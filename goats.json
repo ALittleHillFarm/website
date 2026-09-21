@@ -1,0 +1,434 @@
+{
+  "_comment": "Farm-authored goat content. Registry facts (pedigree, production) come from goat-registry.json at build time. Edit here, run build-goats.py, commit.",
+  "goats": [
+    {
+      "id": "calypso",
+      "template": "doe",
+      "name": "Calypso",
+      "registered_name": "ELITE TUA Farms GCA Calypso",
+      "kind": "Doe · Born April 2022",
+      "badge": "ADGA Elite 2025 · 98%",
+      "blurb": "Calypso made the ADGA Elite List in 2025 at 98%. We are looking forward to having her on milk test again in 2026.",
+      "hero": "assets/photos/20240726_0040_480x480.jpg",
+      "alpha_s1_casein": "B/B",
+      "colour": null,
+      "height": null,
+      "dob_text": "April 6, 2022",
+      "reg": "D002247356",
+      "gallery": [
+        {
+          "src": "assets/photos/20240726_0040_480x480.jpg",
+          "caption": "Summer 2024"
+        },
+        {
+          "src": "assets/photos/20240726_0057.jpg",
+          "caption": "Conformation"
+        },
+        {
+          "src": "assets/photos/messenger_creation_8ea43aaf-adb4-4b52-aff0-077ad1af8530_1_240x240.jpg",
+          "caption": "2F udder — rear"
+        },
+        {
+          "src": "assets/photos/20250817_074513_240x240.jpg",
+          "caption": "2F udder — side"
+        }
+      ],
+      "elite": {
+        "title": "ADGA Elite Doe",
+        "year": "2025",
+        "percentile": 98
+      },
+      "pedigree_named": {
+        "Sire": "Gabhran Creek Adonis *B",
+        "Dam": "ELITE TUA Farms MB Giselle 3*M GEEE87",
+        "Sire's sire": "Oak Apple Spartan",
+        "Sire's dam": "GCH 5 Fold Farm SCC Princess Poppy 4*M EEEV90",
+        "Dam's sire": "Old Mountain Farm M Bold N +B +EV85",
+        "Dam's dam": "SGCH Oak Apple Greta Go Girl 2*M VEEE90"
+      },
+      "parents": [
+        {
+          "who": "Her sire",
+          "name": "Gabhran Creek Adonis *B",
+          "lines": [
+            "S: Oak Apple Spartan",
+            "D: GCH 5 Fold Farm SCC Princess Poppy 4*M EEEV90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/adonis.jpg",
+              "alt": "Gabhran Creek Adonis *B"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        },
+        {
+          "who": "Her dam",
+          "name": "ELITE TUA Farms MB Giselle 3*M GEEE87",
+          "lines": [
+            "S: Old Mountain Farm M Bold N +B +EV85",
+            "D: SGCH Oak Apple Greta Go Girl 2*M VEEE90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/giselle_production_eval.png",
+              "alt": "Production evaluation"
+            },
+            {
+              "src": "assets/photos/giselle.jpg",
+              "alt": "ELITE TUA Farms MB Giselle 3*M GEEE87"
+            },
+            {
+              "src": "assets/photos/giselle_udder_240x240.jpg",
+              "alt": "ELITE TUA Farms MB Giselle 3*M GEEE87 udder"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Freshening dates, kid counts and where they went.",
+            "How Calypso milks, how she behaves on the stand, what she is like in the barn."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cookie",
+      "template": "doe",
+      "name": "Cookie",
+      "registered_name": "DLMG Farms JM Cookies & Cream",
+      "kind": "Doe · Born February 2023",
+      "badge": null,
+      "blurb": null,
+      "hero": "assets/photos/20240726_0066.jpg",
+      "alpha_s1_casein": null,
+      "colour": null,
+      "height": null,
+      "dob_text": "February 22, 2023",
+      "reg": "D002298033",
+      "gallery": [
+        {
+          "src": "assets/photos/20240726_0066.jpg",
+          "caption": "Summer 2024"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "IlenesRascals SD Jagermeister",
+        "Dam": "DLMG Farms LJ Melange",
+        "Sire's sire": null,
+        "Sire's dam": null,
+        "Dam's sire": null,
+        "Dam's dam": null
+      },
+      "parents": [],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Freshening dates, kid counts and where they went.",
+            "How Cookie milks, how she behaves on the stand, what she is like in the barn."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maple-sugar",
+      "template": "doe",
+      "name": "Maple Sugar",
+      "registered_name": "DLMG Farms JM Maple Sugar",
+      "kind": "Doe · Born February 2023",
+      "badge": null,
+      "blurb": null,
+      "hero": "assets/photos/20240726_0054_480x480.jpg",
+      "alpha_s1_casein": null,
+      "colour": null,
+      "height": null,
+      "dob_text": "February 21, 2023",
+      "reg": "D002298076",
+      "gallery": [
+        {
+          "src": "assets/photos/20240726_0054_480x480.jpg",
+          "caption": "Summer 2024"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "IlenesRascals SD Jagermeister",
+        "Dam": "DLMG Farms JT Cambria",
+        "Sire's sire": null,
+        "Sire's dam": null,
+        "Dam's sire": null,
+        "Dam's dam": null
+      },
+      "parents": [],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Freshening dates, kid counts and where they went.",
+            "How Maple Sugar milks, how she behaves on the stand, what she is like in the barn."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mayslee",
+      "template": "doe",
+      "name": "Mayslee",
+      "registered_name": "DLMG Farms ATL Mayslee",
+      "kind": "Doe · Born March 2020",
+      "badge": null,
+      "blurb": null,
+      "hero": "assets/photos/20240726_0035_ee6ee7bc-9843-4d48-879c-305898292f8d.jpg",
+      "alpha_s1_casein": null,
+      "colour": null,
+      "height": null,
+      "dob_text": "March 27, 2020",
+      "reg": null,
+      "gallery": [
+        {
+          "src": "assets/photos/20240726_0035_ee6ee7bc-9843-4d48-879c-305898292f8d.jpg",
+          "caption": "Summer 2024"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "Dragonfly PS Atlantis",
+        "Dam": "DLMG Farms LJ Flutterbye",
+        "Sire's sire": null,
+        "Sire's dam": null,
+        "Dam's sire": null,
+        "Dam's dam": null
+      },
+      "parents": [],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Freshening dates, kid counts and where they went.",
+            "How Mayslee milks, how she behaves on the stand, what she is like in the barn."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "polaris",
+      "template": "buck",
+      "name": "Polaris",
+      "registered_name": "TUA Farms BB Polaris *B",
+      "kind": "Buck · Born April 2025",
+      "badge": null,
+      "blurb": null,
+      "hero": "assets/photos/polaris.jpg",
+      "alpha_s1_casein": null,
+      "colour": null,
+      "height": null,
+      "dob_text": "April 23, 2025",
+      "reg": "D002464894",
+      "gallery": [
+        {
+          "src": "assets/photos/polaris.jpg",
+          "caption": "Polaris — PC: TUA Farms"
+        },
+        {
+          "src": "assets/photos/polaris_in_pen.jpg",
+          "caption": "In the pen"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "TUA Farms Bold N Brazen *B",
+        "Dam": "TUA Farms SH Winter Solstice 5*M GVEV84",
+        "Sire's sire": "Old Mountain Farm M Bold N +B +EV85",
+        "Sire's dam": "ELITE SG TUA Farms SH Smoke and Mirrors 2*M +EEE89",
+        "Dam's sire": "Springwater OR Shimo",
+        "Dam's dam": "TUA Farms MB Vote On Tuesday 4*M VVEE88"
+      },
+      "parents": [
+        {
+          "who": "His sire",
+          "name": "TUA Farms Bold N Brazen *B",
+          "lines": [
+            "S: Old Mountain Farm M Bold N +B +EV85",
+            "D: ELITE SG TUA Farms SH Smoke and Mirrors 2+M +EEE89"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/brazen.jpg",
+              "alt": "TUA Farms Bold N Brazen *B"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        },
+        {
+          "who": "His dam",
+          "name": "TUA Farms SH Winter Solstice 5*M GVEG84",
+          "lines": [
+            "S: Springwater OR Shimo",
+            "D: TUA Farms MB Vote On Tuesday 4*M VVEE88"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/winter.jpg",
+              "alt": "TUA Farms SH Winter Solstice 5*M GVEG84"
+            },
+            {
+              "src": "assets/photos/winter_s_udder_picture.jpg",
+              "alt": "TUA Farms SH Winter Solstice 5*M GVEG84 udder"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Breeding record: which does he has covered, and the kids on the ground.",
+            "How Polaris handles, how he behaves in rut, what he is like around the herd."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "royal-tea",
+      "template": "doe",
+      "name": "Royal Tea",
+      "registered_name": "TUA Farms GCA Royal Tea",
+      "kind": "Doe · Born April 2022",
+      "badge": null,
+      "blurb": null,
+      "hero": "assets/photos/20240726_0117.jpg",
+      "alpha_s1_casein": null,
+      "colour": null,
+      "height": null,
+      "dob_text": "April 4, 2022",
+      "reg": "D002231777",
+      "gallery": [
+        {
+          "src": "assets/photos/20240726_0117.jpg",
+          "caption": "Summer 2024"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "Gabhran Creek Adonis",
+        "Dam": "ELITE TUA Farms Peach Tea",
+        "Sire's sire": null,
+        "Sire's dam": null,
+        "Dam's sire": null,
+        "Dam's dam": null
+      },
+      "parents": [
+        {
+          "who": "Her sire",
+          "name": "Gabhran Creek Adonis *B",
+          "lines": [
+            "S: Oak Apple Spartan",
+            "D: GCH 5 Fold Farm SCC Princess Poppy 4*M EEEV90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/adonis.jpg",
+              "alt": "Gabhran Creek Adonis *B"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Freshening dates, kid counts and where they went.",
+            "How Royal Tea milks, how she behaves on the stand, what she is like in the barn."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toby",
+      "template": "buck",
+      "name": "Toby",
+      "registered_name": "Amores Farm Time Will Tell",
+      "kind": "Buck · Born April 2025",
+      "badge": null,
+      "blurb": "Toby’s dam’s sire, Wolfivan CQ Kentucky Bourbon, is a littermate brother to the 2024 ADGA National Champion.",
+      "hero": "assets/photos/toby_from_amores_farm.jpg",
+      "alpha_s1_casein": "A/B",
+      "colour": null,
+      "height": null,
+      "dob_text": "April 17, 2025",
+      "reg": "D002468319",
+      "gallery": [
+        {
+          "src": "assets/photos/toby_from_amores_farm.jpg",
+          "caption": "Toby — PC: Amores Farm"
+        },
+        {
+          "src": "assets/photos/toby_backside_240x240.jpg",
+          "caption": "Rear — PC: Amores Farm"
+        }
+      ],
+      "elite": null,
+      "pedigree_named": {
+        "Sire": "GCH Amores Farm Kealoha *B VEE89",
+        "Dam": "Wolfivan Sun is Shining 8*M GGVE87",
+        "Sire's sire": "Castle Rock Sutter's Gold +*B",
+        "Sire's dam": "GCH IlenesRascals Love Bite 1*M VEEE92",
+        "Dam's sire": "Wolfivan CQ Kentucky Bourbon *B",
+        "Dam's dam": "GCH Hidden Hills Natural Mystic 7*M EEEE92"
+      },
+      "parents": [
+        {
+          "who": "His sire",
+          "name": "GCH Amores Farm Kealoha *B VEE89",
+          "lines": [
+            "S: Castle Rock Sutter's Gold +*B",
+            "D: GCH IlenesRascals Love Bite 1*M VEEE92"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/kealoha.jpg",
+              "alt": "GCH Amores Farm Kealoha *B VEE89"
+            }
+          ],
+          "credit": "PC: Amores Farm"
+        },
+        {
+          "who": "His dam",
+          "name": "Wolfivan Sun is Shining 8*M",
+          "lines": [
+            "S: Wolfivan CQ Kentucky Bourbon *B",
+            "D: GCH Hidden Hills Natural Mystic 7*M EEEE92"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/shine.jpg",
+              "alt": "Wolfivan Sun is Shining 8*M"
+            },
+            {
+              "src": "assets/photos/shine_udder_1.jpg",
+              "alt": "Wolfivan Sun is Shining 8*M udder"
+            }
+          ],
+          "credit": "PC: Amores Farm"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Notes",
+          "paragraphs": [
+            "Breeding record: which does he has covered, and the kids on the ground.",
+            "How Toby handles, how he behaves in rut, what he is like around the herd."
+          ]
+        }
+      ]
+    }
+  ]
+}

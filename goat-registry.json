@@ -1,0 +1,348 @@
+{
+  "source": "https://genetics.adga.org",
+  "collected": "2026-09-21",
+  "goats": {
+    "calypso": {
+      "registered_name": "TUA FARMS GCA CALYPSO",
+      "reg": "D002247356",
+      "dob": "4/6/2022",
+      "sex_and_type": "PB Doe",
+      "breed_percent": "100% D",
+      "sire": "GABHRAN CREEK ADONIS",
+      "dam": "TUA FARMS MB GISELLE",
+      "grandparents": {
+        "SS": "OAK APPLE SPARTAN",
+        "SD": "5 FOLD FARM SCC PRINCESS POPPY",
+        "DS": "OLD MOUNTAIN FARM M BOLD N",
+        "DD": "OAK APPLE GRETA GO GIRL"
+      },
+      "great_grandparents": {
+        "SSS": "OAK APPLE HECTOR",
+        "SSD": "OAK APPLE SERIA",
+        "SDS": "DILL'S TS SIX STRING CIRCUS",
+        "SDD": "DILL'S BM OBLIVIOUS",
+        "DSS": "OLD MOUNTAIN FARM SAYOMIS",
+        "DSD": "OLD MOUNTAIN FARM FAT TUESDAY",
+        "DDS": "PROCTOR HILL FARM TO GO DADDY",
+        "DDD": "PIDDLIN ACRES W TABOO"
+      },
+      "production_eval": {
+        "SG": null,
+        "Registry": "PB",
+        "Fluid Merit $": "15",
+        "Lactations": "2",
+        "Average STD Milk": "1288",
+        "Average STD Fat": "96",
+        "Average STD Protein": "62",
+        "Milk PTA": "82",
+        "Fat Reliability": "39",
+        "Fat PTA": "7.0",
+        "Fat % PTA": "0.20",
+        "Protein Reliability": "39",
+        "Protein PTA": "4.3",
+        "Protein % PTA": "0.09",
+        "Milk, Predicted Producing Ability": "194",
+        "Fat, Predicted Producing Ability": "201",
+        "Protein, Predicted Producing Ability": "128",
+        "Percentile Rank": "96"
+      },
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": "DNA on File",
+      "notes": [
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File section shows label only (DNA is on file); no alpha s1 casein result displayed on page",
+        "SG value in Production Eval table was blank on page"
+      ]
+    },
+    "royal-tea": {
+      "registered_name": "TUA FARMS GCA ROYAL TEA",
+      "reg": "D002231777",
+      "dob": "4/4/2022",
+      "sex_and_type": "PB Doe",
+      "breed_percent": "100% D",
+      "sire": "GABHRAN CREEK ADONIS",
+      "dam": "TUA FARMS AC PEACH TEA",
+      "grandparents": {
+        "SS": "OAK APPLE SPARTAN",
+        "SD": "5 FOLD FARM SCC PRINCESS POPPY",
+        "DS": "SPRINGWATER WTM APRCOT COBBLER",
+        "DD": "TUA FARMS SP TEA PARTY"
+      },
+      "great_grandparents": {
+        "SSS": "OAK APPLE HECTOR",
+        "SSD": "OAK APPLE SERIA",
+        "SDS": "DILL'S TS SIX STRING CIRCUS",
+        "SDD": "DILL'S BM OBLIVIOUS",
+        "DSS": "SPRINGWATER AL WAIT THAT'S ME",
+        "DSD": "SPRINGWATER AL APRICOT NECTAR",
+        "DDS": "OLD MOUNTAIN FARM STAG PARTY",
+        "DDD": "POPPY PATCH PD CHANTILLY LACE"
+      },
+      "production_eval": {
+        "SG": null,
+        "Registry": "PB",
+        "Fluid Merit $": "20",
+        "Lactations": "2",
+        "Average STD Milk": "1444",
+        "Average STD Fat": "98",
+        "Average STD Protein": "66",
+        "Milk PTA": "137",
+        "Fat Reliability": "40",
+        "Fat PTA": "7.3",
+        "Fat % PTA": "0.07",
+        "Protein Reliability": "40",
+        "Protein PTA": "6.1",
+        "Protein % PTA": "0.08",
+        "Milk, Predicted Producing Ability": "360",
+        "Fat, Predicted Producing Ability": "227",
+        "Protein, Predicted Producing Ability": "177",
+        "Percentile Rank": "98"
+      },
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": null,
+      "notes": [
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File label absent from sidebar - DNA not on file for this animal",
+        "SG value in Production Eval table was blank on page"
+      ]
+    },
+    "cookie": {
+      "registered_name": "DLMG FARMS JM COOKIES & CREAM",
+      "reg": "D002298033",
+      "dob": "2/22/2023",
+      "sex_and_type": "PB Doe",
+      "breed_percent": "100% D",
+      "sire": "ILENESRASCALS SD JAGERMEISTER",
+      "dam": "DLMG FARMS LJ MELANGE",
+      "grandparents": {
+        "SS": "AGAPE'S PRIZE SAINT DISMUS",
+        "SD": "DESERTNANNY DESIGNER CUPCAKE",
+        "DS": "ALMAR ACRES O LEROY JETHRO G",
+        "DD": "ALMAR ACRES AK MOCHA CREAM"
+      },
+      "great_grandparents": {
+        "SSS": "OLD MOUNTAIN FARM CYRUS QUINN",
+        "SSD": "OLD MOUNTAIN FARM MERRIMENT",
+        "SDS": "IRONWOODRANCH AS BREE",
+        "SDD": "DESERTNANNY BR BLACKBOTTOMPIE",
+        "DSS": "ROSASHARN GF OBA",
+        "DSD": "CASTLE ROCK ANGELIKA",
+        "DDS": "CASTLE ROCK AKIKTA",
+        "DDD": "CAMANNA RM CHOCOLATE ECLAIR"
+      },
+      "production_eval": {
+        "SG": null,
+        "Registry": "PB",
+        "Fluid Merit $": "-6",
+        "Lactations": "1",
+        "Average STD Milk": "1038",
+        "Average STD Fat": "65",
+        "Average STD Protein": "48",
+        "Milk PTA": "-36",
+        "Fat Reliability": "35",
+        "Fat PTA": "-2.9",
+        "Fat % PTA": "-0.09",
+        "Protein Reliability": "35",
+        "Protein PTA": "-1.7",
+        "Protein % PTA": "-0.02",
+        "Milk, Predicted Producing Ability": "-97",
+        "Fat, Predicted Producing Ability": "-72",
+        "Protein, Predicted Producing Ability": "-47",
+        "Percentile Rank": "7"
+      },
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": null,
+      "notes": [
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File label absent from sidebar - DNA not on file for this animal",
+        "SG value in Production Eval table was blank on page"
+      ]
+    },
+    "maple-sugar": {
+      "registered_name": "DLMG FARMS JM MAPLE SUGAR",
+      "reg": "D002298076",
+      "dob": "2/21/2023",
+      "sex_and_type": "PB Doe",
+      "breed_percent": "100% D",
+      "sire": "ILENESRASCALS SD JAGERMEISTER",
+      "dam": "DLMG FARMS JT CAMBRIA",
+      "grandparents": {
+        "SS": "AGAPE'S PRIZE SAINT DISMUS",
+        "SD": "DESERTNANNY DESIGNER CUPCAKE",
+        "DS": "LOPERRIZED JS JETTIE",
+        "DD": "CABRANDYWINFARMS AKR SURI"
+      },
+      "great_grandparents": {
+        "SSS": "OLD MOUNTAIN FARM CYRUS QUINN",
+        "SSD": "OLD MOUNTAIN FARM MERRIMENT",
+        "SDS": "IRONWOODRANCH AS BREE",
+        "SDD": "DESERTNANNY BR BLACKBOTTOMPIE",
+        "DSS": "ALMAR ACRES O LEROY JETHRO G",
+        "DSD": "ALMAR ACRES HS SMOKY SKY",
+        "DDS": "ALGEDI FARM CK KINETIC RIPTIDE",
+        "DDD": "SLY FARMS CJ ROSALYN"
+      },
+      "production_eval": {
+        "SG": null,
+        "Registry": "PB",
+        "Fluid Merit $": "-2",
+        "Lactations": "1",
+        "Average STD Milk": "1207",
+        "Average STD Fat": "79",
+        "Average STD Protein": "51",
+        "Milk PTA": "-11",
+        "Fat Reliability": "36",
+        "Fat PTA": "-0.9",
+        "Fat % PTA": "-0.03",
+        "Protein Reliability": "36",
+        "Protein PTA": "-1.0",
+        "Protein % PTA": "-0.04",
+        "Milk, Predicted Producing Ability": "-19",
+        "Fat, Predicted Producing Ability": "-7",
+        "Protein, Predicted Producing Ability": "-31",
+        "Percentile Rank": "22"
+      },
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": "DNA on File",
+      "notes": [
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File section shows label only (DNA is on file); no alpha s1 casein result displayed on page",
+        "SG value in Production Eval table was blank on page"
+      ]
+    },
+    "polaris": {
+      "registered_name": "TUA FARMS BB POLARIS",
+      "reg": "D002464894",
+      "dob": "4/23/2025",
+      "sex_and_type": "PB Buck",
+      "breed_percent": "100% D",
+      "sire": "TUA FARMS BOLD N BRAZEN",
+      "dam": "TUA FARMS SH WINTER SOLSTICE",
+      "grandparents": {
+        "SS": "OLD MOUNTAIN FARM M BOLD N",
+        "SD": "TUA FARMS SH SMOKE AND MIRRORS",
+        "DS": "SPRINGWATER OR SHIMO",
+        "DD": "TUA FARMS MB VOTE ON TUESDAY"
+      },
+      "great_grandparents": {
+        "SSS": "OLD MOUNTAIN FARM SAYOMIS",
+        "SSD": "OLD MOUNTAIN FARM FAT TUESDAY",
+        "SDS": "ALMAR ACRES HS SMOKIN HOT",
+        "SDD": "POPPY PATCH PD CHANTILLY LACE",
+        "DSS": "URBAN ACRES MW ORION",
+        "DSD": "SPRINGWATER BL JANIE'S GOTAGUN",
+        "DDS": "OLD MOUNTAIN FARM M BOLD N",
+        "DDD": "TUA FARMS SP POLITICAL PARTY"
+      },
+      "production_eval": null,
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": "DNA on File",
+      "notes": [
+        "Production Eval tab disabled on page (no href) - no data for this animal",
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File section shows label only (DNA is on file); no alpha s1 casein result displayed on page"
+      ]
+    },
+    "toby": {
+      "registered_name": "AMORES FARM TIME WILL TELL",
+      "reg": "D002468319",
+      "dob": "4/17/2025",
+      "sex_and_type": "PB Buck",
+      "breed_percent": "100% D",
+      "sire": "AMORES FARM KEALOHA",
+      "dam": "WOLFIVAN SUN IS SHINING",
+      "grandparents": {
+        "SS": "CASTLE ROCK SUTTER'S GOLD",
+        "SD": "ILENESRASCALS LOVE BITE",
+        "DS": "WOLFIVAN CQ KENTUCKY BOURBON",
+        "DD": "HIDDEN HILLS NATURAL MYSTIC"
+      },
+      "great_grandparents": {
+        "SSS": "CASTLE ROCK CLEVELAND SAGE",
+        "SSD": "CRF CASTLE ROCK TUSCAN SUN",
+        "SDS": "AGAPE'S PRIZE SAINT DISMUS",
+        "SDD": "ILENESRASCALS UNDENIABLE LOVE",
+        "DSS": "OLD MOUNTAIN FARM CYRUS QUINN",
+        "DSD": "JOYFUL HEARTS KR PHOEBE",
+        "DDS": "ALGEDI FARM CK KINETIC RIPTIDE",
+        "DDD": "ALETHIA M DEW LEE NOTED"
+      },
+      "production_eval": null,
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": "DNA on File",
+      "notes": [
+        "Production Eval tab disabled on page (no href) - no data for this animal",
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File section shows label only (DNA is on file); no alpha s1 casein result displayed on page",
+        "SSDS great-great-grandparent cell was blank on page (beyond requested depth, noted for completeness)"
+      ]
+    },
+    "mayslee": {
+      "registered_name": "DLMG FARMS ATL MAYLSEE",
+      "reg": "D002088065",
+      "dob": "3/27/2020",
+      "sex_and_type": "PB Doe",
+      "breed_percent": "100% D",
+      "sire": "DRAGONFLY PS ATLANTIS",
+      "dam": "DLMG FARMS LJ FLUTTER BYE",
+      "grandparents": {
+        "SS": "DRAGONFLY IH POSEIDON",
+        "SD": "DRAGONFLY SOL FANTASIA",
+        "DS": "ALMAR ACRES O LEROY JETHRO G",
+        "DD": "BLYTHMOOR BZ THYME KEEPER"
+      },
+      "great_grandparents": {
+        "SSS": "PROMISEDLAND INCREDIBLE HUNK",
+        "SSD": "FLAT ROCKS CHARYBDIS",
+        "SDS": "ALGEDI FARM MH SOLARIS",
+        "SDD": "FLAT ROCKS HERE FOR THE PARTY",
+        "DSS": "ROSASHARN GF OBA",
+        "DSD": "CASTLE ROCK ANGELIKA",
+        "DDS": "PECAN HOLLOW ZC BAZINGA",
+        "DDD": "BLYTHMOOR HW SPICE"
+      },
+      "production_eval": {
+        "SG": null,
+        "Registry": "PB",
+        "Fluid Merit $": "-10",
+        "Lactations": "1",
+        "Average STD Milk": "631",
+        "Average STD Fat": "48",
+        "Average STD Protein": "32",
+        "Milk PTA": "-56",
+        "Fat Reliability": "43",
+        "Fat PTA": "-4.4",
+        "Fat % PTA": "-0.13",
+        "Protein Reliability": "43",
+        "Protein PTA": "-2.7",
+        "Protein % PTA": "-0.05",
+        "Milk, Predicted Producing Ability": "-177",
+        "Fat, Predicted Producing Ability": "-133",
+        "Protein, Predicted Producing Ability": "-76",
+        "Percentile Rank": "1"
+      },
+      "linear_history": null,
+      "type_eval": null,
+      "dna_on_file": null,
+      "notes": [
+        "No registration number was provided; found via ADGA Pedigree Search (Name Contains: 'DLMG Farms ATL'). The registry spells the name 'MAYLSEE' (letters transposed vs. the given 'Mayslee'). Confirmed as the correct animal because DOB (3/27/2020), sire (DRAGONFLY PS ATLANTIS), and dam (DLMG FARMS LJ FLUTTER BYE) all match the details supplied for this goat.",
+        "Linear History tab disabled on page (no href) - no data for this animal",
+        "Type Eval tab disabled on page (no href) - no data for this animal",
+        "DNA on File label absent from sidebar - DNA not on file for this animal",
+        "SG value in Production Eval table was blank on page"
+      ]
+    }
+  }
+}
