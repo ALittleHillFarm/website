@@ -1,0 +1,24 @@
+# The farm site — goat pages, herd, breeding schedule.
+# Pure static: no code, just files. The store is a separate Worker
+# (store/wrangler.toml) deployed to store.alittlehillfarm.com.
+#
+# Rebuild + deploy:
+#   bash build-site.sh && npx wrangler deploy -c wrangler.site.toml
+
+name = "alhf-site"
+compatibility_date = "2026-09-21"
+main = "site-worker.js"
+
+[assets]
+directory = "./dist-site"
+binding = "ASSETS"
+# Serve 404.html for unknown paths. html_handling = none keeps the hand-written
+# links working exactly as authored (does.html stays does.html) instead of
+# 307-redirecting every internal link to an extensionless form.
+not_found_handling = "404-page"
+html_handling = "none"
+
+# Uncomment at cutover, once the apex is ready to leave Shopify:
+# [[routes]]
+# pattern = "alittlehillfarm.com"
+# custom_domain = true
