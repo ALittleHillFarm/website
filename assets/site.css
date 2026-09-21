@@ -221,3 +221,8 @@ body.embed .site-footer { margin-top:0; }
   .elite dl { grid-template-columns:1fr; }
   .sched .pair { padding:20px; gap:16px; flex-wrap:wrap; }
 }
+
+/* Goat photos on the roster pages link through to the full profile.
+   The anchor is purely a wrapper — it must not add underline or spacing. */
+.shot-link { display:block; text-decoration:none; color:inherit; }
+.shot-link:focus-visible { outline:2px solid var(--rust); outline-offset:3px; }
