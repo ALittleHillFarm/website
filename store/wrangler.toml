@@ -1,0 +1,36 @@
+name = "alhf-store"
+main = "worker.js"
+compatibility_date = "2026-09-20"
+
+# Deploys to <your-subdomain>.workers.dev until DNS is live on Cloudflare.
+# Set to false once the custom domain below is active.
+workers_dev = true
+
+# The storefront. Anything the worker does not route is served from here.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# Without this, Cloudflare serves a matching asset BEFORE the Worker runs, so
+# /admin would be returned straight from the edge cache and never hit the auth
+# check. Force the Worker to run first for anything admin-related.
+run_worker_first = ["/admin", "/admin/*", "/api/*"]
+
+# Uploaded photos (products now, goats later). Served through /media/* by the
+# worker rather than made public, so we control content-type and caching.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "alhf-media"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "alhf-store"
+database_id = "cbc7ed1f-6dfd-43f2-968c-5348a79dbdf9"
+
+# Uncomment once alittlehillfarm.com is active in Cloudflare, then set
+# workers_dev = false above.
+# [[routes]]
+# pattern = "store.alittlehillfarm.com"
+# custom_domain = true
+
+# Secrets are NOT set here. Put them in .env (gitignored) and run:
+#   npx wrangler secret bulk .env

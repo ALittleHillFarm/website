@@ -1,0 +1,66 @@
+{
+  "_comment": "Operational settings. Edit here, commit, deploy. No code changes needed.",
+  "tax": {
+    "idaho_rate_bps": 600,
+    "_note": "Basis points. 600 = 6.00%. Product-level `taxable` is the default; a customer marked tax_exempt overrides it to zero."
+  },
+  "pickup_locations": [
+    {
+      "id": "farm",
+      "label": "Farm pickup — Potlatch, ID",
+      "active": true
+    },
+    {
+      "id": "moscow",
+      "label": "Moscow, ID meetup",
+      "active": true
+    },
+    {
+      "id": "cda",
+      "label": "Coeur d'Alene, ID meetup",
+      "active": true
+    },
+    {
+      "id": "lewiston",
+      "label": "Lewiston, ID (occasional)",
+      "active": false
+    },
+    {
+      "id": "pullman",
+      "label": "Pullman, WA (occasional)",
+      "active": false
+    }
+  ],
+  "shipping": {
+    "enabled": false,
+    "_note": "P2. When enabled, checkout offers a ship-to address and validates against allowed_states server-side.",
+    "allowed_states": [
+      "ID",
+      "WA",
+      "OR",
+      "MT",
+      "WY",
+      "UT",
+      "NV"
+    ]
+  },
+  "terms": {
+    "version": "2026-09-20",
+    "_note": "Bump version whenever the text below changes. Every sale stores the version the customer accepted — this is dispute evidence.",
+    "text": "Orders are consolidated into a bulk order with our suppliers. Expect 2-4 weeks before your order is ready for pickup. We will email you when your order is placed and again when it is ready."
+  },
+  "limits": {
+    "max_order_cents": 150000,
+    "_note": "Orders above this are held for review regardless of customer trust level."
+  },
+  "pricing": {
+    "_note": "products.json prices are the POSTED price and already absorb card processing cost. ACH and cash take 2% off. This is a cash-discount program, NOT a credit-card surcharge - see DESIGN.md. Never enable surcharging in Stripe.",
+    "ach_discount_bps": 200,
+    "cash_discount_bps": 200,
+    "cash_on_pickup": {
+      "enabled": true,
+      "trusted_only": true,
+      "_note": "Cash orders carry no payment guarantee. On a 2-4 week pre-order we buy stock before seeing money, so restrict to known customers."
+    }
+  }
+}

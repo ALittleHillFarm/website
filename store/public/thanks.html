@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order received — A Little Hill Farm</title>
+<meta name="description" content="Your farm store order has been received.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header" data-chrome>
+  <div class="bar">
+    <a class="brand" href="https://alittlehillfarm.com/">
+      <img src="assets/logo.png" alt="">
+      <span>
+        <span class="name">A Little Hill Farm</span><br>
+        <span class="sub">Potlatch, Idaho · Farm Store</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://alittlehillfarm.com/">Herd</a>
+      <a href="index.html">Farm Store</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap" style="max-width:720px">
+
+  <section class="page-head">
+    <p class="eyebrow">Thank you</p>
+    <h1 class="serif">Your order is in.</h1>
+  </section>
+
+  <div id="confirmation">
+    <!-- filled in by script below -->
+  </div>
+
+  <p style="margin-top:32px"><a class="btn ghost" href="index.html">← Back to the store</a></p>
+
+</div>
+</main>
+
+<footer class="site-footer" data-chrome>
+  <div class="cols">
+    <div>
+      <div class="mark">A Little Hill Farm</div>
+      <p style="font-size:14px;line-height:1.7">Feed, milk, and farm goods — pre-ordered here, picked up at the farm.</p>
+    </div>
+    <div>
+      <h4>Farm store</h4>
+      <ul>
+        <li><a href="index.html">Catalog</a></li>
+        <li><a href="https://alittlehillfarm.com/">Back to the herd</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fine">
+    <span>© A Little Hill Farm</span>
+    <span>Orders are pre-paid and picked up locally</span>
+  </div>
+</footer>
+
+<script>
+/* Thanks page — just a confirmation.
+ * ---------------------------------------------------------------------
+ * There is no endpoint for looking up someone else's order details from
+ * the browser (on purpose — that would leak other customers' orders),
+ * so this page only ever echoes back the sale id already sitting in the
+ * URL's ?sale= parameter, plus the current pre-order terms text pulled
+ * fresh from /api/config so the lead time shown here can never drift
+ * out of sync with what the customer agreed to at checkout.
+ */
+(function () {
+  'use strict';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var saleId = new URLSearchParams(window.location.search).get('sale');
+  var host = document.getElementById('confirmation');
+
+  if (!saleId) {
+    host.innerHTML =
+      '<p class="lede">We could not find an order reference in this link. If you just checked out, ' +
+      'check your email for a confirmation — if anything looks wrong, please contact us directly.</p>';
+    return;
+  }
+
+  host.innerHTML =
+    '<div class="panel" style="margin-bottom:24px">' +
+      '<p class="label">Order reference</p>' +
+      '<p class="serif" style="font-size:20px;word-break:break-all;margin-top:6px">' + esc(saleId) + '</p>' +
+    '</div>' +
+    '<p class="lede" id="lead-time">Loading pickup timing…</p>' +
+    '<p class="lede" style="margin-top:18px">We will email you twice as your order moves along: once when it is placed with our supplier, and again as soon as it arrives and is ready for pickup. Please bring this order reference with you.</p>';
+
+  fetch('/api/config')
+    .then(function (res) { return res.json(); })
+    .then(function (config) {
+      var text = (config && config.terms && config.terms.text) || '';
+      document.getElementById('lead-time').textContent = text;
+    })
+    .catch(function () {
+      document.getElementById('lead-time').textContent =
+        'Orders are consolidated into a bulk supplier order, so please allow a few weeks before pickup.';
+    });
+})();
+</script>
+</body>
+</html>

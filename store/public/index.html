@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm Store — A Little Hill Farm</title>
+<meta name="description" content="Feed, milk, and farm goods from A Little Hill Farm. Pre-order online, pick up locally.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header" data-chrome>
+  <div class="bar">
+    <a class="brand" href="https://alittlehillfarm.com/">
+      <img src="assets/logo.png" alt="">
+      <span>
+        <span class="name">A Little Hill Farm</span><br>
+        <span class="sub">Potlatch, Idaho · Farm Store</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://alittlehillfarm.com/">Herd</a>
+      <a href="index.html" aria-current="page">Farm Store</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <section class="page-head">
+    <p class="eyebrow">Farm Store</p>
+    <h1 class="serif">Feed, milk, and a few<br>farm favorites.</h1>
+    <p class="lede">Everything below is pre-ordered and consolidated into a bulk supplier order, then picked up locally. Add what you need, and the checkout page will show the exact price, any discount, and tax before you pay.</p>
+  </section>
+
+  <div class="store-grid">
+
+    <!-- Catalog: filled in by JS from GET /api/catalog. Grouped by category. -->
+    <div>
+      <div id="catalog">
+        <p class="lede">Loading the catalog…</p>
+      </div>
+    </div>
+
+    <!-- Cart: lives entirely in this browser (localStorage key "alhf_cart"),
+         as a plain list of {id, qty}. Nothing about price or tax is stored
+         here — see the big comment in the script below. -->
+    <aside id="cart" class="cart panel" aria-label="Cart">
+      <h2 class="serif" style="font-size:22px;margin-bottom:16px">Your cart</h2>
+      <div id="cart-lines" aria-live="polite"></div>
+      <div id="cart-totals"></div>
+      <p class="cart note">This total uses list prices only and is an estimate. Bank transfer and cash both carry a discount, and Idaho sales tax is added — the checkout page shows the real total before you pay.</p>
+      <button type="button" id="checkout-btn" class="btn" hidden>Checkout →</button>
+    </aside>
+
+  </div>
+</div>
+</main>
+
+<footer class="site-footer" data-chrome>
+  <div class="cols">
+    <div>
+      <div class="mark">A Little Hill Farm</div>
+      <p style="font-size:14px;line-height:1.7">Feed, milk, and farm goods — pre-ordered here, picked up at the farm.</p>
+    </div>
+    <div>
+      <h4>Farm store</h4>
+      <ul>
+        <li><a href="index.html">Catalog</a></li>
+        <li><a href="https://alittlehillfarm.com/">Back to the herd</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fine">
+    <span>© A Little Hill Farm</span>
+    <span>Orders are pre-paid and picked up locally</span>
+  </div>
+</footer>
+
+<script>
+/* Farm Store — catalog + cart
+ * ---------------------------------------------------------------------
+ * This page only ever shows LIST prices. It never knows about discounts,
+ * tax, or the final total — that math happens once, on the server, via
+ * POST /api/quote (see checkout.html). Keeping it that way means the
+ * cart page can never show a number that disagrees with what the
+ * customer is actually charged.
+ *
+ * The cart itself is just a list of {id, qty} saved in the browser's
+ * localStorage under the key "alhf_cart". checkout.html reads the same
+ * key.
+ */
+(function () {
+  'use strict';
+
+  var CART_KEY = 'alhf_cart';
+
+  // Escape any text that came from the server (or from localStorage)
+  // before it goes into innerHTML, so a product name or description can
+  // never inject HTML into the page.
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Cents in, dollars out — for DISPLAY only. Nothing upstream of this
+  // ever does math in dollars or floats.
+  function money(cents) {
+    return '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
+  }
+
+  function loadCart() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (e) { return []; }
+  }
+
+  function saveCart(cart) {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) {}
+  }
+
+  function cartQty(cart, id) {
+    var line = cart.filter(function (l) { return l.id === id; })[0];
+    return line ? line.qty : 0;
+  }
+
+  // Add, change, or remove (qty 0) a line, then redraw everything so the
+  // catalog steppers and the cart panel never fall out of sync.
+  function setQty(id, qty) {
+    var cart = loadCart();
+    qty = Math.max(0, Math.min(999, Math.floor(Number(qty)) || 0));
+    var line = cart.filter(function (l) { return l.id === id; })[0];
+    if (qty <= 0) {
+      cart = cart.filter(function (l) { return l.id !== id; });
+    } else if (line) {
+      line.qty = qty;
+    } else {
+      cart.push({ id: id, qty: qty });
+    }
+    saveCart(cart);
+    render();
+  }
+
+  var catalog = [];
+
+  function productById(id) {
+    return catalog.filter(function (p) { return p.id === id; })[0];
+  }
+
+  function catLabel(cat) {
+    var s = String(cat || 'other');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function qtyStepper(id, name, qty, prefix) {
+    var uid = prefix + '-' + id;
+    return (
+      '<div class="qty">' +
+        '<button type="button" data-step="-1" data-id="' + esc(id) + '" aria-label="Decrease quantity of ' + esc(name) + '">−</button>' +
+        '<label class="visually-hidden" for="' + esc(uid) + '">Quantity of ' + esc(name) + '</label>' +
+        // qty comes from localStorage, which is attacker-writable. Coerce it to
+        // a number rather than trusting it — unescaped, it breaks out of the
+        // value="..." attribute and executes script on this page.
+        '<input type="number" id="' + esc(uid) + '" min="0" max="999" inputmode="numeric" value="' + (Number(qty) || 0) + '" data-qty="' + esc(id) + '">' +
+        '<button type="button" data-step="1" data-id="' + esc(id) + '" aria-label="Increase quantity of ' + esc(name) + '">+</button>' +
+      '</div>'
+    );
+  }
+
+  function renderCatalog() {
+    var host = document.getElementById('catalog');
+    if (!catalog.length) {
+      host.innerHTML = '<p class="lede">Nothing is in the store right now — check back soon.</p>';
+      return;
+    }
+    var cart = loadCart();
+
+    // Group products by category, keeping the order they first appear in.
+    var order = [];
+    var byCat = {};
+    catalog.forEach(function (p) {
+      var cat = p.category || 'other';
+      if (!byCat[cat]) { byCat[cat] = []; order.push(cat); }
+      byCat[cat].push(p);
+    });
+
+    host.innerHTML = order.map(function (cat) {
+      var cards = byCat[cat].map(function (p) {
+        var qty = cartQty(cart, p.id);
+        var shot = p.image
+          ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">'
+          : 'No photo';
+        return (
+          '<article class="product">' +
+            // Photo and name both open the full product page. The quantity
+            // stepper below stays outside the link so adding to the cart from
+            // the grid still works in one tap.
+            '<a class="shot-link" href="product.html?id=' + encodeURIComponent(p.id) + '">' +
+              '<div class="shot' + (p.image ? '' : ' empty') + '">' + shot + '</div>' +
+            '</a>' +
+            '<div class="body">' +
+              '<h3><a class="title-link" href="product.html?id=' + encodeURIComponent(p.id) + '">' + esc(p.name) + '</a></h3>' +
+              '<p class="meta">' + esc(p.supplier || '') + (p.unit ? ' · ' + esc(p.unit) : '') + '</p>' +
+              (p.description ? '<p class="desc">' + esc(p.description) + '</p>' : '') +
+              '<p class="price">' + money(p.price_cents) + '<span class="unit">list price</span></p>' +
+              '<div class="row">' + qtyStepper(p.id, p.name, qty, 'cat') + '</div>' +
+            '</div>' +
+          '</article>'
+        );
+      }).join('');
+
+      return (
+        '<div class="cat-group">' +
+          '<div class="rule-head"><h2 class="serif">' + esc(catLabel(cat)) + '</h2><div class="rule"></div></div>' +
+          '<div class="products">' + cards + '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderCart() {
+    var cart = loadCart();
+    var linesHost = document.getElementById('cart-lines');
+    var totalsHost = document.getElementById('cart-totals');
+    var checkoutBtn = document.getElementById('checkout-btn');
+
+    // Drop anything no longer in the catalog BEFORE deciding whether the cart
+    // is empty. Otherwise a stale saved cart shows "Your cart is empty" and an
+    // enabled Checkout button at the same time. Only prune once the catalog has
+    // actually loaded, or we would wipe a good cart on a slow connection.
+    if (catalog.length) {
+      var kept = cart.filter(function (l) { return !!productById(l.id); });
+      if (kept.length !== cart.length) {
+        cart = kept;
+        saveCart(cart);
+      }
+    }
+
+    if (!cart.length) {
+      linesHost.innerHTML = '<p class="empty">Your cart is empty. Add something from the catalog to get started.</p>';
+      totalsHost.innerHTML = '';
+      checkoutBtn.hidden = true;
+      return;
+    }
+
+    // Estimate only — see the note printed under the cart, and the big
+    // comment at the top of this script.
+    var subtotal = 0;
+    var rows = cart.map(function (line) {
+      var p = productById(line.id);
+      if (!p) return ''; // product removed from the catalog since it was added
+      var lineTotal = p.price_cents * line.qty;
+      subtotal += lineTotal;
+      return (
+        '<div class="line">' +
+          '<div class="info">' +
+            '<div class="nm">' + esc(p.name) + '</div>' +
+            '<div class="un">' + esc(p.unit || '') + '</div>' +
+          '</div>' +
+          '<div class="controls">' +
+            qtyStepper(p.id, p.name, line.qty, 'cart') +
+            '<div class="lt">' + money(lineTotal) + '</div>' +
+            '<button type="button" class="remove" data-remove="' + esc(p.id) + '">Remove</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    linesHost.innerHTML = rows || '<p class="empty">Your cart is empty.</p>';
+    totalsHost.innerHTML =
+      '<div class="totals"><div class="row grand"><span>Estimated total</span><span>' + money(subtotal) + '</span></div></div>';
+    checkoutBtn.hidden = false;
+  }
+
+  function render() {
+    renderCatalog();
+    renderCart();
+  }
+
+  // ---- events -----------------------------------------------------------
+  document.addEventListener('click', function (e) {
+    var stepBtn = e.target.closest('[data-step]');
+    if (stepBtn) {
+      var id = stepBtn.getAttribute('data-id');
+      var next = cartQty(loadCart(), id) + Number(stepBtn.getAttribute('data-step'));
+      setQty(id, next);
+      return;
+    }
+    var removeBtn = e.target.closest('[data-remove]');
+    if (removeBtn) setQty(removeBtn.getAttribute('data-remove'), 0);
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.matches('[data-qty]')) setQty(e.target.getAttribute('data-qty'), e.target.value);
+  });
+
+  document.getElementById('checkout-btn').addEventListener('click', function () {
+    window.location.href = 'checkout.html';
+  });
+
+  // ---- boot ---------------------------------------------------------------
+  fetch('/api/catalog')
+    .then(function (res) {
+      if (!res.ok) throw new Error('catalog request failed');
+      return res.json();
+    })
+    .then(function (data) {
+      catalog = data.products || [];
+      render();
+    })
+    .catch(function (err) {
+      console.error(err);
+      document.getElementById('catalog').innerHTML =
+        '<p class="alert error">Could not load the catalog right now. Please refresh the page in a moment.</p>';
+      document.getElementById('cart-lines').innerHTML =
+        '<p class="alert error">Could not load your cart.</p>';
+    });
+})();
+
+/* Stripe sends a cancelled checkout back to /?cart=1. The cart is still in
+   localStorage, so reassure them and put it in front of them. */
+(function () {
+  if (new URLSearchParams(location.search).get('cart') !== '1') return;
+
+  var cart = document.getElementById('cart');
+  if (!cart) return;
+
+  var note = document.createElement('p');
+  note.className = 'alert';
+  note.textContent = 'No payment was taken. Your cart is still here whenever you are ready.';
+  cart.insertBefore(note, cart.firstChild);
+
+  cart.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', location.pathname);
+})();
+</script>
+</body>
+</html>

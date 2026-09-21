@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product — A Little Hill Farm</title>
+<meta name="description" content="Product details from the A Little Hill Farm feed store.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header" data-chrome>
+  <div class="bar">
+    <a class="brand" href="https://alittlehillfarm.com/">
+      <img src="assets/logo.png" alt="">
+      <span>
+        <span class="name">A Little Hill Farm</span><br>
+        <span class="sub">Potlatch, Idaho · Farm Store</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://alittlehillfarm.com/">Herd</a>
+      <a href="index.html">Farm Store</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+  <p class="eyebrow" style="margin-top:28px"><a class="link-u" href="index.html">← Back to the store</a></p>
+  <div id="product-host">
+    <p class="lede">Loading…</p>
+  </div>
+</div>
+</main>
+
+<footer class="site-footer" data-chrome>
+  <div class="cols">
+    <div>
+      <div class="mark">A Little Hill Farm</div>
+      <p style="font-size:14px;line-height:1.7">Feed, milk, and farm goods — pre-ordered here, picked up at the farm.</p>
+    </div>
+    <div>
+      <h4>Farm store</h4>
+      <ul>
+        <li><a href="index.html">Catalog</a></li>
+        <li><a href="https://alittlehillfarm.com/">Back to the herd</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fine">
+    <span>© A Little Hill Farm</span>
+    <span>Orders are pre-paid and picked up locally</span>
+  </div>
+</footer>
+
+<script>
+/* Product detail page
+ * ---------------------------------------------------------------------
+ * Shows one product in full, including the complete supplier description
+ * that the catalogue grid clamps to four lines.
+ *
+ * Like the rest of the storefront, this page only ever displays the LIST
+ * price. Discounts and Idaho sales tax are worked out once, on the server,
+ * at checkout. It shares the same localStorage cart key as index.html.
+ */
+(function () {
+  'use strict';
+
+  var CART_KEY = 'alhf_cart';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(cents) {
+    return '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
+  }
+
+  function loadCart() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (e) { return []; }
+  }
+  function saveCart(c) {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(c)); } catch (e) {}
+  }
+  function cartQty(id) {
+    var l = loadCart().filter(function (x) { return x.id === id; })[0];
+    return l ? l.qty : 0;
+  }
+  function setQty(id, qty) {
+    var cart = loadCart();
+    qty = Math.max(0, Math.min(999, Math.floor(Number(qty)) || 0));
+    var line = cart.filter(function (x) { return x.id === id; })[0];
+    if (qty <= 0) cart = cart.filter(function (x) { return x.id !== id; });
+    else if (line) line.qty = qty;
+    else cart.push({ id: id, qty: qty });
+    saveCart(cart);
+  }
+
+  var host = document.getElementById('product-host');
+  var id = new URLSearchParams(location.search).get('id') || '';
+
+  function notFound(msg) {
+    host.innerHTML =
+      '<h1 class="serif" style="font-size:clamp(30px,4vw,44px)">Not available</h1>' +
+      '<p class="lede">' + esc(msg) + '</p>' +
+      '<p><a class="btn" href="index.html">← Back to the store</a></p>';
+  }
+
+  if (!id) { notFound('No product was specified.'); return; }
+
+  fetch('/api/catalog')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var p = (data.products || []).filter(function (x) { return x.id === id; })[0];
+      // Unknown or deactivated product — say so plainly rather than 404ing.
+      if (!p) { notFound('That product is not in the store right now.'); return; }
+
+      document.title = p.name + ' — A Little Hill Farm';
+
+      var shot = p.image
+        ? '<img src="' + esc(p.image) + '" alt="' + esc(p.name) + '">'
+        : '<span>No photo</span>';
+
+      var meta = [];
+      if (p.supplier) meta.push(esc(p.supplier));
+      if (p.unit) meta.push(esc(p.unit));
+      if (p.sku) meta.push('SKU ' + esc(p.sku));
+
+      // Preserve the paragraph breaks from the supplier copy; escape first so
+      // nothing in that text can inject markup.
+      var desc = esc(p.description || '')
+        .split(/\n{2,}/)
+        .map(function (para) { return '<p>' + para.replace(/\n/g, '<br>') + '</p>'; })
+        .join('');
+
+      host.innerHTML =
+        '<div class="product-detail">' +
+          '<div class="pd-shot' + (p.image ? '' : ' empty') + '">' + shot + '</div>' +
+          '<div class="pd-body">' +
+            '<h1 class="serif">' + esc(p.name) + '</h1>' +
+            '<p class="meta">' + meta.join(' · ') + '</p>' +
+            '<p class="pd-price">' + money(p.price_cents) + ' <span class="unit">list price</span></p>' +
+            '<div class="pd-desc">' + (desc || '<p class="meta">No description available.</p>') + '</div>' +
+            '<div class="pd-actions">' +
+              '<div class="qty">' +
+                '<button type="button" id="dec" aria-label="Decrease quantity">−</button>' +
+                '<label class="visually-hidden" for="pd-qty">Quantity</label>' +
+                '<input type="number" id="pd-qty" min="0" max="999" inputmode="numeric" value="' + cartQty(p.id) + '">' +
+                '<button type="button" id="inc" aria-label="Increase quantity">+</button>' +
+              '</div>' +
+              '<a class="btn" href="index.html">Done — back to the store</a>' +
+            '</div>' +
+            '<p class="cart note">Bank transfer and cash both carry a discount, and Idaho sales tax is added. Checkout shows the real total before you pay.</p>' +
+          '</div>' +
+        '</div>';
+
+      var input = document.getElementById('pd-qty');
+      function commit(v) {
+        v = Math.max(0, Math.min(999, Math.floor(Number(v)) || 0));
+        input.value = v;
+        setQty(p.id, v);
+      }
+      document.getElementById('dec').addEventListener('click', function () { commit(Number(input.value) - 1); });
+      document.getElementById('inc').addEventListener('click', function () { commit(Number(input.value) + 1); });
+      input.addEventListener('change', function () { commit(input.value); });
+    })
+    .catch(function () {
+      notFound('Could not load the store right now. Please try again in a moment.');
+    });
+})();
+</script>
+</body>
+</html>

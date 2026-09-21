@@ -1,0 +1,259 @@
+/* A Little Hill Farm — store styles
+   This file adds ONLY the pieces the store needs (product cards, cart,
+   forms, admin console). It does not redefine colors, fonts, or the
+   header/footer — those come from the farm site's own stylesheet,
+   assets/site.css, which every store page loads first. Look there for
+   the color variables (--paper, --ink, --moss, --rust, etc.) used below.
+
+   If the farm site's look ever changes, it should change here too just
+   by re-importing the updated site.css — nothing in this file should
+   need to move to match. */
+
+/* ---------- accessibility helper ---------- */
+/* Visually hides text while keeping it for screen readers — used for the
+   real <label> elements on compact controls like quantity steppers, so
+   sighted and screen-reader users both get a properly labelled field. */
+.visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+/* ---------- small screens: match the farm site's gutter exactly ---------- */
+/* site.css uses 18px under 560px; the store spec calls for 16px at the
+   375px phone width, so we tighten it a touch further down. */
+@media (max-width:400px) {
+  .wrap { padding:0 16px; }
+}
+
+/* ---------- two-column layout: catalog + cart ---------- */
+.store-grid { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:48px; align-items:start; }
+.store-grid .cart { position:sticky; top:84px; }
+
+/* ---------- category groups ---------- */
+.cat-group { margin-bottom:56px; }
+.cat-group:last-child { margin-bottom:0; }
+
+/* ---------- product grid ---------- */
+.products { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:24px; align-items:start; }
+.product { background:var(--card); border:1px solid var(--line); display:flex; flex-direction:column; min-width:0; }
+.product .shot { background:var(--line-soft); aspect-ratio:1/1; overflow:hidden; }
+.product .shot img { width:100%; height:100%; object-fit:cover; transition:transform .5s ease; }
+.product:hover .shot img { transform:scale(1.04); }
+.product .shot.empty { display:flex; align-items:center; justify-content:center; color:var(--muted); font-family:var(--serif); font-size:14px; text-align:center; padding:12px; }
+.product .body { padding:16px 18px 18px; display:flex; flex-direction:column; gap:8px; flex:1; }
+.product h3 { font-family:var(--serif); font-weight:400; font-size:20px; line-height:1.2; }
+.product .meta { font-size:12px; color:var(--muted); }
+/* Supplier descriptions run 400-1300 characters. Clamp to four lines so every
+   card in a row stays the same height; the full text belongs on a product page. */
+.product .desc { font-size:13px; line-height:1.55; color:var(--body);
+  display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical;
+  overflow:hidden; }
+.product .price { font-family:var(--serif); font-size:19px; color:var(--moss); margin-top:auto; padding-top:6px; }
+.product .price .unit { font-family:var(--sans); font-size:11px; color:var(--muted); font-weight:400; margin-left:4px; }
+.product .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+
+/* ---------- quantity stepper ---------- */
+.qty { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:2px; background:var(--card); }
+.qty button { font:inherit; font-size:16px; line-height:1; background:none; border:none; color:var(--ink); width:40px; height:40px; cursor:pointer; }
+.qty button:hover { background:var(--line-soft); }
+.qty input { width:44px; height:40px; border:none; background:none; text-align:center; font:inherit; font-size:16px; color:var(--ink); -moz-appearance:textfield; }
+.qty input::-webkit-outer-spin-button, .qty input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+
+/* small buttons, e.g. remove / mark-sent chips */
+.btn.small { padding:8px 14px; font-size:11px; }
+.btn.rust { background:var(--rust); color:#fff; }
+.btn.rust:hover { background:var(--ink); }
+.btn[disabled] { opacity:.5; cursor:not-allowed; }
+.btn[disabled]:hover { background:var(--moss); }
+
+/* ---------- cart panel ---------- */
+.cart .line { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 0; border-bottom:1px solid var(--line-soft); }
+.cart .line:first-child { padding-top:0; }
+.cart .line .info { min-width:0; }
+.cart .line .info .nm { font-family:var(--serif); font-size:16px; line-height:1.25; }
+.cart .line .info .un { font-size:11px; color:var(--muted); margin-top:2px; }
+.cart .line .controls { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex:none; }
+.cart .line .lt { font-size:13px; color:var(--body); }
+.cart .remove { background:none; border:none; color:var(--muted); font-size:11px; text-decoration:underline; cursor:pointer; padding:14px 0; }
+.cart .remove:hover { color:var(--rust); }
+.cart .totals { margin-top:6px; padding-top:14px; border-top:1px solid var(--line); }
+.cart .totals .row { display:flex; justify-content:space-between; font-size:15px; padding:4px 0; }
+.cart .totals .row.grand { font-family:var(--serif); font-size:22px; padding-top:10px; }
+.cart .note { font-size:11.5px; line-height:1.6; color:var(--muted); font-style:italic; margin-top:10px; }
+.cart .empty { font-size:14px; color:var(--muted); padding:8px 0 4px; }
+.cart .btn { width:100%; text-align:center; margin-top:16px; }
+
+/* ---------- forms (checkout + admin) ---------- */
+.field { margin-bottom:18px; }
+.field label { display:block; font-size:12px; letter-spacing:0.04em; color:var(--muted); margin-bottom:6px; }
+.field input[type="text"],
+.field input[type="email"],
+.field input[type="tel"],
+.field input[type="number"],
+.field input[type="date"],
+.field select,
+.field textarea {
+  width:100%; font:inherit; font-size:16px; color:var(--ink);
+  background:var(--card); border:1px solid var(--line); border-radius:2px;
+  padding:11px 13px;
+}
+.field textarea { resize:vertical; min-height:70px; }
+.field .hint { font-size:11.5px; color:var(--muted); margin-top:5px; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 20px; }
+.form-grid .field.span2 { grid-column:1 / -1; }
+
+/* checkbox + radio rows get a roomier click target and a real focus ring
+   on the input itself (see :focus-visible in site.css) */
+.check-row { display:flex; align-items:flex-start; gap:10px; }
+.check-row input { margin-top:4px; flex:none; width:16px; height:16px; }
+.check-row label { font-size:13.5px; line-height:1.6; color:var(--body); }
+
+/* ---------- payment method ---------- */
+fieldset.pay { border:none; padding:0; margin:0 0 18px; }
+fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted); padding:0; margin-bottom:8px; }
+.pay-options { display:flex; gap:12px; flex-wrap:wrap; }
+.pay-option { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:2px; padding:12px 16px; cursor:pointer; background:var(--card); flex:1 1 200px; }
+.pay-option:has(input:checked) { border-color:var(--moss); background:var(--line-soft); }
+.pay-option input { flex:none; width:16px; height:16px; }
+.pay-option .t { font-size:14px; color:var(--ink); }
+.pay-option .d { font-size:11.5px; color:var(--muted); margin-top:2px; }
+
+/* ---------- quote / price breakdown ---------- */
+.quote .row { display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-bottom:1px dashed var(--line-soft); font-size:14.5px; }
+.quote .row .muted { color:var(--muted); font-size:12px; }
+.quote .row.total { border-bottom:none; padding-top:14px; font-family:var(--serif); font-size:24px; }
+.quote .loading { color:var(--muted); font-size:13px; font-style:italic; }
+
+/* ---------- scrollable terms box ---------- */
+.terms-box { max-height:200px; overflow-y:auto; }
+.terms-box p { font-size:13.5px; line-height:1.7; color:var(--muted); white-space:pre-wrap; }
+
+/* ---------- alerts ---------- */
+.alert { padding:14px 16px; border-radius:2px; font-size:14px; line-height:1.6; margin-bottom:18px; }
+.alert.error { background:#F7E9E3; border-left:3px solid var(--rust); color:#7A3A24; }
+.alert.success { background:#EAEFE4; border-left:3px solid var(--moss); color:var(--moss); }
+
+/* ---------- status badges ---------- */
+.badge.moss { background:var(--moss); }
+.badge.muted { background:var(--muted); }
+
+/* ---------- admin: tabs ---------- */
+.tabs { display:flex; gap:4px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:32px; }
+.tabs button { font:inherit; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); padding:12px 6px; margin-right:22px; cursor:pointer; }
+.tabs button:hover { color:var(--ink); }
+.tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--moss); }
+.tab-panel[hidden] { display:none; }
+
+/* ---------- admin: orders list ---------- */
+.orders { display:flex; flex-direction:column; gap:16px; }
+.order { background:var(--card); border:1px solid var(--line); padding:22px 24px; }
+.order .top { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.order h3 { font-family:var(--serif); font-weight:400; font-size:20px; }
+.order .email { font-size:12.5px; color:var(--muted); word-break:break-word; margin-top:2px; }
+.order .facts { margin-bottom:16px; }
+.order .facts .label { font-size:10px; }
+.order .facts .v { word-break:break-word; }
+.order .checklist { margin-bottom:16px; }
+.order .actions { display:flex; gap:10px; flex-wrap:wrap; }
+.chip { display:inline-block; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; background:var(--line-soft); color:var(--muted); padding:5px 10px; border-radius:2px; border:none; font-family:inherit; }
+.chip.done { background:var(--moss); color:var(--card); }
+.chip.action { cursor:pointer; }
+.chip.action:hover { background:var(--gold); color:#fff; }
+.empty-note { color:var(--muted); font-size:14px; padding:24px 0; }
+
+/* ---------- admin: tax report ---------- */
+.report-filters { display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-bottom:28px; }
+.report-filters .field { margin-bottom:0; }
+.by-category { border-top:1px solid var(--line); margin-top:8px; }
+.by-category .row { display:flex; justify-content:space-between; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line-soft); font-size:14px; }
+.by-category .row .n { color:var(--muted); font-size:12px; }
+
+/* ---------- admin: inventory ---------- */
+.inv-list { display:flex; flex-direction:column; gap:14px; }
+.inv-row { background:var(--card); border:1px solid var(--line); padding:20px 22px; }
+.inv-row .top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+.inv-row h3 { font-family:var(--serif); font-weight:400; font-size:19px; line-height:1.25; }
+.inv-row .meta { font-size:12px; color:var(--muted); margin-top:3px; }
+/* Thumbnail + filename ride along with the name block as one flex item, so
+   .top's existing two-item layout (name block vs. the Active checkbox) is
+   otherwise unchanged. Photos are not editable here — see the panel's intro
+   text — so there is nothing interactive in this group. */
+.inv-row .inv-head { display:flex; gap:12px; min-width:0; }
+.inv-row .inv-photo { flex:none; width:56px; }
+.inv-row .shot { width:56px; height:56px; background:var(--line-soft); overflow:hidden; }
+.inv-row .shot img { width:100%; height:100%; object-fit:cover; }
+.inv-row .shot.empty { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px; line-height:1.25; text-align:center; padding:4px; }
+.inv-row .filename { margin-top:4px; font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.inv-row .fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0 16px; align-items:start; }
+.inv-row .fields .field { margin-bottom:0; }
+.inv-row input[aria-invalid="true"] { border-color:var(--rust); }
+.inv-row .default-hint { font-size:11px; font-style:italic; color:var(--muted); margin-top:5px; }
+.inv-row .money-error { color:var(--rust); font-size:11.5px; margin-top:5px; line-height:1.4; }
+.inv-row .bottom { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:16px; }
+.inv-row .bottom[hidden] { display:none; } /* the price-confirm prompt hides this — without this rule, the flex display above wins over the browser's own [hidden] styling and it would stay visible */
+/* Price-change confirmation: a deliberate, worded choice in place of
+   window.confirm(), so a 5x+ price jump (almost always a decimal-point
+   slip) needs a real click on a clearly-labelled button, not a reflex. */
+.confirm-price { margin-top:16px; margin-bottom:0; }
+.confirm-price p { margin:0 0 12px; }
+.confirm-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.inv-row .status { font-size:13px; color:var(--muted); }
+.inv-row .status.ok { color:var(--moss); }
+.inv-row .status.err { color:var(--rust); }
+/* Margin box: plain by default, loud red when the row is priced below cost —
+   that combination is the single costliest mistake this page can cause. */
+.margin-box { padding:4px 8px; border-radius:2px; }
+.margin-box .label { display:block; font-size:12px; letter-spacing:0.04em; color:var(--muted); margin-bottom:6px; }
+.margin-box .v { font-family:var(--serif); font-size:19px; }
+.margin-box.negative { background:var(--rust); }
+.margin-box.negative .label { color:#F7E5DE; }
+.margin-box.negative .v { color:#fff; font-weight:500; }
+
+/* ---------- responsive ---------- */
+@media (max-width:900px) {
+  .store-grid { grid-template-columns:minmax(0,1fr); }
+  .store-grid .cart { position:static; }
+  .form-grid { grid-template-columns:minmax(0,1fr); }
+  .inv-row .fields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; }
+}
+@media (max-width:560px) {
+  .order .top { flex-direction:column; align-items:flex-start; gap:6px; }
+  .report-filters { flex-direction:column; align-items:stretch; }
+  .inv-row .top { flex-direction:column; align-items:flex-start; gap:8px; }
+  .inv-row .fields { grid-template-columns:minmax(0,1fr); }
+}
+
+/* ---------- product detail page ---------- */
+/* Photo and name in the catalogue grid link here. The anchors are wrappers
+   only — they must not introduce underlines or shift the card layout. */
+.title-link { color:inherit; text-decoration:none; }
+.title-link:hover { text-decoration:underline; text-underline-offset:3px; }
+
+.product-detail { display:grid; grid-template-columns:minmax(0,420px) minmax(0,1fr);
+  gap:36px; align-items:start; margin:20px 0 56px; }
+.pd-shot { background:var(--line-soft); border:1px solid var(--line); border-radius:2px;
+  aspect-ratio:1/1; overflow:hidden; }
+.pd-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+.pd-shot.empty { display:flex; align-items:center; justify-content:center;
+  color:var(--muted); font-family:var(--serif); }
+
+.pd-body h1 { font-size:clamp(30px,4vw,44px); line-height:1.1; margin-bottom:10px; }
+.pd-body .meta { font-size:13px; color:var(--muted); letter-spacing:.04em; }
+.pd-price { font-family:var(--serif); font-size:30px; margin:18px 0 22px; }
+.pd-price .unit { font-family:inherit; font-size:13px; color:var(--muted); letter-spacing:.04em; }
+.pd-desc p { font-size:15px; line-height:1.75; margin-bottom:14px; }
+.pd-actions { display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  margin:26px 0 18px; }
+
+@media (max-width:760px) {
+  .product-detail { grid-template-columns:1fr; gap:24px; }
+}
+
+/* ---------- inventory photo upload ---------- */
+/* The real <input type="file"> is visually hidden; this label is the control. */
+.photo-btn { display:block; margin-top:6px; font-size:11px; letter-spacing:.02em;
+  color:var(--rust); cursor:pointer; white-space:nowrap;
+  text-decoration:underline; text-underline-offset:3px; padding:6px 0; }
+.photo-btn:hover { color:var(--ink); }
+.inv-photo input[type="file"]:focus-visible + .upload-status,
+.inv-photo input[type="file"]:focus-visible ~ .photo-btn { outline:2px solid var(--rust); outline-offset:2px; }
+.upload-status { font-size:11px; line-height:1.5; margin-top:4px; max-width:120px; color:var(--muted); }
+.upload-status.ok  { color:var(--moss, #4a6741); }
+.upload-status.bad { color:var(--rust); }

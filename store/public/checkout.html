@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout — A Little Hill Farm</title>
+<meta name="description" content="Review your order and pay.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header" data-chrome>
+  <div class="bar">
+    <a class="brand" href="https://alittlehillfarm.com/">
+      <img src="assets/logo.png" alt="">
+      <span>
+        <span class="name">A Little Hill Farm</span><br>
+        <span class="sub">Potlatch, Idaho · Farm Store</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://alittlehillfarm.com/">Herd</a>
+      <a href="index.html">Farm Store</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <section class="page-head" style="padding-bottom:32px">
+    <p class="eyebrow">Checkout</p>
+    <h1 class="serif" style="font-size:clamp(34px,4.5vw,50px)">Review &amp; pay</h1>
+  </section>
+
+  <!-- Shown instead of everything else when there is nothing to check out. -->
+  <div id="empty-state" hidden>
+    <p class="lede">Your cart is empty, so there is nothing to check out yet.</p>
+    <p><a class="btn ghost" href="index.html">← Back to the store</a></p>
+  </div>
+
+  <div id="checkout-area" class="store-grid" hidden>
+
+    <!-- Left: customer details, payment method, terms -->
+    <div>
+      <div id="checkout-error"></div>
+
+      <form id="checkout-form" novalidate>
+
+        <h2 class="serif" style="font-size:22px;margin-bottom:16px">Your details</h2>
+        <div class="form-grid">
+          <div class="field span2">
+            <label for="f-name">Full name</label>
+            <input type="text" id="f-name" name="name" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="f-email">Email</label>
+            <input type="email" id="f-email" name="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="f-phone">Phone</label>
+            <input type="tel" id="f-phone" name="phone" autocomplete="tel" required>
+          </div>
+          <div class="field span2">
+            <label for="f-pickup">Pickup location</label>
+            <select id="f-pickup" name="pickup" required>
+              <option value="" disabled selected>Choose a pickup location…</option>
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="pay">
+          <legend>Payment method</legend>
+          <div class="pay-options" id="pay-options">
+            <!-- radios are filled in by script, once we know the discount
+                 percentages and whether cash is available -->
+          </div>
+        </fieldset>
+
+        <h2 class="serif" style="font-size:22px;margin:28px 0 16px">Pre-order terms</h2>
+        <div class="panel dashed terms-box" id="terms-text">
+          <p>Loading terms…</p>
+        </div>
+        <div class="check-row" style="margin-top:14px">
+          <input type="checkbox" id="f-terms" required>
+          <label for="f-terms">I have read and agree to the pre-order terms above.</label>
+        </div>
+
+        <button type="submit" class="btn" id="submit-btn" style="margin-top:24px" disabled>Place order</button>
+      </form>
+    </div>
+
+    <!-- Right: what's in the order, and the server's authoritative price -->
+    <aside class="cart panel" aria-label="Order summary">
+      <h2 class="serif" style="font-size:22px;margin-bottom:16px">Order summary</h2>
+      <div id="summary-lines" aria-live="polite"></div>
+      <div class="quote" id="quote-box">
+        <p class="loading">Calculating…</p>
+      </div>
+    </aside>
+
+  </div>
+</div>
+</main>
+
+<footer class="site-footer" data-chrome>
+  <div class="cols">
+    <div>
+      <div class="mark">A Little Hill Farm</div>
+      <p style="font-size:14px;line-height:1.7">Feed, milk, and farm goods — pre-ordered here, picked up at the farm.</p>
+    </div>
+    <div>
+      <h4>Farm store</h4>
+      <ul>
+        <li><a href="index.html">Catalog</a></li>
+        <li><a href="https://alittlehillfarm.com/">Back to the herd</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fine">
+    <span>© A Little Hill Farm</span>
+    <span>Orders are pre-paid and picked up locally</span>
+  </div>
+</footer>
+
+<script>
+/* Checkout — customer details, payment method, and the real price.
+ * ---------------------------------------------------------------------
+ * Every number a customer pays comes from the server. This page calls
+ * POST /api/quote every time the payment method (or the customer's
+ * email, which can carry a tax-exemption) changes, and just displays
+ * whatever comes back. It never adds, discounts, or taxes anything
+ * itself. All money from the server arrives as integer cents; the only
+ * arithmetic done here is dividing by 100 for display.
+ */
+(function () {
+  'use strict';
+
+  var CART_KEY = 'alhf_cart';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(cents) {
+    return '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
+  }
+  // Basis points -> a plain percentage string for a discount label
+  // (300 -> "3", 250 -> "2.5"). Never used for money math, display only.
+  function bpsToPct(bps) {
+    return String(Math.round((Number(bps) || 0) / 10) / 10);
+  }
+
+  function loadCart() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (e) { return []; }
+  }
+  function saveCart(cart) {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) {}
+  }
+  function clearCart() {
+    try { localStorage.removeItem(CART_KEY); } catch (e) {}
+  }
+
+  async function getJSON(url, options) {
+    var res = await fetch(url, options);
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+    if (!res.ok) {
+      var msg = (data && data.error) ? data.error : ('Request failed (' + res.status + ')');
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  var cart = loadCart();
+  var config = null;
+  var quoteReady = false;
+
+  var form = document.getElementById('checkout-form');
+  var submitBtn = document.getElementById('submit-btn');
+  var errorHost = document.getElementById('checkout-error');
+  var emailField = document.getElementById('f-email');
+  var termsCheck = document.getElementById('f-terms');
+
+  function showError(msg) {
+    errorHost.innerHTML = '<div class="alert error">' + esc(msg) + '</div>';
+    errorHost.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function clearError() { errorHost.innerHTML = ''; }
+
+  function updateSubmitEnabled() {
+    submitBtn.disabled = !(quoteReady && termsCheck.checked && cart.length > 0);
+  }
+
+  function currentMethod() {
+    var checked = document.querySelector('input[name="payment_method"]:checked');
+    return checked ? checked.value : 'card';
+  }
+
+  function renderSummaryLines(lines) {
+    var host = document.getElementById('summary-lines');
+    if (!lines || !lines.length) { host.innerHTML = ''; return; }
+    host.innerHTML = lines.map(function (l) {
+      return (
+        '<div class="line">' +
+          '<div class="info">' +
+            '<div class="nm">' + esc(l.name) + '</div>' +
+            '<div class="un">' + esc(l.unit || '') + ' × ' + Number(l.qty) + '</div>' +
+          '</div>' +
+          '<div class="controls"><div class="lt">' + money(l.line_total_cents) + '</div></div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderQuote(q) {
+    var host = document.getElementById('quote-box');
+    var rows = '';
+    rows += '<div class="row"><span>Subtotal</span><span>' + money(q.subtotal_cents) + '</span></div>';
+    if (q.discount_cents > 0) {
+      rows += '<div class="row"><span>Discount</span><span>-' + money(q.discount_cents) + '</span></div>';
+    }
+    rows += '<div class="row"><span>Idaho sales tax</span><span>' +
+      (q.tax_exempt ? money(0) + ' <span class="muted">(exempt)</span>' : money(q.tax_cents)) +
+      '</span></div>';
+    rows += '<div class="row total"><span>Total</span><span>' + money(q.total_cents) + '</span></div>';
+    host.innerHTML = rows;
+    renderSummaryLines(q.lines);
+  }
+
+  function fetchQuote() {
+    if (!cart.length) return;
+    var host = document.getElementById('quote-box');
+    host.innerHTML = '<p class="loading">Calculating…</p>';
+    quoteReady = false;
+    updateSubmitEnabled();
+
+    getJSON('/api/quote', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        items: cart,
+        payment_method: currentMethod(),
+        email: emailField.value.trim()
+      })
+    }).then(function (q) {
+      renderQuote(q);
+      quoteReady = true;
+      updateSubmitEnabled();
+    }).catch(function (err) {
+      host.innerHTML = '<p class="alert error">Could not price your order: ' + esc(err.message) + '</p>';
+      quoteReady = false;
+      updateSubmitEnabled();
+    });
+  }
+
+  function payOptionHtml(value, label, note, checked) {
+    // The note carries a discount percentage derived from server config, so
+    // escape all three even though they are currently safe. Every other
+    // innerHTML in this file goes through esc(); this one should not be the
+    // exception someone later relies on.
+    var id = 'pay-' + value;
+    return (
+      '<label class="pay-option" for="' + esc(id) + '">' +
+        '<input type="radio" id="' + esc(id) + '" name="payment_method" value="' + esc(value) + '"' +
+          (checked ? ' checked' : '') + ' aria-describedby="' + esc(id) + '-note">' +
+        '<span><span class="t">' + esc(label) + '</span><br>' +
+          '<span class="d" id="' + esc(id) + '-note">' + esc(note) + '</span></span>' +
+      '</label>'
+    );
+  }
+
+  function setupPaymentOptions() {
+    var achPct = bpsToPct(config.pricing.ach_discount_bps);
+    var cashPct = bpsToPct(config.pricing.cash_discount_bps);
+    var html = payOptionHtml('card', 'Card', 'Pay the posted price.', true);
+    html += payOptionHtml('ach', 'Bank transfer', 'Save ' + achPct + '% — paid by ACH bank transfer.', false);
+    if (config.cash_enabled) {
+      html += payOptionHtml('cash', 'Cash at pickup', 'Save ' + cashPct + '% — pay when you pick up.', false);
+    }
+    document.getElementById('pay-options').innerHTML = html;
+
+    document.querySelectorAll('input[name="payment_method"]').forEach(function (radio) {
+      radio.addEventListener('change', fetchQuote);
+    });
+  }
+
+  function setupPickup() {
+    var select = document.getElementById('f-pickup');
+    config.pickup_locations.forEach(function (loc) {
+      var opt = document.createElement('option');
+      opt.value = loc.id;
+      opt.textContent = loc.label;
+      select.appendChild(opt);
+    });
+  }
+
+  function setupTerms() {
+    document.getElementById('terms-text').innerHTML = '<p>' + esc(config.terms.text) + '</p>';
+  }
+
+  function init() {
+    if (!cart.length) {
+      document.getElementById('empty-state').hidden = false;
+      return;
+    }
+    document.getElementById('checkout-area').hidden = false;
+
+    Promise.all([getJSON('/api/config'), getJSON('/api/catalog')])
+      .then(function (results) {
+        config = results[0];
+        var catalog = results[1].products || [];
+        var knownIds = {};
+        catalog.forEach(function (p) { knownIds[p.id] = true; });
+
+        // If the catalog changed since something was added to the cart,
+        // drop it here rather than letting the whole order fail server-side.
+        var before = cart.length;
+        cart = cart.filter(function (l) { return knownIds[l.id]; });
+        if (cart.length !== before) saveCart(cart);
+
+        if (!cart.length) {
+          document.getElementById('checkout-area').hidden = true;
+          document.getElementById('empty-state').hidden = false;
+          return;
+        }
+
+        setupPaymentOptions();
+        setupPickup();
+        setupTerms();
+        fetchQuote();
+      })
+      .catch(function (err) {
+        console.error(err);
+        showError('Could not load checkout right now. Please refresh the page in a moment.');
+      });
+  }
+
+  emailField.addEventListener('blur', fetchQuote);
+  termsCheck.addEventListener('change', updateSubmitEnabled);
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearError();
+
+    if (!form.reportValidity()) return;
+    if (!termsCheck.checked) { showError('Please accept the pre-order terms to continue.'); return; }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Placing your order…';
+
+    getJSON('/api/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        items: cart,
+        payment_method: currentMethod(),
+        email: emailField.value.trim(),
+        name: document.getElementById('f-name').value.trim(),
+        phone: document.getElementById('f-phone').value.trim(),
+        pickup: document.getElementById('f-pickup').value,
+        terms_ack: true
+      })
+    }).then(function (result) {
+      // Only clear the cart once the server has confirmed the order.
+      clearCart();
+      if (result.redirect_url) {
+        window.location.href = result.redirect_url;
+      } else {
+        window.location.href = 'thanks.html?sale=' + encodeURIComponent(result.sale_id);
+      }
+    }).catch(function (err) {
+      showError(err.message || 'Something went wrong placing your order. Please try again.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Place order';
+      updateSubmitEnabled();
+    });
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

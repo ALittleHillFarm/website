@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order review — A Little Hill Farm</title>
+<meta name="description" content="Staff console for the farm store: review orders, record cash sales, and run the tax report.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header" data-chrome>
+  <div class="bar">
+    <a class="brand" href="https://alittlehillfarm.com/">
+      <img src="assets/logo.png" alt="">
+      <span>
+        <span class="name">A Little Hill Farm</span><br>
+        <span class="sub">Potlatch, Idaho · Farm Store</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://alittlehillfarm.com/">Herd</a>
+      <a href="index.html">Farm Store</a>
+      <a href="admin.html" aria-current="page">Admin</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <section class="page-head" style="padding-bottom:24px">
+    <p class="eyebrow">Staff only</p>
+    <h1 class="serif" style="font-size:clamp(32px,4vw,46px)">Order review console</h1>
+    <p class="lede">Your browser will ask for the admin username and password the first time this page talks to the server.</p>
+  </section>
+
+  <div class="tabs" role="tablist" aria-label="Admin sections">
+    <button type="button" role="tab" id="tab-orders" aria-controls="panel-orders" aria-selected="true">Orders</button>
+    <button type="button" role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Record a sale</button>
+    <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
+    <button type="button" role="tab" id="tab-inventory" aria-controls="panel-inventory" aria-selected="false">Inventory</button>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Orders — review, capture, cancel, and track the notify checklist -->
+  <!-- ============================================================ -->
+  <section id="panel-orders" class="tab-panel" role="tabpanel" aria-labelledby="tab-orders" tabindex="0">
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Orders</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      <strong>Authorized</strong> means the customer's card is on hold but has not been charged yet — that's the normal state
+      to review before you capture. <strong>Captured</strong> is paid. <strong>Recorded</strong> is a cash or check sale that
+      never touched a card.
+    </p>
+
+    <div class="report-filters">
+      <div class="field">
+        <label for="status-filter">Status</label>
+        <select id="status-filter">
+          <option value="authorized" selected>Authorized (awaiting capture)</option>
+          <option value="captured">Captured</option>
+          <option value="pending">Pending</option>
+          <option value="canceled">Canceled</option>
+          <option value="recorded">Recorded (cash / direct)</option>
+          <option value="">All statuses</option>
+        </select>
+      </div>
+      <button type="button" class="btn ghost" id="refresh-orders">Refresh</button>
+    </div>
+
+    <div id="orders-msg"></div>
+    <div class="orders" id="orders-list"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Record a sale — cash/check sales that never touch the online store -->
+  <!-- ============================================================ -->
+  <section id="panel-record" class="tab-panel" role="tabpanel" aria-labelledby="tab-record" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Record a sale</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">For feed, milk, cheese, or goat sales handled in person — cash or check. This does not touch Stripe; it just adds a line to the ledger.</p>
+
+    <form id="record-form" class="form-narrow" style="max-width:640px">
+      <div class="form-grid">
+        <div class="field">
+          <label for="r-date">Date</label>
+          <input type="date" id="r-date" required>
+        </div>
+        <div class="field">
+          <label for="r-category">Category</label>
+          <select id="r-category" required>
+            <option value="feed">Feed</option>
+            <option value="milk">Milk</option>
+            <option value="cheese">Cheese</option>
+            <option value="goat">Goat</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-name">Customer name</label>
+          <input type="text" id="r-name" required>
+        </div>
+        <div class="field">
+          <label for="r-email">Customer email (optional)</label>
+          <input type="email" id="r-email">
+        </div>
+        <div class="field span2">
+          <label for="r-desc">Item description</label>
+          <textarea id="r-desc" required placeholder="e.g. 2 dozen eggs, 1 gallon raw milk"></textarea>
+        </div>
+        <div class="field">
+          <label for="r-subtotal">Subtotal ($)</label>
+          <input type="number" id="r-subtotal" min="0" step="0.01" inputmode="decimal" required>
+        </div>
+        <div class="field">
+          <label for="r-tax">Tax ($)</label>
+          <input type="number" id="r-tax" min="0" step="0.01" inputmode="decimal" value="0" required>
+        </div>
+        <div class="field">
+          <label for="r-method">Payment method</label>
+          <select id="r-method" required>
+            <option value="cash">Cash</option>
+            <option value="check">Check</option>
+          </select>
+        </div>
+        <div class="field">
+          <div class="check-row" style="margin-top:30px">
+            <input type="checkbox" id="r-exempt">
+            <label for="r-exempt">Tax-exempt sale</label>
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn">Record sale</button>
+      <div id="record-msg" style="margin-top:16px"></div>
+    </form>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Tax report — totals for a date range, for quarterly filing -->
+  <!-- ============================================================ -->
+  <section id="panel-report" class="tab-panel" role="tabpanel" aria-labelledby="tab-report" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Tax report</h2>
+
+    <form id="report-form">
+      <div class="report-filters">
+        <div class="field">
+          <label for="rep-from">From</label>
+          <input type="date" id="rep-from" required>
+        </div>
+        <div class="field">
+          <label for="rep-to">To</label>
+          <input type="date" id="rep-to" required>
+        </div>
+        <button type="submit" class="btn">Run report</button>
+      </div>
+      <p class="field hint" style="margin-top:-8px">"To" is exclusive of that day itself — to cover a full month, set "To" to the 1st of the next month.</p>
+    </form>
+
+    <div id="report-results"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Inventory — switch products on/off, update price/cost/freight -->
+  <!-- ============================================================ -->
+  <section id="panel-inventory" class="tab-panel" role="tabpanel" aria-labelledby="tab-inventory" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Inventory</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      Switch a product on or off, or update its price, cost, or freight when a supplier's numbers change.
+      Leave a dollar box empty to use that product's regular default instead of changing it — that is
+      different from entering 0.00, which means exactly zero. <strong>Margin</strong> is price minus cost
+      minus freight; <strong>if a row turns red, it is priced below what it costs to sell.</strong>
+      Replace a photo with the button under its thumbnail — the new picture only goes live when you press Save on that row.</p>
+
+    <div class="report-filters">
+      <div class="field" style="min-width:220px">
+        <label for="inv-search">Search</label>
+        <input type="text" id="inv-search" placeholder="Name, SKU, or supplier">
+      </div>
+      <div class="check-row" style="margin-bottom:0">
+        <input type="checkbox" id="inv-show-all">
+        <label for="inv-show-all">Show inactive products too</label>
+      </div>
+      <button type="button" class="btn ghost" id="refresh-inventory">Refresh</button>
+    </div>
+
+    <div id="inventory-msg"></div>
+    <div class="inv-list" id="inventory-list"></div>
+  </section>
+
+</div>
+</main>
+
+<footer class="site-footer" data-chrome>
+  <div class="cols">
+    <div>
+      <div class="mark">A Little Hill Farm</div>
+      <p style="font-size:14px;line-height:1.7">Feed, milk, and farm goods — pre-ordered here, picked up at the farm.</p>
+    </div>
+    <div>
+      <h4>Farm store</h4>
+      <ul>
+        <li><a href="index.html">Catalog</a></li>
+        <li><a href="https://alittlehillfarm.com/">Back to the herd</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fine">
+    <span>© A Little Hill Farm</span>
+    <span>Staff console — not indexed, but not a secret vault either</span>
+  </div>
+</footer>
+
+<script>
+/* Order review console.
+ * ---------------------------------------------------------------------
+ * Every write here (capture, cancel, notify, record) goes straight to
+ * the server; this page just displays what comes back and re-loads
+ * the list afterwards so it never shows stale state. All money from
+ * the server is integer cents — this file only ever divides by 100 to
+ * print a dollar figure, never to calculate one.
+ *
+ * Basic Auth is handled entirely by the browser: the first fetch to an
+ * /api/admin/... URL that comes back 401 makes the browser pop up its
+ * own username/password dialog. There is nothing for this script to do
+ * about that beyond showing a plain error if it's ever declined.
+ */
+(function () {
+  'use strict';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(cents) {
+    return '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
+  }
+  function catLabel(cat) {
+    var s = String(cat || 'other');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  function dateStr(d) {
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+  function timeAgo(iso) {
+    var then = new Date(iso).getTime();
+    if (!isFinite(then)) return '—';
+    var mins = Math.floor(Math.max(0, Date.now() - then) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+    var days = Math.floor(hours / 24);
+    if (days < 30) return days + (days === 1 ? ' day ago' : ' days ago');
+    var months = Math.floor(days / 30);
+    return months + (months === 1 ? ' month ago' : ' months ago');
+  }
+
+  async function getJSON(url, options) {
+    var res = await fetch(url, options);
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* not JSON, e.g. the plain-text 401 */ }
+    if (!res.ok) {
+      var msg = (data && data.error) ? data.error : ('Request failed (' + res.status + ')');
+      var err = new Error(msg);
+      // Most callers only ever read err.message. A couple of special cases
+      // (the inventory price-change confirmation below) need the raw status
+      // and body too, so both ride along on the error rather than being
+      // dropped on the floor here.
+      err.status = res.status;
+      err.body = data;
+      throw err;
+    }
+    return data;
+  }
+
+  // ---- tabs ---------------------------------------------------------------
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+      if (tab.id === 'tab-orders') loadOrders();
+      if (tab.id === 'tab-inventory') loadInventory();
+    });
+  });
+
+  // ---- orders ---------------------------------------------------------------
+  var pickupMap = {};
+
+  function pickupLabel(fulfillment) {
+    if (!fulfillment) return '—';
+    var parts = String(fulfillment).split(':');
+    var kind = parts[0], id = parts[1];
+    var label = pickupMap[id] || id || fulfillment;
+    return kind === 'ship' ? 'Ship to ' + label : label;
+  }
+
+  var STAGES = [
+    ['received', 'Order received'],
+    ['supplier_ordered', 'Supplier ordered'],
+    ['arrived', 'Arrived'],
+    ['picked_up', 'Picked up']
+  ];
+
+  var STATUS_BADGE = {
+    authorized: 'badge',
+    captured: 'badge moss',
+    canceled: 'badge rust',
+    recorded: 'badge muted',
+    pending: 'badge muted'
+  };
+
+  function renderOrderCard(sale) {
+    var notified = {};
+    try { notified = JSON.parse(sale.notified_json || '{}'); } catch (e) {}
+
+    var checklist = STAGES.map(function (stage) {
+      var key = stage[0], label = stage[1];
+      if (notified[key]) return '<span class="chip done">' + esc(label) + ' ✓</span>';
+      return '<button type="button" class="chip action" data-action="notify" data-sale="' +
+        esc(sale.id) + '" data-stage="' + key + '">Mark: ' + esc(label) + '</button>';
+    }).join(' ');
+
+    var actions = '';
+    if (sale.status === 'authorized') {
+      actions +=
+        '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Capture</button>' +
+        '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Capture partial…</button>';
+    }
+    if (sale.status === 'authorized' || sale.status === 'pending') {
+      actions += '<button type="button" class="btn small rust" data-action="cancel" data-sale="' + esc(sale.id) + '">Cancel</button>';
+    }
+
+    var badgeClass = STATUS_BADGE[sale.status] || 'badge muted';
+
+    return (
+      '<article class="order">' +
+        '<div class="top">' +
+          '<div>' +
+            '<h3>' + esc(sale.customer_name || 'Unnamed customer') + '</h3>' +
+            '<div class="email">' + esc(sale.customer_email || '') + '</div>' +
+          '</div>' +
+          '<span class="' + badgeClass + '">' + esc(sale.status) + '</span>' +
+        '</div>' +
+        '<div class="facts">' +
+          '<div><div class="label">Total</div><div class="v">' + money(sale.total_cents) + '</div></div>' +
+          '<div><div class="label">Pickup</div><div class="v">' + esc(pickupLabel(sale.fulfillment)) + '</div></div>' +
+          '<div><div class="label">Placed</div><div class="v">' + esc(timeAgo(sale.sold_at)) + '</div></div>' +
+          '<div><div class="label">Payment</div><div class="v">' + esc(sale.payment_method || '') + '</div></div>' +
+        '</div>' +
+        '<div class="checklist">' + checklist + '</div>' +
+        (actions ? '<div class="actions">' + actions + '</div>' : '') +
+      '</article>'
+    );
+  }
+
+  function setOrdersMessage(msg, isError) {
+    var host = document.getElementById('orders-msg');
+    host.innerHTML = msg ? '<p class="' + (isError ? 'alert error' : 'lede') + '">' + esc(msg) + '</p>' : '';
+  }
+
+  function loadOrders() {
+    var status = document.getElementById('status-filter').value;
+    setOrdersMessage('Loading…');
+    var url = '/api/admin/sales' + (status ? '?status=' + encodeURIComponent(status) : '');
+    getJSON(url).then(function (data) {
+      setOrdersMessage('');
+      var sales = data.sales || [];
+      document.getElementById('orders-list').innerHTML = sales.length
+        ? sales.map(renderOrderCard).join('')
+        : '<p class="empty-note">No orders match this filter.</p>';
+    }).catch(function (err) {
+      document.getElementById('orders-list').innerHTML = '';
+      setOrdersMessage(err.message, true);
+    });
+  }
+
+  function runAction(url, body) {
+    return getJSON(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  document.getElementById('orders-list').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    var saleId = btn.getAttribute('data-sale');
+    var action = btn.getAttribute('data-action');
+    var job;
+
+    if (action === 'capture') {
+      job = runAction('/api/admin/capture', { sale_id: saleId });
+    } else if (action === 'capture-partial') {
+      var dollars = window.prompt('Capture how much, in dollars?');
+      if (dollars === null) return;
+      var cents = Math.round(parseFloat(dollars) * 100);
+      if (!isFinite(cents) || cents <= 0) { window.alert('Enter a dollar amount greater than zero.'); return; }
+      job = runAction('/api/admin/capture', { sale_id: saleId, amount_cents: cents });
+    } else if (action === 'cancel') {
+      var ok = window.confirm(
+        'Cancel this order?\n\nThis costs nothing — the card was only ever authorized, not charged. ' +
+        'That is different from a refund, which has a fee even when the amount comes back to the customer.'
+      );
+      if (!ok) return;
+      job = runAction('/api/admin/cancel', { sale_id: saleId });
+    } else if (action === 'notify') {
+      job = runAction('/api/admin/notify', { sale_id: saleId, stage: btn.getAttribute('data-stage') });
+    } else {
+      return;
+    }
+
+    btn.disabled = true;
+    job.then(function () { loadOrders(); })
+      .catch(function (err) { setOrdersMessage(err.message, true); btn.disabled = false; });
+  });
+
+  document.getElementById('status-filter').addEventListener('change', loadOrders);
+  document.getElementById('refresh-orders').addEventListener('click', loadOrders);
+
+  // ---- record a sale ---------------------------------------------------------------
+  document.getElementById('r-date').value = dateStr(new Date());
+
+  document.getElementById('record-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msgHost = document.getElementById('record-msg');
+    msgHost.innerHTML = '';
+
+    var subtotalCents = Math.round(parseFloat(document.getElementById('r-subtotal').value) * 100);
+    var taxCents = Math.round(parseFloat(document.getElementById('r-tax').value || '0') * 100);
+    if (!isFinite(subtotalCents) || subtotalCents < 0) {
+      msgHost.innerHTML = '<p class="alert error">Enter a valid subtotal.</p>';
+      return;
+    }
+
+    var body = {
+      sold_at: document.getElementById('r-date').value,
+      category: document.getElementById('r-category').value,
+      customer_name: document.getElementById('r-name').value.trim(),
+      customer_email: document.getElementById('r-email').value.trim() || null,
+      items: [{ description: document.getElementById('r-desc').value.trim() }],
+      subtotal_cents: subtotalCents,
+      tax_cents: taxCents,
+      tax_exempt: document.getElementById('r-exempt').checked,
+      payment_method: document.getElementById('r-method').value
+    };
+
+    var submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+
+    runAction('/api/admin/record', body).then(function (result) {
+      msgHost.innerHTML = '<p class="alert success">Recorded. Reference ' + esc(result.sale_id) + '.</p>';
+      e.target.reset();
+      document.getElementById('r-date').value = dateStr(new Date());
+      submitBtn.disabled = false;
+    }).catch(function (err) {
+      msgHost.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>';
+      submitBtn.disabled = false;
+    });
+  });
+
+  // ---- tax report ---------------------------------------------------------------
+  (function setDefaultReportDates() {
+    var now = new Date();
+    var firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('rep-from').value = dateStr(firstOfMonth);
+    document.getElementById('rep-to').value = dateStr(now);
+  })();
+
+  function renderReport(r) {
+    var host = document.getElementById('report-results');
+    var rows = (r.by_category || []).map(function (c) {
+      return (
+        '<div class="row"><span>' + esc(catLabel(c.category)) + ' <span class="n">(' + Number(c.n) + ')</span></span>' +
+        '<span>' + money(c.total_cents) + '</span></div>'
+      );
+    }).join('');
+
+    host.innerHTML =
+      '<section class="stats" style="margin:24px 0">' +
+        '<div><div class="n">' + Number(r.sales || 0) + '</div><div class="l">Sales</div></div>' +
+        '<div><div class="n">' + money(r.gross_cents) + '</div><div class="l">Gross</div></div>' +
+        '<div><div class="n">' + money(r.tax_collected_cents) + '</div><div class="l">Tax collected</div></div>' +
+        '<div><div class="n">' + money(r.exempt_cents) + '</div><div class="l">Exempt sales</div></div>' +
+      '</section>' +
+      '<h3 class="serif" style="font-size:18px;margin-bottom:4px">By category</h3>' +
+      '<div class="by-category">' + (rows || '<p class="empty-note">No sales in this period.</p>') + '</div>';
+  }
+
+  document.getElementById('report-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var host = document.getElementById('report-results');
+    host.innerHTML = '<p class="lede">Running report…</p>';
+    var from = document.getElementById('rep-from').value;
+    var to = document.getElementById('rep-to').value;
+    getJSON('/api/admin/report?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to))
+      .then(renderReport)
+      .catch(function (err) { host.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>'; });
+  });
+
+  // ---- inventory ---------------------------------------------------------------
+  // All ~133 products live here, active and inactive. This page keeps its own
+  // copy (allProducts / productsById) so the search box and "show inactive"
+  // checkbox can filter instantly without hitting the server on every
+  // keystroke. That copy is refreshed from the server when the tab opens, on
+  // Refresh, and after every save — so a row never shows anything the server
+  // hasn't actually confirmed.
+  var allProducts = [];
+  var productsById = {};
+
+  // Holds the exact body of a save that the server flagged as needing
+  // confirmation (a 5x+ price jump — see showPriceConfirm below), keyed by
+  // product id, so the Confirm button can re-send that identical body plus
+  // confirm:true rather than re-reading fields that may have moved on.
+  var pendingSaves = {};
+
+  function rebuildProductsById() {
+    productsById = {};
+    allProducts.forEach(function (p) { productsById[String(p.id)] = p; });
+  }
+
+  // Formats cents as a plain dollar string for pre-filling a money <input> —
+  // e.g. "53.00", never a "$" sign — so it parses straight back into
+  // parseMoneyInput() below without needing to strip anything first.
+  function dollarsForInput(cents) {
+    return (Math.round(Number(cents) || 0) / 100).toFixed(2);
+  }
+
+  // Turns whatever she typed into a money box into whole cents, or flags it
+  // as invalid. This is the only place that reads a raw money string, and it
+  // is deliberately strict: no "$", no commas, no negative numbers, nothing
+  // silently guessed. An empty box is valid and means "use the committed
+  // default" — that is reported as cents:null, never cents:0, so the caller
+  // can send null rather than quietly turning a blank box into a real zero.
+  function parseMoneyInput(raw) {
+    var v = String(raw == null ? '' : raw).trim();
+    if (v === '') return { ok: true, cents: null };
+    if (!/^\d+(\.\d{1,2})?$/.test(v)) return { ok: false };
+    var cents = Math.round(parseFloat(v) * 100);
+    if (!isFinite(cents) || cents < 0) return { ok: false };
+    return { ok: true, cents: cents };
+  }
+
+  function matchesInventoryFilters(p) {
+    if (!document.getElementById('inv-show-all').checked && !p.active) return false;
+    var q = document.getElementById('inv-search').value.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(p.name || '').toLowerCase().indexOf(q) !== -1 ||
+      String(p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+      String(p.supplier || '').toLowerCase().indexOf(q) !== -1
+    );
+  }
+
+  // Margin is price minus cost minus freight, in cents. Negative margin means
+  // she'd be selling below cost, so that state gets a loud red box rather
+  // than just a minus sign — it is the costliest mistake this page can make.
+  function marginBoxHtml(marginCents) {
+    var neg = marginCents < 0;
+    return (
+      '<div class="margin-box' + (neg ? ' negative' : '') + '">' +
+        '<div class="label">Margin</div>' +
+        '<div class="v">' + money(marginCents) + (neg ? ' — below cost!' : '') + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderInventoryRow(p) {
+    var id = esc(p.id);
+    var priceVal = esc(dollarsForInput(p.price_cents));
+    var costVal = esc(dollarsForInput(p.cost_cents));
+    var freightVal = esc(dollarsForInput(p.freight_cents));
+    var marginCents = Number(p.price_cents || 0) - Number(p.cost_cents || 0) - Number(p.freight_cents || 0);
+
+    // Photos are display-only on this page (see the note in the panel's
+    // intro text) — just the last path segment is shown, so she can tell
+    // which file a product is using, with the full path riding along in
+    // the title attribute. An empty image means no photo has been set yet.
+    var imagePath = String(p.image || '');
+    var fileName = imagePath.slice(imagePath.lastIndexOf('/') + 1);
+    var shot = imagePath
+      ? '<img src="' + esc(imagePath) + '" alt="" loading="lazy">'
+      : 'no photo';
+
+    return (
+      '<article class="inv-row" data-id="' + id + '">' +
+        '<div class="top">' +
+          '<div class="inv-head">' +
+            '<div class="inv-photo">' +
+              '<div class="shot' + (imagePath ? '' : ' empty') + '">' + shot + '</div>' +
+              '<div class="filename" title="' + esc(imagePath) + '">' + esc(fileName) + '</div>' +
+              // Uploading only stages the new photo on this row; it is not
+              // live until Save, same as every other field here.
+              '<label class="photo-btn" for="inv-file-' + id + '">Replace photo…</label>' +
+              '<input type="file" class="visually-hidden" id="inv-file-' + id + '" data-upload="1" accept="image/jpeg,image/png,image/gif,image/webp">' +
+              '<div class="upload-status" id="inv-upload-' + id + '" hidden></div>' +
+            '</div>' +
+            '<div>' +
+              '<h3>' + esc(p.name) + '</h3>' +
+              '<div class="meta">' + esc(p.unit || '') + ' · ' + esc(p.supplier || '') + ' · SKU ' + esc(p.sku || '') + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="check-row" style="margin-bottom:0">' +
+            '<input type="checkbox" id="inv-active-' + id + '" data-active="1"' + (p.active ? ' checked' : '') + '>' +
+            '<label for="inv-active-' + id + '">Active (shown in the store)</label>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fields">' +
+          '<div class="field">' +
+            '<label for="inv-price-' + id + '">Price ($)</label>' +
+            '<input type="text" inputmode="decimal" autocomplete="off" id="inv-price-' + id + '" data-money="1" value="' + priceVal + '" placeholder="Default" aria-describedby="inv-price-err-' + id + '">' +
+            '<div class="default-hint" id="inv-price-default-' + id + '" hidden>Empty = ' + money(p.default_price_cents) + '</div>' +
+            '<div class="money-error" id="inv-price-err-' + id + '" hidden></div>' +
+          '</div>' +
+          '<div class="field">' +
+            '<label for="inv-cost-' + id + '">Cost ($)</label>' +
+            '<input type="text" inputmode="decimal" autocomplete="off" id="inv-cost-' + id + '" data-money="1" value="' + costVal + '" placeholder="Default" aria-describedby="inv-cost-err-' + id + '">' +
+            '<div class="default-hint" id="inv-cost-default-' + id + '" hidden>Empty = ' + money(p.default_cost_cents) + '</div>' +
+            '<div class="money-error" id="inv-cost-err-' + id + '" hidden></div>' +
+          '</div>' +
+          '<div class="field">' +
+            '<label for="inv-freight-' + id + '">Freight ($)</label>' +
+            '<input type="text" inputmode="decimal" autocomplete="off" id="inv-freight-' + id + '" data-money="1" value="' + freightVal + '" placeholder="Default" aria-describedby="inv-freight-err-' + id + '">' +
+            '<div class="default-hint" id="inv-freight-default-' + id + '" hidden>Empty = ' + money(p.default_freight_cents) + '</div>' +
+            '<div class="money-error" id="inv-freight-err-' + id + '" hidden></div>' +
+          '</div>' +
+          '<div id="inv-margin-' + id + '">' + marginBoxHtml(marginCents) + '</div>' +
+        '</div>' +
+        // Empty while the row is in its normal state. When the server flags a
+        // price change as needing confirmation, showPriceConfirm() fills this
+        // in and hides the Save button below until she confirms or cancels.
+        '<div class="confirm-box" id="inv-confirm-' + id + '" aria-live="assertive" hidden></div>' +
+        '<div class="bottom" id="inv-bottom-' + id + '">' +
+          '<button type="button" class="btn small" data-action="save-inventory" data-id="' + id + '">Save</button>' +
+          '<span class="status" id="inv-status-' + id + '" aria-live="polite"></span>' +
+        '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderInventoryList() {
+    var host = document.getElementById('inventory-list');
+    if (!allProducts.length) { host.innerHTML = ''; return; }
+    var filtered = allProducts.filter(matchesInventoryFilters);
+    host.innerHTML = filtered.length
+      ? filtered.map(renderInventoryRow).join('')
+      : '<p class="empty-note">No products match this search.</p>';
+  }
+
+  function setInventoryMessage(msg, isError) {
+    var host = document.getElementById('inventory-msg');
+    host.innerHTML = msg ? '<p class="' + (isError ? 'alert error' : 'lede') + '">' + esc(msg) + '</p>' : '';
+  }
+
+  function loadInventory() {
+    setInventoryMessage('Loading…');
+    getJSON('/api/admin/products').then(function (data) {
+      setInventoryMessage('');
+      allProducts = data.products || [];
+      rebuildProductsById();
+      renderInventoryList();
+    }).catch(function (err) {
+      document.getElementById('inventory-list').innerHTML = '';
+      setInventoryMessage(err.message, true);
+    });
+  }
+
+  // Finds a row's <article> by its data-id via plain attribute comparison,
+  // rather than interpolating the id into a CSS selector — a product id
+  // could in principle contain a character that would break a selector.
+  function findInventoryRowEl(id) {
+    var rows = document.querySelectorAll('#inventory-list .inv-row');
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute('data-id') === id) return rows[i];
+    }
+    return null;
+  }
+
+  function htmlToElement(html) {
+    var tmp = document.createElement('template');
+    tmp.innerHTML = html.trim();
+    return tmp.content.firstElementChild;
+  }
+
+  // Shows or hides one field's small "Empty = $X.XX" note — only relevant
+  // while that specific box is actually blank.
+  function toggleDefaultHint(id, field, show) {
+    var el = document.getElementById('inv-' + field + '-default-' + id);
+    if (el) el.hidden = !show;
+  }
+
+  // Recalculates the on-screen margin as she types, before anything is
+  // saved, and keeps each field's "Empty = $X.XX" note in sync. A blank
+  // price/cost/freight box means "use the committed default", and the
+  // product list now carries that default straight from the server
+  // (default_price_cents etc.), so this is the real number, not a guess.
+  function updateMoneyFieldUI(rowEl) {
+    var id = rowEl.getAttribute('data-id');
+    var p = productsById[id];
+    var marginHost = document.getElementById('inv-margin-' + id);
+    if (!p || !marginHost) return;
+
+    var priceRaw = document.getElementById('inv-price-' + id).value;
+    var costRaw = document.getElementById('inv-cost-' + id).value;
+    var freightRaw = document.getElementById('inv-freight-' + id).value;
+
+    toggleDefaultHint(id, 'price', priceRaw.trim() === '');
+    toggleDefaultHint(id, 'cost', costRaw.trim() === '');
+    toggleDefaultHint(id, 'freight', freightRaw.trim() === '');
+
+    var price = parseMoneyInput(priceRaw);
+    var cost = parseMoneyInput(costRaw);
+    var freight = parseMoneyInput(freightRaw);
+
+    if (!price.ok || !cost.ok || !freight.ok) {
+      marginHost.innerHTML = '<div class="margin-box"><div class="label">Margin</div><div class="v">—</div></div>';
+      return;
+    }
+    var priceCents = price.cents == null ? p.default_price_cents : price.cents;
+    var costCents = cost.cents == null ? p.default_cost_cents : cost.cents;
+    var freightCents = freight.cents == null ? p.default_freight_cents : freight.cents;
+    marginHost.innerHTML = marginBoxHtml(priceCents - costCents - freightCents);
+  }
+
+  // Re-reads one row from the server after a successful save, so what's on
+  // screen afterwards is what the server actually stored — not just an echo
+  // of what was typed. That matters if the server applied a default, and
+  // it's also the only way to notice a second person (or a second tab)
+  // changed the same product in the meantime. Only this one row's DOM is
+  // touched, so any unsaved edits sitting in other rows are left alone.
+  function refreshInventoryRow(id) {
+    return getJSON('/api/admin/products').then(function (data) {
+      allProducts = data.products || [];
+      rebuildProductsById();
+      delete pendingSaves[id];
+      var rowEl = findInventoryRowEl(id);
+      var fresh = productsById[id];
+      if (!rowEl) return;
+      if (!fresh || !matchesInventoryFilters(fresh)) {
+        // Saved fine, but no longer belongs in the current view — e.g. she
+        // just switched it off while "show inactive" is unchecked. Remove
+        // it and say why, rather than leaving her wondering where it went.
+        var name = fresh ? fresh.name : 'That product';
+        rowEl.remove();
+        setInventoryMessage('Saved. "' + name + '" is no longer shown because of the current search or the "show inactive" setting.', false);
+        return;
+      }
+      rowEl.replaceWith(htmlToElement(renderInventoryRow(fresh)));
+      var statusEl = document.getElementById('inv-status-' + id);
+      if (statusEl) { statusEl.textContent = 'Saved ✓'; statusEl.className = 'status ok'; }
+    });
+  }
+
+  function saveInventoryRow(id, btn) {
+    var p = productsById[id];
+    if (!p) return;
+    var statusEl = document.getElementById('inv-status-' + id);
+    // A fresh Save always supersedes any earlier price-change confirmation
+    // that was still waiting on her — she is about to submit current values.
+    delete pendingSaves[id];
+
+    var moneyFields = [
+      { key: 'price_cents', input: document.getElementById('inv-price-' + id), errEl: document.getElementById('inv-price-err-' + id) },
+      { key: 'cost_cents', input: document.getElementById('inv-cost-' + id), errEl: document.getElementById('inv-cost-err-' + id) },
+      { key: 'freight_cents', input: document.getElementById('inv-freight-' + id), errEl: document.getElementById('inv-freight-err-' + id) }
+    ];
+
+    var body = {
+      product_id: p.id,
+      active: document.getElementById('inv-active-' + id).checked,
+      // Set only when a new photo was uploaded on this row during this visit.
+      // Otherwise send back what was loaded, so saving a price cannot drop
+      // a photo — and send null rather than a products.json path, because the
+      // server only accepts /media/ paths it issued itself.
+      image: (function () {
+        var rowEl = document.querySelector('.inv-row[data-id="' + id + '"]');
+        var staged = rowEl && rowEl.getAttribute('data-staged-image');
+        if (staged) return staged;
+        return /^\/media\//.test(String(p.image || '')) ? p.image : null;
+      })(),
+      // This page does not expose "note" for editing — send back exactly
+      // what was last loaded so saving a price/cost/active change here can
+      // never silently wipe out a note set some other way.
+      note: (p.note == null ? null : p.note)
+    };
+
+    var hasError = false;
+    moneyFields.forEach(function (f) {
+      var parsed = parseMoneyInput(f.input.value);
+      if (!parsed.ok) {
+        hasError = true;
+        f.input.setAttribute('aria-invalid', 'true');
+        f.errEl.hidden = false;
+        f.errEl.textContent = 'Enter a plain dollar amount like 53.00 — no "$", no negative numbers — or leave it empty to use the default.';
+      } else {
+        f.input.removeAttribute('aria-invalid');
+        f.errEl.hidden = true;
+        f.errEl.textContent = '';
+        body[f.key] = parsed.cents;
+      }
+    });
+
+    if (hasError) {
+      statusEl.textContent = 'Fix the highlighted field(s) before saving.';
+      statusEl.className = 'status err';
+      return;
+    }
+
+    statusEl.textContent = 'Saving…';
+    statusEl.className = 'status';
+    btn.disabled = true;
+
+    runAction('/api/admin/products', body).then(function () {
+      // The save itself succeeded. If reading it back fails (e.g. a dropped
+      // connection), say so plainly rather than claiming the save failed —
+      // the server already has it.
+      return refreshInventoryRow(id).catch(function (err) {
+        var el = document.getElementById('inv-status-' + id);
+        if (el) {
+          el.textContent = 'Saved, but could not refresh this row (' + err.message + '). Use Refresh to check it.';
+          el.className = 'status err';
+        }
+      });
+    }).catch(function (err) {
+      // A 5x+ price jump isn't rejected outright — the server hands back a
+      // 409 asking for a deliberate confirmation instead of a plain error.
+      // That is not a failure, so it gets its own inline prompt, not the
+      // red "Save failed" status.
+      if (err.status === 409 && err.body && err.body.error === 'price_change_needs_confirmation') {
+        showPriceConfirm(id, body, err.body.message);
+        statusEl.textContent = '';
+        statusEl.className = 'status';
+        return;
+      }
+      statusEl.textContent = 'Save failed: ' + err.message;
+      statusEl.className = 'status err';
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
+  // Puts up the "are you sure" prompt for a price change the server flagged
+  // as unusually large (5x+ in either direction — almost always a misplaced
+  // decimal point). This replaces the row's normal Save button until she
+  // answers, and it is a real inline choice, never window.confirm().
+  function showPriceConfirm(id, body, message) {
+    pendingSaves[id] = body;
+    var box = document.getElementById('inv-confirm-' + id);
+    var bottom = document.getElementById('inv-bottom-' + id);
+    if (!box) return;
+    box.innerHTML =
+      '<div class="alert error confirm-price">' +
+        '<p>' + esc(message) + '</p>' +
+        '<div class="confirm-actions">' +
+          '<button type="button" class="btn ghost" data-action="cancel-price" data-id="' + esc(id) + '">Cancel — let me fix it</button>' +
+          '<button type="button" class="btn rust" data-action="confirm-price" data-id="' + esc(id) + '">Yes, save this price</button>' +
+        '</div>' +
+      '</div>';
+    box.hidden = false;
+    if (bottom) bottom.hidden = true;
+  }
+
+  // Backs out of a pending price confirmation without saving anything —
+  // the row goes back to its normal, fully editable state with whatever
+  // she had typed still sitting in the boxes.
+  function cancelPriceChange(id) {
+    delete pendingSaves[id];
+    var box = document.getElementById('inv-confirm-' + id);
+    var bottom = document.getElementById('inv-bottom-' + id);
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+    if (bottom) bottom.hidden = false;
+    var statusEl = document.getElementById('inv-status-' + id);
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'status'; }
+  }
+
+  // Re-sends the exact body that triggered the 409, adding confirm:true so
+  // the server applies it instead of asking again.
+  function confirmPriceChange(id, btn) {
+    var body = pendingSaves[id];
+    if (!body) return;
+    btn.disabled = true;
+    var confirmedBody = {};
+    Object.keys(body).forEach(function (k) { confirmedBody[k] = body[k]; });
+    confirmedBody.confirm = true;
+
+    runAction('/api/admin/products', confirmedBody).then(function () {
+      return refreshInventoryRow(id).catch(function (err) {
+        var el = document.getElementById('inv-status-' + id);
+        if (el) {
+          el.textContent = 'Saved, but could not refresh this row (' + err.message + '). Use Refresh to check it.';
+          el.className = 'status err';
+        }
+      });
+    }).catch(function (err) {
+      // Shouldn't normally happen — confirm:true is meant to bypass the
+      // guard — but if it does, treat it like any other failed save and
+      // hand control back to the normal Save button.
+      delete pendingSaves[id];
+      var box = document.getElementById('inv-confirm-' + id);
+      var bottom = document.getElementById('inv-bottom-' + id);
+      if (box) { box.hidden = true; box.innerHTML = ''; }
+      if (bottom) bottom.hidden = false;
+      var statusEl = document.getElementById('inv-status-' + id);
+      if (statusEl) { statusEl.textContent = 'Save failed: ' + err.message; statusEl.className = 'status err'; }
+      btn.disabled = false;
+    });
+  }
+
+  document.getElementById('inventory-list').addEventListener('click', function (e) {
+    var saveBtn = e.target.closest('button[data-action="save-inventory"]');
+    if (saveBtn) { saveInventoryRow(saveBtn.getAttribute('data-id'), saveBtn); return; }
+
+    var confirmBtn = e.target.closest('button[data-action="confirm-price"]');
+    if (confirmBtn) { confirmPriceChange(confirmBtn.getAttribute('data-id'), confirmBtn); return; }
+
+    var cancelBtn = e.target.closest('button[data-action="cancel-price"]');
+    if (cancelBtn) { cancelPriceChange(cancelBtn.getAttribute('data-id')); return; }
+  });
+
+  /* Photo upload.
+   * The file goes to R2 immediately so she can see it worked, but the product
+   * is not repointed at it until Save — consistent with every other field on
+   * this row. The server re-checks the file type from its actual bytes, so the
+   * accept="" attribute here is a convenience, not the validation. */
+  document.getElementById('inventory-list').addEventListener('change', function (e) {
+    if (!e.target.matches('input[data-upload]')) return;
+
+    var row = e.target.closest('.inv-row');
+    var id = row.getAttribute('data-id');
+    var file = e.target.files && e.target.files[0];
+    var statusEl = document.getElementById('inv-upload-' + id);
+    if (!file) return;
+
+    function say(msg, cls) {
+      statusEl.hidden = false;
+      statusEl.textContent = msg;
+      statusEl.className = 'upload-status' + (cls ? ' ' + cls : '');
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      say('That photo is larger than 10 MB.', 'bad');
+      e.target.value = '';
+      return;
+    }
+
+    say('Uploading…');
+    fetch('/api/admin/upload', { method: 'POST', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { say(res.d.error || 'Upload failed.', 'bad'); return; }
+        row.setAttribute('data-staged-image', res.d.url);
+        var shot = row.querySelector('.inv-photo .shot');
+        shot.classList.remove('empty');
+        shot.innerHTML = '<img src="' + esc(res.d.url) + '" alt="">';
+        var fn = row.querySelector('.inv-photo .filename');
+        fn.textContent = res.d.url.slice(res.d.url.lastIndexOf('/') + 1);
+        fn.setAttribute('title', res.d.url);
+        say('Uploaded — press Save to use it.', 'ok');
+      })
+      .catch(function () { say('Upload failed. Check your connection.', 'bad'); })
+      .finally(function () { e.target.value = ''; });
+  });
+
+  document.getElementById('inventory-list').addEventListener('input', function (e) {
+    if (!e.target.matches('input[data-money]')) return;
+    var row = e.target.closest('.inv-row');
+    if (!row) return;
+    var id = row.getAttribute('data-id');
+    // Editing a money field after a price-change prompt appeared means the
+    // prompt no longer matches what's in the boxes — drop it rather than
+    // risk confirming a stale number she has since changed her mind about.
+    if (pendingSaves[id]) cancelPriceChange(id);
+    updateMoneyFieldUI(row);
+  });
+
+  document.getElementById('inventory-list').addEventListener('change', function (e) {
+    if (!e.target.matches('input[data-active]')) return;
+    var row = e.target.closest('.inv-row');
+    var id = row && row.getAttribute('data-id');
+    // Same reasoning as above: flipping the Active switch changes what a
+    // Confirm click would submit, so any pending prompt is now stale.
+    if (id && pendingSaves[id]) cancelPriceChange(id);
+  });
+
+  document.getElementById('inv-search').addEventListener('input', renderInventoryList);
+  document.getElementById('inv-show-all').addEventListener('change', renderInventoryList);
+  document.getElementById('refresh-inventory').addEventListener('click', loadInventory);
+
+  // ---- boot ---------------------------------------------------------------
+  getJSON('/api/config').then(function (config) {
+    (config.pickup_locations || []).forEach(function (loc) { pickupMap[loc.id] = loc.label; });
+  }).catch(function () {
+    // Non-fatal — pickupLabel() just falls back to the raw location id.
+  }).then(loadOrders);
+})();
+</script>
+</body>
+</html>

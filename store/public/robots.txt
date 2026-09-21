@@ -1,0 +1,5 @@
+# The store front is fine to index. The admin console and the API are not.
+User-agent: *
+Disallow: /admin
+Disallow: /api/
+Allow: /
