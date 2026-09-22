@@ -261,3 +261,57 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 /* Quiet aside inside a field label, e.g. "usually empty". */
 .field label .lbl-note { font-weight:400; text-transform:none; letter-spacing:0;
   color:var(--muted); font-size:11px; }
+
+/* ---------- quick pick: filter the store by animal ---------- */
+/* Deliberately borrows the site nav's vocabulary — 2px corners, uppercase,
+   wide letterspacing — so it reads as part of the farm site rather than a
+   component bolted on from somewhere else. */
+.quickpick {
+  display:flex; align-items:center; gap:18px;
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  padding:16px 0; margin:0 0 36px;
+}
+.qp-label {
+  flex:none; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted);
+}
+
+/* Scrolls sideways on a phone rather than wrapping into a ragged block.
+   The mask fades the right edge so it is visibly scrollable. */
+.qp-row {
+  display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;
+  scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
+.qp-row::-webkit-scrollbar { display:none; }
+
+.qp {
+  flex:none; display:inline-flex; align-items:center; gap:7px;
+  min-height:40px; padding:9px 15px;
+  font:inherit; font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted); background:none;
+  border:1px solid var(--line); border-radius:2px;
+  cursor:pointer; white-space:nowrap;
+  transition:background-color .12s ease, color .12s ease, border-color .12s ease;
+}
+.qp:hover { background:var(--line-soft); color:var(--ink); border-color:#C9BFA9; }
+.qp:focus-visible { outline:2px solid var(--rust); outline-offset:2px; }
+
+.qp[aria-pressed="true"] {
+  background:var(--moss); color:var(--card); border-color:var(--moss);
+}
+.qp[aria-pressed="true"]:hover { background:var(--ink); border-color:var(--ink); }
+
+/* The count is supporting information, never competing with the label. */
+.qp .n { font-size:10px; letter-spacing:.06em; color:var(--muted); }
+.qp[aria-pressed="true"] .n { color:var(--line); }
+.qp:hover .n { color:var(--body); }
+.qp[aria-pressed="true"]:hover .n { color:var(--line-soft); }
+
+@media (max-width:700px) {
+  .quickpick { flex-direction:column; align-items:stretch; gap:10px; }
+  .qp-row {
+    margin-inline:-16px; padding-inline:16px;
+    -webkit-mask-image:linear-gradient(to right, #000 88%, transparent);
+            mask-image:linear-gradient(to right, #000 88%, transparent);
+  }
+}

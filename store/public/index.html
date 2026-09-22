@@ -37,6 +37,10 @@
     <p class="lede">Everything below is pre-ordered and consolidated into a bulk supplier order, then picked up locally. Add what you need, and the checkout page will show the exact price, any discount, and tax before you pay.</p>
   </section>
 
+  <!-- Quick pick: filled in by JS once the catalogue is known, so it only ever
+       offers animals we actually stock something for. -->
+  <nav class="quickpick" id="quickpick" aria-label="Filter by animal" hidden></nav>
+
   <div class="store-grid">
 
     <!-- Catalog: filled in by JS from GET /api/catalog. Grouped by category. -->
@@ -187,10 +191,24 @@
     }
     var cart = loadCart();
 
+    // Narrow to the chosen animal first. Category grouping is kept either way,
+    // because a product can serve several animals and grouping BY animal would
+    // print the same bag of kelp five times down one page.
+    var shown = activeAnimal
+      ? catalog.filter(function (p) { return (p.animals || []).indexOf(activeAnimal) > -1; })
+      : catalog;
+
+    if (!shown.length) {
+      host.innerHTML =
+        '<p class="lede">Nothing for ' + esc(activeAnimal.toLowerCase()) + ' in the store at the moment.</p>' +
+        '<p><button type="button" class="btn ghost" data-animal="">Show everything</button></p>';
+      return;
+    }
+
     // Group products by category, keeping the order they first appear in.
     var order = [];
     var byCat = {};
-    catalog.forEach(function (p) {
+    shown.forEach(function (p) {
       var cat = p.category || 'other';
       if (!byCat[cat]) { byCat[cat] = []; order.push(cat); }
       byCat[cat].push(p);
@@ -284,7 +302,58 @@
     checkoutBtn.hidden = false;
   }
 
+  /* ---- quick pick ---------------------------------------------------------
+   * A row of animal filters built from the catalogue itself, so it can never
+   * offer "Sheep" when nothing for sheep is in stock. The choice lives in the
+   * URL (?for=goats) so a customer can bookmark or share "the goat page".
+   */
+  var ANIMAL_ORDER = ['Goats', 'Chickens', 'Sheep', 'Cattle', 'Horses',
+                      'Ducks', 'Turkeys', 'Pigs', 'Llamas', 'Rabbits', 'Garden'];
+  var activeAnimal = '';
+
+  function animalCounts() {
+    var counts = {};
+    catalog.forEach(function (p) {
+      (p.animals || []).forEach(function (a) { counts[a] = (counts[a] || 0) + 1; });
+    });
+    return counts;
+  }
+
+  function renderQuickPick() {
+    var host = document.getElementById('quickpick');
+    var counts = animalCounts();
+    var available = ANIMAL_ORDER.filter(function (a) { return counts[a]; });
+
+    // One lonely filter is not a choice — don't clutter the page with it.
+    if (available.length < 2) { host.hidden = true; return; }
+    host.hidden = false;
+
+    function pill(value, label, n) {
+      var on = activeAnimal === value;
+      return '<button type="button" class="qp" data-animal="' + esc(value) + '"' +
+             ' aria-pressed="' + (on ? 'true' : 'false') + '">' +
+             esc(label) + '<span class="n">' + n + '</span></button>';
+    }
+
+    host.innerHTML =
+      '<span class="qp-label">Shopping for</span>' +
+      '<div class="qp-row">' +
+        pill('', 'Everything', catalog.length) +
+        available.map(function (a) { return pill(a, a, counts[a]); }).join('') +
+      '</div>';
+  }
+
+  function setAnimal(value) {
+    activeAnimal = value || '';
+    var url = activeAnimal
+      ? location.pathname + '?for=' + encodeURIComponent(activeAnimal.toLowerCase())
+      : location.pathname;
+    history.replaceState(null, '', url);
+    render();
+  }
+
   function render() {
+    renderQuickPick();
     renderCatalog();
     renderCart();
   }
@@ -299,7 +368,10 @@
       return;
     }
     var removeBtn = e.target.closest('[data-remove]');
-    if (removeBtn) setQty(removeBtn.getAttribute('data-remove'), 0);
+    if (removeBtn) { setQty(removeBtn.getAttribute('data-remove'), 0); return; }
+
+    var pick = e.target.closest('[data-animal]');
+    if (pick) setAnimal(pick.getAttribute('data-animal'));
   });
 
   document.addEventListener('change', function (e) {
@@ -318,6 +390,14 @@
     })
     .then(function (data) {
       catalog = data.products || [];
+
+      // Honour ?for=goats on arrival, but only if we actually stock it —
+      // a stale bookmark should land on the full store, not an empty page.
+      var want = (new URLSearchParams(location.search).get('for') || '').toLowerCase();
+      if (want) {
+        var match = ANIMAL_ORDER.filter(function (a) { return a.toLowerCase() === want; })[0];
+        if (match && animalCounts()[match]) activeAnimal = match;
+      }
       render();
     })
     .catch(function (err) {

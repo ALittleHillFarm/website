@@ -122,6 +122,8 @@ async function apiCatalog(env) {
       category: p.category,
       description: p.description,
       image: p.image,
+      // Which animals this is for, driving the quick-pick filter on the store.
+      animals: p.animals || [],
       note: p.note || '',
     })),
   });

@@ -15,7 +15,10 @@
       "category": "amendment",
       "active": false,
       "description": "Dehydrated Alfalfa Meal is ideal as a soil amendment for depleted pastures or gardens.",
-      "image": "/assets/products/f50-alf-meal_f50-alfalfa-meal_1d454c49-ec40-4851-bc68-83ea50a81f3e.jpg"
+      "image": "/assets/products/f50-alf-meal_f50-alfalfa-meal_1d454c49-ec40-4851-bc68-83ea50a81f3e.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "alfalfa-pellets-50-lbs",
@@ -30,7 +33,14 @@
       "category": "feed",
       "active": false,
       "description": "These organic pellets are ideal for horses, cattle, and other animals.",
-      "image": "/assets/products/gp491_azuremarketorganicsalfalfapellets_40lb.jpg"
+      "image": "/assets/products/gp491_azuremarketorganicsalfalfapellets_40lb.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "alfalfa-pellets-organic-small-40-lb",
@@ -45,7 +55,15 @@
       "category": "feed",
       "active": false,
       "description": "These organic pellets are ideal for ruminants, rabbits, and other small animals.",
-      "image": "/assets/products/azuremarketorganicsalfalfapellets_small_40lb.jpg"
+      "image": "/assets/products/azuremarketorganicsalfalfapellets_small_40lb.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "aubichick-hemp-bedding-22lb",
@@ -60,7 +78,19 @@
       "category": "bedding",
       "active": false,
       "description": "Hemp bedding is perfect for those sensitive to allergens and dust found in most animal beddings.",
-      "image": "/assets/products/hlth0780_la-chanvriere-aubichick-bedding.jpg"
+      "image": "/assets/products/hlth0780_la-chanvriere-aubichick-bedding.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas",
+        "Rabbits"
+      ]
     },
     {
       "id": "azomite-field-grade-44-lbs",
@@ -75,7 +105,10 @@
       "category": "mineral",
       "active": false,
       "description": "Field Grade Azomite mimics a coarse sand.",
-      "image": "/assets/products/hlth0810_azomite-f_d87d6c9c-f99f-4c96-b29c-5cf6956c085b.jpg"
+      "image": "/assets/products/hlth0810_azomite-f_d87d6c9c-f99f-4c96-b29c-5cf6956c085b.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "azomite-granular-44-lbs",
@@ -90,7 +123,10 @@
       "category": "mineral",
       "active": false,
       "description": "Formed into easy-to-handle and store granules, Azomite is ideal for broadcast spreading, fertilizer blends, and starter fertilizers.",
-      "image": "/assets/products/hlth0115_azomite-granular_f6fca5c8-e0a0-409c-bcfc-51a7b8fe5cf3.jpg"
+      "image": "/assets/products/hlth0115_azomite-granular_f6fca5c8-e0a0-409c-bcfc-51a7b8fe5cf3.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "azomite-micronized-44-lbs",
@@ -105,7 +141,10 @@
       "category": "mineral",
       "active": false,
       "description": "Azomite Micronized is a powder with flour-like consistency, where 90% of the particles will pass through a 200-mesh screen.",
-      "image": "/assets/products/hlth0113_azomite.jpg"
+      "image": "/assets/products/hlth0113_azomite.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "azure-market-diatomaceous-earth-5-lb",
@@ -120,7 +159,10 @@
       "category": "mineral",
       "active": false,
       "description": "Bird and animal feed contain substances such as molasses that cause the particles to become \"sticky.\" It forms clumps that not only make",
-      "image": "/assets/products/azuremarketorganicsdefrontbag.jpg"
+      "image": "/assets/products/azuremarketorganicsdefrontbag.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "azure-market-organics-sunflower-seeds-in-the-shell-black-oil-organic-25-lbs",
@@ -135,7 +177,11 @@
       "category": "feed",
       "active": false,
       "description": "Organic Black Oil Sunflower Seeds are bagged as harvested.",
-      "image": "/assets/products/gp603_azure_market_organics_sunflower_seeds_in_the_shell_black_oil_organic_25_lbs.jpg"
+      "image": "/assets/products/gp603_azure_market_organics_sunflower_seeds_in_the_shell_black_oil_organic_25_lbs.jpg",
+      "animals": [
+        "Goats",
+        "Chickens"
+      ]
     },
     {
       "id": "azure-market-organics-whole-field-peas-50-lb",
@@ -150,7 +196,15 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": "/assets/products/azuremarketorganicswholefieldpeas_50lbfrontbag.jpg"
+      "image": "/assets/products/azuremarketorganicswholefieldpeas_50lbfrontbag.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Cattle",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "azure-market-organics-whole-oats-30-lb",
@@ -165,7 +219,13 @@
       "category": "feed",
       "active": false,
       "description": "Whole organic, non-GMO oats with hulls have not had the husk (hull) removed, this product is great for animal feed.",
-      "image": "/assets/products/azuremarketorganicswholeoats_30lbfrontbag.jpg"
+      "image": "/assets/products/azuremarketorganicswholeoats_30lbfrontbag.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "azure-markets-organics-whole-barley-45-lb",
@@ -180,7 +240,17 @@
       "category": "feed",
       "active": false,
       "description": "Organic whole barley for your farm stock.",
-      "image": "/assets/products/azuremarketorganicswholebarley_45lb.jpg"
+      "image": "/assets/products/azuremarketorganicswholebarley_45lb.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "bedding-buddy-25lb",
@@ -195,7 +265,18 @@
       "category": "bedding",
       "active": false,
       "description": "Bedding Buddy absorbs moisture and neutralizes harmful odors in all animal living areas.",
-      "image": "/assets/products/f25-bed-bud_bedding-buddy-front-v.2_a8bcab7a-b060-4b6d-8b34-d14cf1d427d2.jpg"
+      "image": "/assets/products/f25-bed-bud_bedding-buddy-front-v.2_a8bcab7a-b060-4b6d-8b34-d14cf1d427d2.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "big-sky-organic-feed-poultry-layer-mash-no-soy-50-lbs",
@@ -210,7 +291,10 @@
       "category": "feed",
       "active": false,
       "description": "Big Sky Organic Feed is a certified organic feed producer, certified by the Montana Department of Agriculture.",
-      "image": "/assets/products/gp492_big_sky_organic_feed_poultry_layer_mash_no_soy_50_lbs.jpg"
+      "image": "/assets/products/gp492_big_sky_organic_feed_poultry_layer_mash_no_soy_50_lbs.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "big-sky-organic-feed-poultry-scratch",
@@ -225,7 +309,10 @@
       "category": "feed",
       "active": false,
       "description": "Big Sky Organic Feed is made from top quality grain grown predominantly on the high plains of northcentral Montana and the surrounding",
-      "image": "/assets/products/bigskyscratch.jpg"
+      "image": "/assets/products/bigskyscratch.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "bokashi-soil-amendment",
@@ -240,7 +327,10 @@
       "category": "amendment",
       "active": false,
       "description": "Protect your investment and show your plants you love them.",
-      "image": "/assets/products/bokashisoilamendment.png"
+      "image": "/assets/products/bokashisoilamendment.png",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "power-pellet-broiler-feed",
@@ -255,7 +345,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free Power Pellet Grower/Broiler is a complete nutritional feed of cracked and milled grains.",
-      "image": "/assets/products/f40-broiler-pwr.png"
+      "image": "/assets/products/f40-broiler-pwr.png",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "calcium-carbonate-limestone-50-lbs",
@@ -270,7 +363,10 @@
       "category": "mineral",
       "active": false,
       "description": "Calcium Carbonate can be used in both soil improvement plans and in building feed rations for livestock.",
-      "image": "/assets/products/hlth0986_hlth0986_602cd4e0-4b86-47fc-9f33-4f9b47e92fcb.jpg"
+      "image": "/assets/products/hlth0986_hlth0986_602cd4e0-4b86-47fc-9f33-4f9b47e92fcb.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "calf-feed-40lb",
@@ -285,7 +381,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic feed for Calves is formulated to support growth of calves while on pasture before and after weaning.",
-      "image": "/assets/products/f40-calf_f40-calf.jpg"
+      "image": "/assets/products/f40-calf_f40-calf.jpg",
+      "animals": [
+        "Cattle"
+      ]
     },
     {
       "id": "cattle-maintenance-feed-40lb",
@@ -300,7 +399,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic 14% Protein feed for Cattle is formulated to support optimum growth and development for growing, finishing, and",
-      "image": "/assets/products/f40-cattl_f40-cattle-maintenance_77559ee9-cf18-48fe-a716-d5cdf01992ef.jpg"
+      "image": "/assets/products/f40-cattl_f40-cattle-maintenance_77559ee9-cf18-48fe-a716-d5cdf01992ef.jpg",
+      "animals": [
+        "Cattle"
+      ]
     },
     {
       "id": "classic-grind-layer-feed-50-lbs",
@@ -317,7 +419,10 @@
       "description": "Our Certified Organic, Soy-Free 17% Protein Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with organic kelp and alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength and organic flaxseed to increase the omega-3 content of the eggs.\n\nMade exclusively with North American Organic Grains.",
       "image": "/assets/products/f50-layer_f50-layer.jpg",
       "tags": "Chicken, Johnson's",
-      "weight_lbs": 50.0
+      "weight_lbs": 50.0,
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "classic-layer-crumble-35-lbs",
@@ -332,7 +437,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 17% Protein Layer Feed Crumble is a complete nutritional feed of milled grain that’s supplemented with",
-      "image": "/assets/products/gc-f35-layer-crumb_layer-crumble_1_d84f6ccf-6577-40d8-a117-efa819d310a6.jpg"
+      "image": "/assets/products/gc-f35-layer-crumb_layer-crumble_1_d84f6ccf-6577-40d8-a117-efa819d310a6.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "classic-layer-pellets-35-lbs",
@@ -347,7 +455,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 17% Protein Layer Feed Pellets are a complete nutritional feed of milled grain that’s supplemented with",
-      "image": "/assets/products/gc-f35-layer-p_layer-pellets_0b36c0b0-dde2-4e16-99aa-86149d8f3562.jpg"
+      "image": "/assets/products/gc-f35-layer-p_layer-pellets_0b36c0b0-dde2-4e16-99aa-86149d8f3562.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "cluckin-good-grubs-3-5-lb",
@@ -362,7 +473,10 @@
       "category": "feed",
       "active": false,
       "description": "Cluckin’ Good Grubs are premium poultry treats grown and packaged in the Pacific NW.",
-      "image": "/assets/products/cluckin_good_grubs_front_of_bag.png"
+      "image": "/assets/products/cluckin_good_grubs_front_of_bag.png",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "coolstance-44-lbs",
@@ -377,7 +491,13 @@
       "category": "feed",
       "active": false,
       "description": "Cool Stance copra is a unique source of energy because it has low Non-Structural Carbohydrate (NSC), and yet has a high digestible energy",
-      "image": "/assets/products/hlth0157_coolstance_2d1e1c7e-4b67-4d97-b9b8-0dfd5db8b6f2.jpg"
+      "image": "/assets/products/hlth0157_coolstance_2d1e1c7e-4b67-4d97-b9b8-0dfd5db8b6f2.jpg",
+      "animals": [
+        "Goats",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "corn-free-grower-broiler-feed-40-lbs",
@@ -392,7 +512,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free, Low Starch 19% Protein Grower/Broiler Feed is a complete nutritional feed of cracked and milled grain",
-      "image": "/assets/products/f40-broilr-nc_f40-no-corn-broiler_e19b7b32-32b3-461e-a62c-a74127e7410f.jpg"
+      "image": "/assets/products/f40-broilr-nc_f40-no-corn-broiler_e19b7b32-32b3-461e-a62c-a74127e7410f.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "corn-free-layer-feed-50-lbs",
@@ -409,7 +532,10 @@
       "description": "Our 17% Protein Low Starch Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with kelp, organic alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength and organic flaxseed to increase the omega-3 content of the eggs. Made without corn, this feed is ideal for flocks living in hot climates.\n\nMade exclusively with North American Organic Grains.\n\nBecause our feeds are milled on the same equipment, we do not guarantee that the finished product will be 100% free of corn.\n\nIf you have an allergy concern, we recommend consulting with your physician to ensure this product is right for your flock.",
       "image": "/assets/products/f50-layer-nc_f50-no-corn-layer_e979333a-fb0c-45f5-b7e6-0538f88ed3eb.jpg",
       "tags": "Chicken, Johnson's",
-      "weight_lbs": 50.0
+      "weight_lbs": 50.0,
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "corn-free-layer-pellets-35-lbs",
@@ -424,7 +550,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free, Low Starch Layer Pellets are made without corn to better aid flocks living in hotter environments.",
-      "image": "/assets/products/gc-f35-layer-p_layer-pellets.jpg"
+      "image": "/assets/products/gc-f35-layer-p_layer-pellets.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "corn-free-starter-feed-40lb",
@@ -439,7 +568,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 21% Protein Low Starch Poultry Starter is a complete nutritional feed of North American Organic grains",
-      "image": "/assets/products/f40-start-nc_f40-no-corn-starter_99ddd5e8-3df1-45f3-9e86-df80e8ccb881.jpg"
+      "image": "/assets/products/f40-start-nc_f40-no-corn-starter_99ddd5e8-3df1-45f3-9e86-df80e8ccb881.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "corn-free-swine-feed-12-40-lbs",
@@ -454,7 +586,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic 12% Swine Feed contains the perfect mixture of quality organic grains, alfalfa, and kelp to maintain",
-      "image": "/assets/products/f40-swine-nc_f40-12_-swine-nc_07f6b0bb-dff3-4df1-870d-651c9adad07b.jpg"
+      "image": "/assets/products/f40-swine-nc_f40-12_-swine-nc_07f6b0bb-dff3-4df1-870d-651c9adad07b.jpg",
+      "animals": [
+        "Pigs"
+      ]
     },
     {
       "id": "corn-free-swine-feed-16-40-lbs",
@@ -469,7 +604,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic 16% Corn-Free Swine Feed is a complete diet formulated to support the nutritional needs of weaning",
-      "image": "/assets/products/f40-swine-16_-nc_f40-16_-swine-nc_1_9a42ffd4-11f4-4610-9d06-9494af1a3f3d.jpg"
+      "image": "/assets/products/f40-swine-16_-nc_f40-16_-swine-nc_1_9a42ffd4-11f4-4610-9d06-9494af1a3f3d.jpg",
+      "animals": [
+        "Pigs"
+      ]
     },
     {
       "id": "corn-free-turkey-grower-40-lbs",
@@ -484,7 +622,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic Corn-Free Turkey Grower feed is a beautiful blend of organic grains, organic kelp, fish meal, and a",
-      "image": "/assets/products/f40-turky-grw-nc_f40-turkey-grower-nc_1_b74bb193-c05c-44d6-af40-45cf2449171d.jpg"
+      "image": "/assets/products/f40-turky-grw-nc_f40-turkey-grower-nc_1_b74bb193-c05c-44d6-af40-45cf2449171d.jpg",
+      "animals": [
+        "Turkeys"
+      ]
     },
     {
       "id": "corn-free-turkey-starter-40-lbs",
@@ -499,7 +640,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic Corn-Free Turkey Starter feed is a beautiful blend of organic grains, organic kelp, fish meal, and a",
-      "image": "/assets/products/f40-turky-str-nc_f40-turkey-start-nc_f2796fef-9652-4a87-a485-ec76993f000c.jpg"
+      "image": "/assets/products/f40-turky-str-nc_f40-turkey-start-nc_f2796fef-9652-4a87-a485-ec76993f000c.jpg",
+      "animals": [
+        "Turkeys"
+      ]
     },
     {
       "id": "cracked-corn-40lb",
@@ -514,7 +658,16 @@
       "category": "feed",
       "active": false,
       "description": "Cracked Corn is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-corn-crackd_f40-cracked-corn_6514fcf6-6ea9-4ca4-8d0d-43cf64055dac.jpg"
+      "image": "/assets/products/f40-corn-crackd_f40-cracked-corn_6514fcf6-6ea9-4ca4-8d0d-43cf64055dac.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "cracked-peas-1000-lb-tote",
@@ -529,7 +682,8 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": ""
+      "image": "",
+      "animals": []
     },
     {
       "id": "dairy-cattle-feed-40lb",
@@ -544,7 +698,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic 16% Protein feed for Dairy Cattle is formulated to support growth, lactation, gestation, and general maintenance of",
-      "image": "/assets/products/f40-cattl-dairy_f40-dairy-cattle_f2ecebcb-daaa-4df9-b983-2d92bc7c437d.jpg"
+      "image": "/assets/products/f40-cattl-dairy_f40-dairy-cattle_f2ecebcb-daaa-4df9-b983-2d92bc7c437d.jpg",
+      "animals": [
+        "Cattle"
+      ]
     },
     {
       "id": "dairy-no-3-nutri-balancer-50-lbs",
@@ -559,7 +716,12 @@
       "category": "mineral",
       "active": false,
       "description": "Fertrell’s Nutri-Balancers are special blends of vitamins, minerals, and direct fed microbials (selected bacteria and probiotics) to",
-      "image": "/assets/products/hlth0182_dairy-no.3_faaf8246-8829-444b-a28f-fa30e196956f.jpg"
+      "image": "/assets/products/hlth0182_dairy-no.3_faaf8246-8829-444b-a28f-fa30e196956f.jpg",
+      "animals": [
+        "Goats",
+        "Cattle",
+        "Llamas"
+      ]
     },
     {
       "id": "diatomaceous-earth-50-lbs",
@@ -574,7 +736,8 @@
       "category": "mineral",
       "active": false,
       "description": "Diatomaceous Earth packaged under Perma-Guard's FOSSIL SHELL FLOUR® label comes from an extremely pure freshwater deposit of the diatom",
-      "image": "/assets/products/hlth0180_diatomaceous-earth_9c2cdadb-2b93-4369-b1c9-2900f891dd3a.jpg"
+      "image": "/assets/products/hlth0180_diatomaceous-earth_9c2cdadb-2b93-4369-b1c9-2900f891dd3a.jpg",
+      "animals": []
     },
     {
       "id": "dolomite-pulverized-limestone",
@@ -589,7 +752,18 @@
       "category": "mineral",
       "active": false,
       "description": "Dolomite Limestone can be used in both soil improvement plans and in building feed rations for livestock.",
-      "image": "/assets/products/hlth0190_screen_shot_2019-10-31_at_1.31.31_pm_75eef20b-2a60-4a67-9b82-b651c86f079b.png"
+      "image": "/assets/products/hlth0190_screen_shot_2019-10-31_at_1.31.31_pm_75eef20b-2a60-4a67-9b82-b651c86f079b.png",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "duck-grower-feed-40lb",
@@ -604,7 +778,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 19% Protein Duck Grower is a complete nutritional feed of cracked and milled grain that's supplemented with",
-      "image": "/assets/products/f40-duck-growr_f40-duck-grower_562633f8-60d9-4a10-9d1c-1d44eadfc2b1.jpg"
+      "image": "/assets/products/f40-duck-growr_f40-duck-grower_562633f8-60d9-4a10-9d1c-1d44eadfc2b1.jpg",
+      "animals": [
+        "Ducks"
+      ]
     },
     {
       "id": "duck-layer-feed-40lb",
@@ -619,7 +796,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 17% Protein Duck Layer is a complete nutritional feed of cracked and milled grain that's supplemented with",
-      "image": "/assets/products/f40-duck-layer_f40-duck-layer.jpg"
+      "image": "/assets/products/f40-duck-layer_f40-duck-layer.jpg",
+      "animals": [
+        "Ducks"
+      ]
     },
     {
       "id": "egg-basket-small",
@@ -634,7 +814,10 @@
       "category": "supply",
       "active": false,
       "description": "",
-      "image": "/assets/products/smalleggbasket.jpg"
+      "image": "/assets/products/smalleggbasket.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "elite-competitor-horse-feed-40lb",
@@ -649,7 +832,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Ultra-Premium Elite Competitor Horse Feed is formulated with your hard-working horse in mind.",
-      "image": "/assets/products/f40-horse-elite_f40-elite-competitor_ad4f62d4-903b-4704-aa92-12c6cbe93083.jpg"
+      "image": "/assets/products/f40-horse-elite_f40-elite-competitor_ad4f62d4-903b-4704-aa92-12c6cbe93083.jpg",
+      "animals": [
+        "Horses"
+      ]
     },
     {
       "id": "fertrell-aragonite-undried-50-lbs",
@@ -664,7 +850,18 @@
       "category": "mineral",
       "active": false,
       "description": "Aragonite is a calcium carbonate mineral from seashells that is often used to counteract high levels of magnesium in the soil.",
-      "image": "/assets/products/hlth0112_aragonite_9034e457-a83a-4b13-af8d-fb8f8eef2006.jpg"
+      "image": "/assets/products/hlth0112_aragonite_9034e457-a83a-4b13-af8d-fb8f8eef2006.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "fertrell-goat-nutri-balancer",
@@ -679,7 +876,10 @@
       "category": "mineral",
       "active": false,
       "description": "Fertrell's Goat Nutri-Balancer is formulated specifically for the nutritional requirements for all stages of a goat’s life.",
-      "image": "/assets/products/fertrellgoatnb.jpg"
+      "image": "/assets/products/fertrellgoatnb.jpg",
+      "animals": [
+        "Goats"
+      ]
     },
     {
       "id": "fertrell-poultry-nutri-balancer-60-lbs",
@@ -694,7 +894,10 @@
       "category": "mineral",
       "active": false,
       "description": "Fertrell’s Nutri-Balancers are special blends of vitamins, minerals, and direct fed microbials (selected bacteria and probiotics) to",
-      "image": "/assets/products/hlth0316_60lb-poultry-nutribalancer_798efc35-3e8c-4930-86d7-452eb04226c5.jpg"
+      "image": "/assets/products/hlth0316_60lb-poultry-nutribalancer_798efc35-3e8c-4930-86d7-452eb04226c5.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "fertrell-rc-gold-4x-12-5-lb",
@@ -709,7 +912,12 @@
       "category": "mineral",
       "active": false,
       "description": "Fertrell’s RC Gold 4X is a version of Rumi-Cult 40 that is 4 times stronger than the original formula.",
-      "image": "/assets/products/fertrellrcgold.jpg"
+      "image": "/assets/products/fertrellrcgold.jpg",
+      "animals": [
+        "Goats",
+        "Cattle",
+        "Horses"
+      ]
     },
     {
       "id": "fertrell-sheep-nutri-balancer",
@@ -724,7 +932,10 @@
       "category": "mineral",
       "active": false,
       "description": "Sheep Nutri-Balancer is a premix vitamin & mineral supplement.",
-      "image": "/assets/products/sheep_nutribalancer.png"
+      "image": "/assets/products/sheep_nutribalancer.png",
+      "animals": [
+        "Sheep"
+      ]
     },
     {
       "id": "fertrell-swine-nutri-balancer-no-lysine-added-60lb",
@@ -739,7 +950,10 @@
       "category": "mineral",
       "active": false,
       "description": "Fertrell’s Nutri-Balancers are special blends of vitamins, minerals, and direct fed microbials (selected bacteria and probiotics) to",
-      "image": "/assets/products/hlth0423_fertrell-swine-supplement_827188ce-38a1-4a6c-8079-864f0a54ef6a.jpg"
+      "image": "/assets/products/hlth0423_fertrell-swine-supplement_827188ce-38a1-4a6c-8079-864f0a54ef6a.jpg",
+      "animals": [
+        "Pigs"
+      ]
     },
     {
       "id": "fertrell-tomato-grower-3-4-7",
@@ -754,7 +968,10 @@
       "category": "amendment",
       "active": false,
       "description": "Tomatoes are heavy feeders that need quality nutrition in order to have strong performance and quality produce.",
-      "image": "/assets/products/5lb-fertrell-tomato-grower.jpg"
+      "image": "/assets/products/5lb-fertrell-tomato-grower.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "fertrell-vegetable-blend-5-3-4",
@@ -769,7 +986,10 @@
       "category": "amendment",
       "active": false,
       "description": "This organic blend will supply you with large, delicious, nutritious produce all season long!",
-      "image": "/assets/products/5lb-fertrell-vegetable-blend.jpg"
+      "image": "/assets/products/5lb-fertrell-vegetable-blend.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "fibre-beet-44-lbs",
@@ -784,7 +1004,14 @@
       "category": "feed",
       "active": false,
       "description": "\"Fibre-Beet® Quick Soaking Conditioning Feed is formulated with a blend of high-quality Alfalfa and Speedi-Beet®.",
-      "image": "/assets/products/hlth0198_fibre-beet_1_6e1d66c2-d983-481c-99e1-94fb4ab2dce6.jpg"
+      "image": "/assets/products/hlth0198_fibre-beet_1_6e1d66c2-d983-481c-99e1-94fb4ab2dce6.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "fish-meal-40lb",
@@ -799,7 +1026,13 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Fish Meal is allowed for organic use and is sourced from the southern USA.",
-      "image": "/assets/products/f40-fish_fish-meal_1.jpg"
+      "image": "/assets/products/f40-fish_fish-meal_1.jpg",
+      "animals": [
+        "Chickens",
+        "Ducks",
+        "Turkeys",
+        "Pigs"
+      ]
     },
     {
       "id": "flax-40lb",
@@ -814,7 +1047,11 @@
       "category": "feed",
       "active": false,
       "description": "Unmilled Flaxseed is ideal for diet supplementation, diet formulation, and large-scale producers.",
-      "image": "/assets/products/f40-flax_f40-flaxseed_552da697-9371-40fa-8d35-5825b00ae148.jpg"
+      "image": "/assets/products/f40-flax_f40-flaxseed_552da697-9371-40fa-8d35-5825b00ae148.jpg",
+      "animals": [
+        "Chickens",
+        "Horses"
+      ]
     },
     {
       "id": "flock-armor-daily-chicken-dewormer-flock-gut-support",
@@ -829,7 +1066,8 @@
       "category": "supply",
       "active": false,
       "description": "Roosty’s Flock Armor is a natural daily supplement designed to support digestion, gut health, and parasite defense for backyard flocks.",
-      "image": "/assets/products/7da8fa9b65107ef7d1933e87efe1e7bf757e814c7ce7d6af3171b310260921e4.jpg"
+      "image": "/assets/products/7da8fa9b65107ef7d1933e87efe1e7bf757e814c7ce7d6af3171b310260921e4.jpg",
+      "animals": []
     },
     {
       "id": "flock-perfect-healthy-herbs-12-oz",
@@ -844,7 +1082,12 @@
       "category": "supply",
       "active": false,
       "description": "Flock Perfect Healthy Herbs include Calendula, Cleavers herb, Comfrey, Fennel, Garlic, Nettle, Oregano, Red Clover, Sage, Rue and Wormwood.",
-      "image": "/assets/products/12oz-herbs-case.jpg"
+      "image": "/assets/products/12oz-herbs-case.jpg",
+      "animals": [
+        "Chickens",
+        "Ducks",
+        "Turkeys"
+      ]
     },
     {
       "id": "game-bird-crumbles-35-lbs",
@@ -859,7 +1102,11 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic High Protein Game Bird Crumble is a nutrient dense blend of organic grains, organic kelp, fish meal",
-      "image": "/assets/products/gc-f35-game-bird_gamebird-crumble_f960565e-04a0-488b-934d-91bf8c697f5c.jpg"
+      "image": "/assets/products/gc-f35-game-bird_gamebird-crumble_f960565e-04a0-488b-934d-91bf8c697f5c.jpg",
+      "animals": [
+        "Chickens",
+        "Turkeys"
+      ]
     },
     {
       "id": "goat-feed-40-lbs",
@@ -876,7 +1123,10 @@
       "description": "Our Certified Organic 15% Protein feed for Goats is formulated to support growth, lactation, gestation, and general management of goats.\n\nMade exclusively with North American Organic Grains, this feed is balanced with probiotics, kelp, and other minerals to best meet your herd’s needs.\n\nFeed 1 to 2 lbs. per head per day for general maintenance and gestation diets. Feed 1 lb. grain per 3 lbs. milk production per day for lactating goats.\n\nFeed as a supplement to good quality forage.\n\nFeeding rate may be adjusted as needed for animal size, amount of production desired, and amount/quality of forage available.",
       "image": "/assets/products/f40-goat_f40-goat-feed_8b552124-40ea-45af-966c-f4d290db818b.jpg",
       "tags": "Goat",
-      "weight_lbs": 40.0
+      "weight_lbs": 40.0,
+      "animals": [
+        "Goats"
+      ]
     },
     {
       "id": "goat-milk-quart",
@@ -891,7 +1141,8 @@
       "category": "other",
       "active": false,
       "description": "Raw Nigerian Dwarf goat milk, known for its high butterfat content, creaminess, and delightful taste!",
-      "image": "/assets/products/goat_milk.jpg"
+      "image": "/assets/products/goat_milk.jpg",
+      "animals": []
     },
     {
       "id": "goat-pellets-40-lbs",
@@ -908,7 +1159,10 @@
       "description": "Our Certified Organic 15% Protein Goat Pellets capture all the quality ingredients of our classic Goat Feed in an easy to feed pellet that helps to support growth, lactation, gestation, and general management of goats.\n\nMade exclusively with North American Organic Grains, this feed is balanced with probiotics, kelp, and other minerals to best meet your herd’s needs.\n\nFeed 1 to 2 lbs. per head per day for general maintenance and gestation diets. Feed 1 lb. grain per 3 lbs. milk production per day for lactating goats.\n\nFeed as a supplement to good quality forage.\n\nFeeding rate may be adjusted as needed for animal size, amount of production desired, and amount/quality of forage available.",
       "image": "/assets/products/f40-goat-p_f40-goat-pellets_5192885b-2b75-4756-ac83-b2ac1fd9d8f5.jpg",
       "tags": "Goat",
-      "weight_lbs": 40.0
+      "weight_lbs": 40.0,
+      "animals": [
+        "Goats"
+      ]
     },
     {
       "id": "grower-broiler-feed-40lb",
@@ -923,7 +1177,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 19% Protein Grower/Broiler is a complete nutritional feed of cracked and milled grain that's supplemented",
-      "image": "/assets/products/f40-broiler.jpg"
+      "image": "/assets/products/f40-broiler.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "harmony-ag-organic-fertilizer-50-lbs",
@@ -938,7 +1195,10 @@
       "category": "amendment",
       "active": false,
       "description": "",
-      "image": "/assets/products/hlth0796_harmony_5-4-3_8387eace-35b9-4efe-9f6c-526495e4bdc8.jpg"
+      "image": "/assets/products/hlth0796_harmony_5-4-3_8387eace-35b9-4efe-9f6c-526495e4bdc8.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "kelp-based-healthy-mineral-for-cattle-goats-and-horses-40-lbs",
@@ -953,7 +1213,12 @@
       "category": "mineral",
       "active": false,
       "description": "Our Certified Organic Cattle, Goat, and Horse Mineral is to be fed as a free-choice vitamin and mineral mix to supplement nutrition.",
-      "image": "/assets/products/f40-cgh-minl_f50-bw-cgh-mineral_1_d08aeae1-878d-4ab8-b6be-7e3bb56ee2f3.jpg"
+      "image": "/assets/products/f40-cgh-minl_f50-bw-cgh-mineral_1_d08aeae1-878d-4ab8-b6be-7e3bb56ee2f3.jpg",
+      "animals": [
+        "Goats",
+        "Cattle",
+        "Horses"
+      ]
     },
     {
       "id": "kelp-based-healthy-mineral-for-sheep-40-lbs",
@@ -968,7 +1233,10 @@
       "category": "mineral",
       "active": false,
       "description": "Our Certified Organic Sheep Mineral is to be fed as a free-choice vitamin and mineral mix to supplement nutrition.",
-      "image": "/assets/products/f40-sheep-minl_f50-bw-sheep-mineral_1_59842341-0346-48a9-954f-4506f7aa76bd.jpg"
+      "image": "/assets/products/f40-sheep-minl_f50-bw-sheep-mineral_1_59842341-0346-48a9-954f-4506f7aa76bd.jpg",
+      "animals": [
+        "Sheep"
+      ]
     },
     {
       "id": "layer-feed-with-power-pellets",
@@ -983,7 +1251,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, soy-free, 17% protein Power Pellet Layer feed is a complete nutritional feed of cracked and milled grains.",
-      "image": "/assets/products/f40-layer-pwr_1.png"
+      "image": "/assets/products/f40-layer-pwr_1.png",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "layer-feed-no-wheat-40lb",
@@ -998,7 +1269,10 @@
       "category": "feed",
       "active": false,
       "description": "Our 17% Protein Wheat-Free Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with kelp, organic",
-      "image": "/assets/products/f40-layer-nw_f40-no-wheat-layer.jpg"
+      "image": "/assets/products/f40-layer-nw_f40-no-wheat-layer.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "living-soil-growing-medium-1-cubic-foot-bag",
@@ -1013,7 +1287,10 @@
       "category": "amendment",
       "active": false,
       "description": "Ingredients: Sphagnum Peat Moss, Mountain Gate Organics Earthworm Castings, Leaf Compost, Neem Meal, Crab Meal, Fish Bone Meal, Bio Char",
-      "image": "/assets/products/hlth0814_living-soil.jpg"
+      "image": "/assets/products/hlth0814_living-soil.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "llama-and-alpaca-feed-40lb",
@@ -1028,7 +1305,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic 15% Protein feed for Llamas and Alpacas is formulated to support growth, lactation, gestation, and general management.",
-      "image": "/assets/products/f40-llama_f40-llama-alpaca.jpg"
+      "image": "/assets/products/f40-llama_f40-llama-alpaca.jpg",
+      "animals": [
+        "Llamas"
+      ]
     },
     {
       "id": "low-starch-horse-feed-40lb",
@@ -1043,7 +1323,10 @@
       "category": "feed",
       "active": false,
       "description": "This beautiful feed is formulated for \"easy keeper\" horses or those with metabolic disorders that may require lower starch in their diet.",
-      "image": "/assets/products/f40-horse-lwsch_f40-low-starch.jpg"
+      "image": "/assets/products/f40-horse-lwsch_f40-low-starch.jpg",
+      "animals": [
+        "Horses"
+      ]
     },
     {
       "id": "loyalty-senior-horse-pellets-40lb",
@@ -1058,7 +1341,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic Loyalty Senior Horse Pellets are specially designed with senior horse digestion and needs in mind.",
-      "image": "/assets/products/f40-horse-snr-p_senior-horse.png"
+      "image": "/assets/products/f40-horse-snr-p_senior-horse.png",
+      "animals": [
+        "Horses"
+      ]
     },
     {
       "id": "mcenroe-organic-potting-soil-35-lbs",
@@ -1073,7 +1359,10 @@
       "category": "amendment",
       "active": false,
       "description": "Beginning with their Premium Organic Compost, sustainably harvested Sphagnum peat moss and sand to facilitate drainage, McEnroe’s Organic",
-      "image": "/assets/products/hlth0311_mcenroe-regular_42dd6f67-7838-43fd-9ab3-6b94f9aa27b8.jpg"
+      "image": "/assets/products/hlth0311_mcenroe-regular_42dd6f67-7838-43fd-9ab3-6b94f9aa27b8.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "microna-poultry-grit-calcium-carbonate",
@@ -1088,7 +1377,10 @@
       "category": "mineral",
       "active": false,
       "description": "MICRONA™ Poultry Grit is derived from calcium carbonate.",
-      "image": "/assets/products/micronagrit.jpg"
+      "image": "/assets/products/micronagrit.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "mikrobs",
@@ -1103,7 +1395,10 @@
       "category": "amendment",
       "active": false,
       "description": "Mikrobs is an organic microbial soil amendment/bioinoculant for plant and root growth stimulation that also encourages preventative",
-      "image": "/assets/products/mikrobs.jpg"
+      "image": "/assets/products/mikrobs.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "millet-40lb",
@@ -1118,7 +1413,19 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": "/assets/products/azure_market_organics_whole_millet_50_lb_front_bag.jpg"
+      "image": "/assets/products/azure_market_organics_whole_millet_50_lb_front_bag.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas",
+        "Rabbits"
+      ]
     },
     {
       "id": "mountain-gate-organics-earthworm-castings-5-lbs",
@@ -1133,7 +1440,10 @@
       "category": "amendment",
       "active": false,
       "description": "These earthworm castings are from earthworms fed an organic, plant-based diet to ensure pathogens are not transmitted from the host to the",
-      "image": "/assets/products/hlth0651_worm-castings-5lb-bucket.jpg"
+      "image": "/assets/products/hlth0651_worm-castings-5lb-bucket.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "mountain-gate-organics-earthworm-castings-25-lbs",
@@ -1148,7 +1458,10 @@
       "category": "amendment",
       "active": false,
       "description": "These earthworm castings are from earthworms fed an organic, plant-based diet to ensure pathogens are not transmitted from the host to the",
-      "image": "/assets/products/hlth0632_mt-gate-earthworm-castings-25lb_c8521b0e-9501-4d29-bdad-dc18b65e392e.jpg"
+      "image": "/assets/products/hlth0632_mt-gate-earthworm-castings-25lb_c8521b0e-9501-4d29-bdad-dc18b65e392e.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "13-0-0-pelleted-fertilizer",
@@ -1163,7 +1476,10 @@
       "category": "amendment",
       "active": false,
       "description": "Nature Safe’s 13-0-0 All-Natural Fertilizer is a high nitrogen product derived from feather meal, meat meal, and blood meal.",
-      "image": "/assets/products/nature-safe-13-0-0.jpg"
+      "image": "/assets/products/nature-safe-13-0-0.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "nature-safe-8-5-5-fertilizer",
@@ -1178,7 +1494,10 @@
       "category": "amendment",
       "active": false,
       "description": "Nature Safe 8-5-5 All-Natural Fertilizer is formulated to provide optimal nutrition for plants and boost microbial life in the soil.",
-      "image": "/assets/products/nature-safe-8-5-5.jpg"
+      "image": "/assets/products/nature-safe-8-5-5.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "natures-kelp-40lb",
@@ -1193,7 +1512,18 @@
       "category": "mineral",
       "active": false,
       "description": "For those wanting the quality kelp experience from Thorvin at a discounted cost, look no further than Thorvin’s Nature’s Kelp.",
-      "image": "/assets/products/f40-kelp-natrs_f40-natures-kelp_278751a0-b90b-4ed7-9d69-375da57ea5df.jpg"
+      "image": "/assets/products/f40-kelp-natrs_f40-natures-kelp_278751a0-b90b-4ed7-9d69-375da57ea5df.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "non-gmo-beet-pulp-pellets-40lb-not-organic",
@@ -1208,7 +1538,14 @@
       "category": "feed",
       "active": false,
       "description": "With highly digestible fiber, New Country Organics Non-GMO Beet Pulp Pellets are a great supplement for horses of all life stages and all",
-      "image": "/assets/products/f40-beet_f40-beet-pulp-pellets_2_be83c23b-d2ba-4e5a-9d7f-41fc8ee14cde.jpg"
+      "image": "/assets/products/f40-beet_f40-beet-pulp-pellets_2_be83c23b-d2ba-4e5a-9d7f-41fc8ee14cde.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "nutri-rich-organic-granular-fertilizer-4-3-2-40-lb",
@@ -1223,7 +1560,10 @@
       "category": "amendment",
       "active": false,
       "description": "Nutri-Rich 4-3-2 Ca 7%.",
-      "image": "/assets/products/nutri-richgranularfertilizer_40lbfrontbag.jpg"
+      "image": "/assets/products/nutri-richgranularfertilizer_40lbfrontbag.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "organc-olive-oil-grower-broiler-40lb",
@@ -1238,7 +1578,10 @@
       "category": "feed",
       "active": false,
       "description": "The great nutrition you've enjoyed from our corn-free Grower/Broiler feed, now with the added benefits of olive oil.",
-      "image": "/assets/products/f40-broilr-olive_f40-broilr-olive-toga_9e2b785e-c20d-40e8-8ae1-775885d10c76.jpg"
+      "image": "/assets/products/f40-broilr-olive_f40-broilr-olive-toga_9e2b785e-c20d-40e8-8ae1-775885d10c76.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "organic-olive-oil-layer-feed-40lb",
@@ -1255,7 +1598,10 @@
       "description": "The great nutrition you’ve enjoyed from our corn-free classic layer feed, now with the added benefits of olive oil. Our 17% Protein Organic Olive Oil Layer Feed is a complete nutritional feed of cracked and milled grain that’s supplemented with kelp, organic alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength.\n\nThis is a low PUFA feed, with balanced vitamins, minerals, and protein.\n\nMade exclusively with non-GMO, North American Organic Grains.\n\nBecause our feeds are milled on the same equipment, we do not guarantee that the finished product will be 100% free of corn.\n\nIf you have an allergy concern, we recommend consulting with your physician to ensure this product is right for your flock.",
       "image": "/assets/products/f40-layer-olive_f40-layer-olive-toga_ce33438b-53f1-4958-aa1b-44eface09299.jpg",
       "tags": "Chicken, Johnson's",
-      "weight_lbs": 40.0
+      "weight_lbs": 40.0,
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "organic-olive-oil-starter-feed-40-lbs",
@@ -1270,7 +1616,10 @@
       "category": "feed",
       "active": false,
       "description": "The great nutrition you’ve enjoyed from our corn-free Starter feed, now with the added benefits of olive oil.",
-      "image": "/assets/products/f40-start-olive_f40-start-olive-toga_fdf12bf0-4cc2-4d03-8ad7-2fa32c6b823c.jpg"
+      "image": "/assets/products/f40-start-olive_f40-start-olive-toga_fdf12bf0-4cc2-4d03-8ad7-2fa32c6b823c.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "pacific-pearl-pure-oyster-shell-5-lb",
@@ -1285,7 +1634,11 @@
       "category": "mineral",
       "active": false,
       "description": "For Laying Poultry: Our crushed oyster shell lay blend is crafted to offer a variety of particle sizes designed to provide essential",
-      "image": "/assets/products/pacificpearloystershellfrontbag.jpg"
+      "image": "/assets/products/pacificpearloystershellfrontbag.jpg",
+      "animals": [
+        "Chickens",
+        "Ducks"
+      ]
     },
     {
       "id": "pasture-perfect-layer-mash-1000-lb-tote",
@@ -1300,7 +1653,8 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": ""
+      "image": "",
+      "animals": []
     },
     {
       "id": "pastured-perfect-grower-broiler-feed-40-lbs",
@@ -1315,7 +1669,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free, Low Starch 19% Protein Pastured Perfect Grower/Broiler Feed is a complete nutritional feed of cracked and",
-      "image": "/assets/products/f40-growr-pasture_f40-growr-pasture_3dbdb8e4-5a8d-4473-b28a-43c14c847831.jpg"
+      "image": "/assets/products/f40-growr-pasture_f40-growr-pasture_3dbdb8e4-5a8d-4473-b28a-43c14c847831.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "pastured-perfect-layer-feed-40-lbs",
@@ -1332,7 +1689,10 @@
       "description": "Our 17% Protein Low Starch Pastured Perfect Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with kelp, organic alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength.\n\nMade exclusively with North American Organic Grains.\n\nBecause our feeds are milled on the same equipment, we do not guarantee that the finished product will be 100% free of corn.\n\nIf you have an allergy concern, we recommend consulting with your physician to ensure this product is right for your flock.",
       "image": "/assets/products/f40-layer-pasture_f40-layer-pasture_68070547-49f3-42e9-a9a4-1996a3641f17.jpg",
       "tags": "Chicken, Johnson's",
-      "weight_lbs": 40.0
+      "weight_lbs": 40.0,
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "pastured-perfect-starter-feed-40-lbs",
@@ -1347,7 +1707,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 21% Protein Low Starch Pastured Perfect Poultry Starter is a complete nutritional feed of North American",
-      "image": "/assets/products/f40-start-pasture_f40-start-pasture_e85d6ed1-241c-4e92-b918-2e1130aefda6.jpg"
+      "image": "/assets/products/f40-start-pasture_f40-start-pasture_e85d6ed1-241c-4e92-b918-2e1130aefda6.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "peas-cracked-40-lbs",
@@ -1362,7 +1725,14 @@
       "category": "feed",
       "active": false,
       "description": "Peas are ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-peas-crackd_f40-cracked-peas_bce52295-8c71-4639-9e7b-de66ce1ce059.jpg"
+      "image": "/assets/products/f40-peas-crackd_f40-cracked-peas_bce52295-8c71-4639-9e7b-de66ce1ce059.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses"
+      ]
     },
     {
       "id": "performance-horse-feed-40lb",
@@ -1377,7 +1747,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic Performance Horse Feed is formulated specifically for maintenance diets with moderate energy demands.",
-      "image": "/assets/products/f40-horse-perfm_f40-performance-horse_424a5602-7112-444e-a5a8-c1e6cf491c61.jpg"
+      "image": "/assets/products/f40-horse-perfm_f40-performance-horse_424a5602-7112-444e-a5a8-c1e6cf491c61.jpg",
+      "animals": [
+        "Horses"
+      ]
     },
     {
       "id": "planters-ii-trace-minerals-40-lbs",
@@ -1392,7 +1765,10 @@
       "category": "amendment",
       "active": false,
       "description": "Many soils lack the secondary and trace minerals that plants and trees need for healthy growth, fruit and crop production.",
-      "image": "/assets/products/f40-planters-ii_f40-planters-ii.jpg"
+      "image": "/assets/products/f40-planters-ii_f40-planters-ii.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "poultry-layer-grit",
@@ -1407,7 +1783,10 @@
       "category": "mineral",
       "active": false,
       "description": "Crushed Granite for laying chickens Aids Digestion by Lodging Within the Gizzard to Grind Feed into Small Particles Sourced in the USA",
-      "image": "/assets/products/poultrylayergrit.jpg"
+      "image": "/assets/products/poultrylayergrit.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "poultry-starter-grit",
@@ -1422,7 +1801,10 @@
       "category": "mineral",
       "active": false,
       "description": "Grit is an important part of poultry diets that will help your birds get the most nutrition out of their feed.",
-      "image": "/assets/products/starter-grit-50lb.jpg"
+      "image": "/assets/products/starter-grit-50lb.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "rabbit-pelleted-feed-40lb",
@@ -1437,7 +1819,10 @@
       "category": "feed",
       "active": false,
       "description": "Fortified with vitamins, minerals, and probiotics, our beautiful rabbit pellets are a great boost to your bunny’s diet.",
-      "image": "/assets/products/f40-rabbit_f40-rabbit_bc8ea595-8322-431e-9e5e-abb02595263e.jpg"
+      "image": "/assets/products/f40-rabbit_f40-rabbit_bc8ea595-8322-431e-9e5e-abb02595263e.jpg",
+      "animals": [
+        "Rabbits"
+      ]
     },
     {
       "id": "redmond-10-fine-with-garlic-50-lbs",
@@ -1452,7 +1837,14 @@
       "category": "mineral",
       "active": false,
       "description": "Redmond 10 Fine with Garlic is a premium sea salt with naturally occurring essential trace minerals including zinc, manganese, copper",
-      "image": "/assets/products/hlth0745_redmond-garlic.jpg"
+      "image": "/assets/products/hlth0745_redmond-garlic.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-animal-salt-medium-4-50-lb",
@@ -1467,7 +1859,8 @@
       "category": "mineral",
       "active": false,
       "description": "Redmond natural trace mineral salt has been used for all classes of livestock for more than 40 years.",
-      "image": "/assets/products/gp199_redmondagricultureanimalsalt_medium4_50lb.jpg"
+      "image": "/assets/products/gp199_redmondagricultureanimalsalt_medium4_50lb.jpg",
+      "animals": []
     },
     {
       "id": "redmond-conditioner-50-lbs",
@@ -1482,7 +1875,17 @@
       "category": "mineral",
       "active": false,
       "description": "Redmond Conditioner is an OMRI listed montmorillonite clay product that is designed for use in all classes of livestock.",
-      "image": "/assets/products/hlth0332_redmond-conditioner-anti-caking-agent.png"
+      "image": "/assets/products/hlth0332_redmond-conditioner-anti-caking-agent.png",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-natural-salt-block-with-garlic-44-lbs",
@@ -1497,7 +1900,14 @@
       "category": "mineral",
       "active": false,
       "description": "Redmond Salt Block with Garlic is a premium sea salt with naturally occurring essential trace minerals including zinc, manganese, copper",
-      "image": "/assets/products/hlth0746_redmond-block_7549e7d8-ad7e-4d92-abe1-c9b6489b9b46.jpg"
+      "image": "/assets/products/hlth0746_redmond-block_7549e7d8-ad7e-4d92-abe1-c9b6489b9b46.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-natural-trace-mineral-salt-50-lbs",
@@ -1512,7 +1922,14 @@
       "category": "mineral",
       "active": false,
       "description": "Mined from an ancient sea mineral bed in Utah, Redmond NTM Salt is an ideal supplement for all classes of livestock.",
-      "image": "/assets/products/hlth0334_redmond-10-fine-premium-mineral-salt.png"
+      "image": "/assets/products/hlth0334_redmond-10-fine-premium-mineral-salt.png",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-natural-trace-mineral-salt-44-lb-block",
@@ -1527,7 +1944,14 @@
       "category": "mineral",
       "active": false,
       "description": "Mined from an ancient sea mineral bed in Utah, Redmond NTM Salt is an ideal supplement for all classes of livestock.",
-      "image": "/assets/products/hlth0330_redmond-natural-regular-block_b74d8f0c-441d-42ee-98dd-c71b804cb2b8.jpg"
+      "image": "/assets/products/hlth0330_redmond-natural-regular-block_b74d8f0c-441d-42ee-98dd-c71b804cb2b8.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-salt-selenium-90-ppm-50-lbs",
@@ -1542,7 +1966,14 @@
       "category": "mineral",
       "active": false,
       "description": "Redmond Selenium 90 is a premium sea salt with naturally occurring essential trace minerals.",
-      "image": "/assets/products/hlth0335_redmond-selenium-90-premium-mineral-salt.png"
+      "image": "/assets/products/hlth0335_redmond-selenium-90-premium-mineral-salt.png",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "redmond-soil-test-kit",
@@ -1557,7 +1988,10 @@
       "category": "supply",
       "active": false,
       "description": "Redmond’s Soil Test Kit combines predictive soil testing technologies with an easy-to-use at-home kit.",
-      "image": "/assets/products/hlth0899_img_7549_02daa544-079f-42fd-a210-537ac74e9ca2.jpg"
+      "image": "/assets/products/hlth0899_img_7549_02daa544-079f-42fd-a210-537ac74e9ca2.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "replenish-3-4-3",
@@ -1572,7 +2006,10 @@
       "category": "amendment",
       "active": false,
       "description": "Replenish 3-4-3 is produced from 100% pure layer manure that has been cured for several months before undergoing a unique granulation and",
-      "image": "/assets/products/replenish-3-4-3.jpg"
+      "image": "/assets/products/replenish-3-4-3.jpg",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "scratch-feed-40lb",
@@ -1587,7 +2024,12 @@
       "category": "feed",
       "active": false,
       "description": "A mix of organic cracked corn, organic milo, organic whole wheat, and organic whole oats, this gorgeous nutritional mix is ideal as a",
-      "image": "/assets/products/f40-scratch_f40-scratch.jpg"
+      "image": "/assets/products/f40-scratch_f40-scratch.jpg",
+      "animals": [
+        "Chickens",
+        "Ducks",
+        "Turkeys"
+      ]
     },
     {
       "id": "sea-90-agriculture-soil-mineralizer",
@@ -1602,7 +2044,10 @@
       "category": "amendment",
       "active": false,
       "description": "Sea-90 Soil Mineralizer Plus offers a complete spectrum of minerals and trace elements to naturally supercharge soil health and fertility.",
-      "image": "/assets/products/sea90soilmineralizerfrontbag.png"
+      "image": "/assets/products/sea90soilmineralizerfrontbag.png",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "sea-90-foliar-mineralizer-25-lbs",
@@ -1617,7 +2062,10 @@
       "category": "amendment",
       "active": false,
       "description": "Sea-90 Foliar Mineralizer offers a complete spectrum of minerals and trace elements in a convenient micronized form factor for liquid",
-      "image": "/assets/products/sea90foliarfrontbag.png"
+      "image": "/assets/products/sea90foliarfrontbag.png",
+      "animals": [
+        "Garden"
+      ]
     },
     {
       "id": "sea-90-premium-mineral-salt-25-lbs",
@@ -1632,7 +2080,8 @@
       "category": "mineral",
       "active": false,
       "description": "Sea-90 Premium Mineral Salt is an all-natural mineral and trace element salt for all livestock and horses.",
-      "image": "/assets/products/sea90premiummineralsaltfrontbag.png"
+      "image": "/assets/products/sea90premiummineralsaltfrontbag.png",
+      "animals": []
     },
     {
       "id": "sheep-feed-40lb",
@@ -1647,7 +2096,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic Sheep feed is formulated to support meat, wool, and milk production.",
-      "image": "/assets/products/f40-sheep_f40-sheep_a56fa98b-6cfb-4d23-82b1-a2294edf2db5.jpg"
+      "image": "/assets/products/f40-sheep_f40-sheep_a56fa98b-6cfb-4d23-82b1-a2294edf2db5.jpg",
+      "animals": [
+        "Sheep"
+      ]
     },
     {
       "id": "shur-hook-hay-hooks-set-of-9",
@@ -1662,7 +2114,8 @@
       "category": "supply",
       "active": false,
       "description": "Easy To Use: The Shur-Hook makes it effortless to hook and pick up hay bales; no more looking for strings or contending with tight bale",
-      "image": "/assets/products/hay-hook-main.jpg"
+      "image": "/assets/products/hay-hook-main.jpg",
+      "animals": []
     },
     {
       "id": "speedi-beet-44-lbs",
@@ -1677,7 +2130,14 @@
       "category": "feed",
       "active": false,
       "description": "Speedi-Beet® Quick Soaking Sugar-Beet Flakes improve nutritional availability and provides energy through the natural process of hind gut",
-      "image": "/assets/products/hlth0413_speedi-beet_0ea2a5e4-85eb-4e6f-9bc6-e6d1e1da24ef.jpg"
+      "image": "/assets/products/hlth0413_speedi-beet_0ea2a5e4-85eb-4e6f-9bc6-e6d1e1da24ef.jpg",
+      "animals": [
+        "Goats",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Llamas"
+      ]
     },
     {
       "id": "starter-crumble-for-chicks-and-ducklings-35-lbs",
@@ -1692,7 +2152,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 21% Protein Poultry Starter Crumbles is a complete nutritional feed of North American Organic grains",
-      "image": "/assets/products/gc-f35-start-crumb_layer-crumble_1_5bf8c7a6-0d1a-4139-88fd-b5e9b94814b6.jpg"
+      "image": "/assets/products/gc-f35-start-crumb_layer-crumble_1_5bf8c7a6-0d1a-4139-88fd-b5e9b94814b6.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "starter-feed-40lb",
@@ -1707,7 +2170,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 21% Protein Poultry Starter is a complete nutritional feed of North American Organic grains supplemented",
-      "image": "/assets/products/f40-start_f40-starter_ff727859-c03b-4f27-b8be-05819d7bb54a.jpg"
+      "image": "/assets/products/f40-start_f40-starter_ff727859-c03b-4f27-b8be-05819d7bb54a.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "sunflower-meal-40lb",
@@ -1722,7 +2188,18 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic Sunflower Meal is a byproduct of the sunflower oil extraction process.",
-      "image": "/assets/products/f40-sunmeal_f40-sunflower-meal_f29ee98c-139c-4ecb-a280-a7bf4117fa43.jpg"
+      "image": "/assets/products/f40-sunmeal_f40-sunflower-meal_f29ee98c-139c-4ecb-a280-a7bf4117fa43.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "swine-feed-12-40lb",
@@ -1737,7 +2214,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic 12% Swine Feed contains the perfect mixture of quality organic grains, alfalfa, and kelp to maintain",
-      "image": "/assets/products/f40-swine_f40-12_-swine_2bdece78-3d13-453e-b59f-e074ee134111.jpg"
+      "image": "/assets/products/f40-swine_f40-12_-swine_2bdece78-3d13-453e-b59f-e074ee134111.jpg",
+      "animals": [
+        "Pigs"
+      ]
     },
     {
       "id": "swine-grower-feed-16-protein-40lb",
@@ -1752,7 +2232,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic 16% Swine Feed is a complete diet formulated to support the nutritional needs of weaning and growing",
-      "image": "/assets/products/f40-swine-16__f40-16_-swine.jpg"
+      "image": "/assets/products/f40-swine-16__f40-16_-swine.jpg",
+      "animals": [
+        "Pigs"
+      ]
     },
     {
       "id": "thorvin-kelp-50-lbs",
@@ -1769,7 +2252,18 @@
       "description": "Thorvin Kelp is the finest Certified Organic nutrient source on the market today. Kelp contains a range of minerals and vitamins often deficient in soils and feed and has a broad array of uses in agriculture and product formulations.\n\nKelp is a valuable renewable resource for animal health. The most valuable kelps grow in cold, mineral-rich waters and grow more slowly. These kelps collect minerals, vitamins, enzymes, amino acids and other beneficial bioactive properties. Thorvin carefully captures and preserves these nutrients using the most effective drying and storing methods in order to deliver the most consistently effective products derived from these kelps.\n\nFor animal feeding programs, average intake levels on a free choice basis (per head per day) are as follows: Livestock: 1 to 4 ounces Dogs: ½ to 1 teaspoon per animal per day Cats: ¼ teaspoon per animal per day Poultry: 1-2% of feed ration. \n\n*Please DO NOT feed Thorvin Kelp directly to Rabbits. The level of iodine in the kind of kelp Thorvin provides is very high. While for many animals this is a benefit, rabbits are sensitive to iodine.\n\n**Note that because this product is bagged in a mill which handles organic grains, it may not be completely free of small pieces of organic grain.",
       "image": "/assets/products/f50-kelp-thrvn_thorvin_6f78040a-94fb-443c-b161-2dcbb0a43eb7.jpg",
       "tags": "Cattle, Chicken, Duck, Goat, Horse, Johnson's, Llama, Minerals, Pig/Swine, Sheep, Turkey",
-      "weight_lbs": 50.0
+      "weight_lbs": 50.0,
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "thorvin-kelp-5-lb",
@@ -1784,7 +2278,15 @@
       "category": "mineral",
       "active": false,
       "description": "An excellent ingredient for strengthening feed and supplement blends, Thorvin Icelandic Geothermal Kelp delivers a complex array of",
-      "image": "/assets/products/thorvinkelp_5lb.jpg"
+      "image": "/assets/products/thorvinkelp_5lb.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Ducks",
+        "Llamas"
+      ]
     },
     {
       "id": "tiny-pocket-pet-crochet-chicken-mystery-color",
@@ -1799,7 +2301,8 @@
       "category": "other",
       "active": false,
       "description": "Brighten up your home with these adorable handmade tiny chickens, each with its own charming personality.",
-      "image": "/assets/products/4c062b3996bffc6a7856348317fc4cb012b0bdcf23bdd05618123c857cee62cc.jpg"
+      "image": "/assets/products/4c062b3996bffc6a7856348317fc4cb012b0bdcf23bdd05618123c857cee62cc.jpg",
+      "animals": []
     },
     {
       "id": "tua-farms-fm-good-as-gold",
@@ -1814,7 +2317,8 @@
       "category": "other",
       "active": false,
       "description": "ADGA# PD2408296 Date of Birth: 04/30/2024 Sire: TUA FARMS BB FORTISSIMO (*B pending) Dam: TUA FARMS SP SWEET N SASSY 5*M VVEV88 Sassy: 2020",
-      "image": "/assets/products/20240726_0202.jpg"
+      "image": "/assets/products/20240726_0202.jpg",
+      "animals": []
     },
     {
       "id": "turkey-grower-40lb",
@@ -1829,7 +2333,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic Turkey Grower feed is a beautiful blend of organic grains, organic kelp, fish meal, and a vitamin",
-      "image": "/assets/products/f40-turky-growr_f40-turkey-grower_453f3be8-7c4e-44dc-a172-2824e280695a.jpg"
+      "image": "/assets/products/f40-turky-growr_f40-turkey-grower_453f3be8-7c4e-44dc-a172-2824e280695a.jpg",
+      "animals": [
+        "Turkeys"
+      ]
     },
     {
       "id": "turkey-starter-40lb",
@@ -1844,7 +2351,10 @@
       "category": "feed",
       "active": false,
       "description": "New Country Organics Certified Organic Turkey Starter feed is a beautiful blend of organic grains, organic kelp, fish meal, and a vitamin",
-      "image": "/assets/products/f40-turky-start_f40-turkey-starter_18c23e8e-330d-4ff7-8164-09e6774e252d.jpg"
+      "image": "/assets/products/f40-turky-start_f40-turkey-starter_18c23e8e-330d-4ff7-8164-09e6774e252d.jpg",
+      "animals": [
+        "Turkeys"
+      ]
     },
     {
       "id": "unmilled-layer-feed-40lb",
@@ -1859,7 +2369,10 @@
       "category": "feed",
       "active": false,
       "description": "Our Certified Organic, Soy-Free 17% Protein Layer Feed is a complete nutritional feed of unmilled grains that are supplemented with organic",
-      "image": "/assets/products/f40-layer-unmill_f40-whole-grain-layer_9bfc7294-56f1-4208-ac54-ed1dfed902c6.jpg"
+      "image": "/assets/products/f40-layer-unmill_f40-whole-grain-layer_9bfc7294-56f1-4208-ac54-ed1dfed902c6.jpg",
+      "animals": [
+        "Chickens"
+      ]
     },
     {
       "id": "unmilled-wheat-2-000-lb-tote",
@@ -1874,7 +2387,8 @@
       "category": "feed",
       "active": false,
       "description": "Whole Wheat is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": ""
+      "image": "",
+      "animals": []
     },
     {
       "id": "wee3farms-jumpin-jack-flash-flash",
@@ -1889,7 +2403,8 @@
       "category": "other",
       "active": false,
       "description": "ADGA# PD2102469 Date of Birth: 03/08/2023 Sire: HIGHLAND RANCH VP THUNDER Dam: SAND STONE RIDGE HOLLY DESIGN 4*M EEEE90 Holly: 2019 DHIA",
-      "image": "/assets/products/flash-wee3pic1.jpg"
+      "image": "/assets/products/flash-wee3pic1.jpg",
+      "animals": []
     },
     {
       "id": "wheat-unmilled-40lb",
@@ -1904,7 +2419,18 @@
       "category": "feed",
       "active": false,
       "description": "Whole Wheat is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-wheat_f40-wheat_1_bd0acedb-c40a-4ef1-8dff-3d07dc866f13.jpg"
+      "image": "/assets/products/f40-wheat_f40-wheat_1_bd0acedb-c40a-4ef1-8dff-3d07dc866f13.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "whole-barley-40lb",
@@ -1919,7 +2445,18 @@
       "category": "feed",
       "active": false,
       "description": "Whole Barley is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-barley_f40-barley.jpg"
+      "image": "/assets/products/f40-barley_f40-barley.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Pigs",
+        "Llamas"
+      ]
     },
     {
       "id": "whole-corn-40lb",
@@ -1934,7 +2471,16 @@
       "category": "feed",
       "active": false,
       "description": "Unmilled Corn is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-corn__f40-whole-corn_5ad41ba1-6307-42c3-bc2f-eb0f56212098.jpg"
+      "image": "/assets/products/f40-corn__f40-whole-corn_5ad41ba1-6307-42c3-bc2f-eb0f56212098.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "whole-corn-2000-lb-tote",
@@ -1949,7 +2495,8 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": ""
+      "image": "",
+      "animals": []
     },
     {
       "id": "whole-milo-40lb",
@@ -1964,7 +2511,12 @@
       "category": "feed",
       "active": false,
       "description": "Milo is ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-milo_f40-milo.jpg"
+      "image": "/assets/products/f40-milo_f40-milo.jpg",
+      "animals": [
+        "Chickens",
+        "Ducks",
+        "Turkeys"
+      ]
     },
     {
       "id": "whole-oats-40lb",
@@ -1979,7 +2531,17 @@
       "category": "feed",
       "active": false,
       "description": "Oats are ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-oats_f40-oats_c5c46422-6d5a-475e-a616-61da249a693d.jpg"
+      "image": "/assets/products/f40-oats_f40-oats_c5c46422-6d5a-475e-a616-61da249a693d.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "whole-peas-40lb",
@@ -1994,7 +2556,17 @@
       "category": "feed",
       "active": false,
       "description": "Peas are ideal for diet supplementation, diet formulation, large scale producers, or fermentation.",
-      "image": "/assets/products/f40-peas_f40-whole-peas.jpg"
+      "image": "/assets/products/f40-peas_f40-whole-peas.jpg",
+      "animals": [
+        "Goats",
+        "Chickens",
+        "Sheep",
+        "Cattle",
+        "Horses",
+        "Ducks",
+        "Turkeys",
+        "Llamas"
+      ]
     },
     {
       "id": "whole-peas-2000-lb-tote",
@@ -2009,7 +2581,8 @@
       "category": "feed",
       "active": false,
       "description": "",
-      "image": ""
+      "image": "",
+      "animals": []
     },
     {
       "id": "goat-breath",
@@ -2024,7 +2597,10 @@
       "category": "test",
       "active": true,
       "description": "A $1.00 test product used to check that orders, payments and refunds work end to end. Not a real thing you can buy. If you are seeing this and you are not us, we have left it switched on by mistake.",
-      "image": ""
+      "image": "",
+      "animals": [
+        "Goats"
+      ]
     }
   ]
 }
