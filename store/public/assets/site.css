@@ -77,7 +77,14 @@ a:hover { color:var(--rust); }
 .stats .l { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
 
 /* ---------- herd grid ---------- */
-.herd { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:26px 20px; align-items:start; }
+/* Flex rather than grid, specifically so a partial last row centres. With
+   grid auto-fill the fifth doe hangs off the left edge; with wrapped flex and
+   justify-content:center she sits in the middle - and so will the seventh.
+   max-width stops a lone card in its own row from stretching the full width;
+   below 640px it is lifted so cards fill a phone screen as before. */
+.herd { display:flex; flex-wrap:wrap; justify-content:center; gap:26px 20px; align-items:flex-start; }
+.herd > a { flex:1 1 200px; max-width:250px; }
+@media (max-width:640px) { .herd > a { max-width:none; } }
 .herd a { text-decoration:none; color:inherit; display:block; }
 .herd .shot { background:var(--line-soft); overflow:hidden; margin-bottom:12px; }
 .herd a:hover .shot img { transform:scale(1.03); }
