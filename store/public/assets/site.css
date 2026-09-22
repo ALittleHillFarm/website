@@ -77,9 +77,15 @@ a:hover { color:var(--rust); }
 /* Baseline-aligned on one line rather than stacked. Keeps all four figures
    legible while giving back roughly half the vertical space, which is what
    lets the does appear without scrolling. */
-.stats div { background:var(--paper); padding:16px 20px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
-.stats .n { font-family:var(--serif); font-size:30px; line-height:1; color:var(--moss); }
-.stats .l { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
+/* Always stacked. The previous version put the label beside the number and
+   let it wrap, which meant every cell decided for itself: at 560px three sat
+   inline and "Kiddings due 2026" dropped below, and the whole thing flipped
+   between inline and stacked several times on the way down. Stacking is
+   predictable at every width - and tighter than the inline version ever was,
+   because nothing has to reserve room for a label that might wrap. */
+.stats > div { background:var(--paper); padding:14px 20px; }
+.stats .n { font-family:var(--serif); font-size:28px; line-height:1; color:var(--moss); }
+.stats .l { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-top:6px; }
 
 /* ---------- herd grid ---------- */
 /* Flex rather than grid, specifically so a partial last row centres. With
