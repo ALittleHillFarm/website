@@ -1,5 +1,5 @@
 {
-  "_comment": "Farm-authored goat content. Registry facts (pedigree, production) come from goat-registry.json at build time. Edit here, run build-goats.py, commit.",
+  "_comment": "Farm-authored goat content. Registry facts come from goat-registry.json at build time. Edit here, run build-goats.py, commit. NOTE: sections_todo holds prompts about what to write and is NEVER rendered - move a paragraph into sections when it is real copy.",
   "goats": [
     {
       "id": "calypso",
@@ -86,7 +86,8 @@
           "credit": "PC: TUA Farms"
         }
       ],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
@@ -126,7 +127,8 @@
         "Dam's dam": null
       },
       "parents": [],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
@@ -166,7 +168,8 @@
         "Dam's dam": null
       },
       "parents": [],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
@@ -177,10 +180,10 @@
       ]
     },
     {
-      "id": "mayslee",
+      "id": "maylsee",
       "template": "doe",
-      "name": "Mayslee",
-      "registered_name": "DLMG Farms ATL Mayslee",
+      "name": "Maylsee",
+      "registered_name": "DLMG Farms ATL Maylsee",
       "kind": "Doe · Born March 2020",
       "badge": null,
       "blurb": null,
@@ -206,12 +209,13 @@
         "Dam's dam": null
       },
       "parents": [],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
             "Freshening dates, kid counts and where they went.",
-            "How Mayslee milks, how she behaves on the stand, what she is like in the barn."
+            "How Maylsee milks, how she behaves on the stand, what she is like in the barn."
           ]
         }
       ]
@@ -285,7 +289,8 @@
           "credit": "PC: TUA Farms"
         }
       ],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
@@ -341,7 +346,8 @@
           "credit": "PC: TUA Farms"
         }
       ],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
@@ -420,7 +426,8 @@
           "credit": "PC: Amores Farm"
         }
       ],
-      "sections": [
+      "sections": [],
+      "sections_todo": [
         {
           "title": "Notes",
           "paragraphs": [
