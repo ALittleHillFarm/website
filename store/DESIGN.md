@@ -147,9 +147,10 @@ The tax report separates the three numbers Schedule F wants:
 - `cogs_cents` — cost of goods sold
 - `gross_margin_cents` — the difference
 
-Freight is really charged on the bulk supplier order, not per bag. Allocate it
-by dividing the order's freight across the units in it, and put that in
-`freight_cents`.
+`freight_cents` is normally **0**. New Country Organics and Azure Standard
+quote a delivered price, so freight is already inside `cost_cents` and adding
+it again would double-count. The field exists for a future supplier who bills
+freight separately.
 
 
 ## Editing inventory without a deploy

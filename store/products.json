@@ -1,5 +1,5 @@
 {
-  "_comment": "Catalog. Edit and commit to change the store. Only active:true products are sold. cost_cents is the supplier cost from the Shopify export (2026-09-21); freight_cents is freight allocated per unit and is still to be filled in. Neither is ever exposed by the public API - both are snapshotted onto each sale for COGS.",
+  "_comment": "Catalog. Edit and commit to change the store. Only active:true products are sold. cost_cents is the delivered supplier cost from the Shopify export (2026-09-21) - our suppliers already include freight in it, so freight_cents stays 0 and exists only for a supplier that bills freight separately. Neither is ever exposed by the public API; both are snapshotted onto each sale for COGS.",
   "updated": "2026-09-20",
   "products": [
     {

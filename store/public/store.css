@@ -257,3 +257,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .upload-status { font-size:11px; line-height:1.5; margin-top:4px; max-width:120px; color:var(--muted); }
 .upload-status.ok  { color:var(--moss, #4a6741); }
 .upload-status.bad { color:var(--rust); }
+
+/* Quiet aside inside a field label, e.g. "usually empty". */
+.field label .lbl-note { font-weight:400; text-transform:none; letter-spacing:0;
+  color:var(--muted); font-size:11px; }

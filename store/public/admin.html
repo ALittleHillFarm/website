@@ -635,7 +635,10 @@
             '<div class="money-error" id="inv-cost-err-' + id + '" hidden></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label for="inv-freight-' + id + '">Freight ($)</label>' +
+            // New Country Organics and Azure Standard already fold freight into
+            // their per-unit price, so this stays empty for them. It exists for
+            // a supplier that bills freight separately.
+            '<label for="inv-freight-' + id + '">Freight ($) <span class="lbl-note">usually empty</span></label>' +
             '<input type="text" inputmode="decimal" autocomplete="off" id="inv-freight-' + id + '" data-money="1" value="' + freightVal + '" placeholder="Default" aria-describedby="inv-freight-err-' + id + '">' +
             '<div class="default-hint" id="inv-freight-default-' + id + '" hidden>Empty = ' + money(p.default_freight_cents) + '</div>' +
             '<div class="money-error" id="inv-freight-err-' + id + '" hidden></div>' +
