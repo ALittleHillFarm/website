@@ -153,6 +153,57 @@ is automatic and free.
 
 ---
 
+## How to test a purchase
+
+### While in sandbox — test cards only
+
+A real card number is rejected in test mode, so there is nothing to gain by
+trying one, and never use a card that is not yours. Stripe publishes numbers
+for every outcome. Any future expiry, any CVC, any ZIP.
+
+| Card | What happens |
+|---|---|
+| `4242 4242 4242 4242` | Succeeds — the normal path |
+| `4000 0000 0000 0002` | Declined |
+| `4000 0000 0000 9995` | Insufficient funds |
+| `4000 0000 0000 0069` | Expired card |
+| `4000 0000 0000 0127` | Wrong CVC |
+| `4000 0025 0000 3155` | Requires 3D Secure |
+
+For ACH, use routing `110000000` with:
+
+| Account | What happens |
+|---|---|
+| `000123456789` | Succeeds |
+| `000222222227` | Insufficient funds |
+| `000111111113` | Account closed |
+| `000000004954` | Blocked by Radar |
+| `000555555559` | Triggers a dispute |
+
+Test ACH settles instantly. **Live ACH takes several days** — do not read the
+instant test result as how it will behave in production.
+
+### The live smoke test, for about 33 cents
+
+Once the live keys are in, you do need one real transaction. Make it cheap
+instead of buying a $127 bag of kelp from yourself.
+
+1. **Inventory tab → set one product to $1.00.** The decimal-point guard will
+   stop you and ask for confirmation, which conveniently tests that too.
+2. **Order A — prove the free path.** Buy it with your own card. Confirm it
+   lands as `authorized`, that your bank shows a *pending hold* and not a
+   charge, then **Cancel** it. Watch the hold disappear. This costs **nothing**
+   and exercises checkout, the webhook, the admin screen and cancellation.
+3. **Order B — prove money moves.** Order again, **Capture** it, confirm it
+   reaches your Stripe balance, then refund it from the Stripe dashboard.
+   You lose the processing fee — about **33c** on a $1 order — and that is
+   the whole cost of knowing the system works.
+4. **Set the price back.** The guard will ask again.
+
+Do not skip step 2. Cancelling an authorization is the single most important
+behaviour in this store, and it is the one you will use on every suspicious
+order.
+
 ## Before taking real money
 
 Run every one of these against Stripe **test mode**. Do not skip the boring ones —
