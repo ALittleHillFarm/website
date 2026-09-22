@@ -69,9 +69,12 @@ a:hover { color:var(--rust); }
 .link-u { font-size:12px; letter-spacing:0.08em; text-transform:uppercase; text-decoration:none; border-bottom:1px solid #C9BFA9; padding-bottom:2px; }
 
 .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--line); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
-.stats div { background:var(--paper); padding:26px 22px; }
-.stats .n { font-family:var(--serif); font-size:40px; line-height:1; color:var(--moss); }
-.stats .l { font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-top:10px; }
+/* Baseline-aligned on one line rather than stacked. Keeps all four figures
+   legible while giving back roughly half the vertical space, which is what
+   lets the does appear without scrolling. */
+.stats div { background:var(--paper); padding:16px 20px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.stats .n { font-family:var(--serif); font-size:30px; line-height:1; color:var(--moss); }
+.stats .l { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
 
 /* ---------- herd grid ---------- */
 .herd { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:26px 20px; align-items:start; }
@@ -185,11 +188,14 @@ a:hover { color:var(--rust); }
 .sched .go { padding:24px; text-align:right; }
 
 /* ---------- hero ---------- */
-.hero { padding:72px 0 56px; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:56px; align-items:end; }
+.hero { padding:32px 0 24px; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,0.7fr); gap:44px; align-items:center; }
 .hero h1 { font-size:clamp(44px,6vw,76px); line-height:1.02; letter-spacing:-0.025em; margin:20px 0 24px; text-wrap:balance; }
 .hero em { color:var(--moss); }
-.hero .shots { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; align-items:start; }
-.hero .shots div { background:var(--line-soft); overflow:hidden; }
+/* The mark is already a circle with transparent corners, so it needs no
+   frame - just room to breathe and a ceiling so it never outgrows the
+   headline it is paired with. */
+.hero-mark { display:flex; justify-content:center; }
+.hero-mark img { width:100%; max-width:290px; height:auto; display:block; }
 
 /* ---------- embed mode (Shopify iframe) ---------- */
 body.embed [data-chrome] { display:none !important; }
