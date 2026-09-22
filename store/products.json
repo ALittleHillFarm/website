@@ -2010,6 +2010,21 @@
       "active": false,
       "description": "",
       "image": ""
+    },
+    {
+      "id": "goat-breath",
+      "sku": "TEST-001",
+      "name": "Goat Breath",
+      "supplier": "A Little Hill Farm",
+      "unit": "1 whiff",
+      "cost_cents": 0,
+      "freight_cents": 0,
+      "price_cents": 100,
+      "taxable": true,
+      "category": "test",
+      "active": true,
+      "description": "A $1.00 test product used to check that orders, payments and refunds work end to end. Not a real thing you can buy. If you are seeing this and you are not us, we have left it switched on by mistake.",
+      "image": ""
     }
   ]
 }
