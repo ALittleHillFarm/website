@@ -68,7 +68,12 @@ a:hover { color:var(--rust); }
 .btn.ghost:hover { background:var(--moss); color:var(--card); }
 .link-u { font-size:12px; letter-spacing:0.08em; text-transform:uppercase; text-decoration:none; border-bottom:1px solid #C9BFA9; padding-bottom:2px; }
 
-.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--line); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+/* Fixed counts rather than auto-fit. auto-fit packs in whatever fits, which
+   on the way down gives an awkward 3 + 1 orphan; stepping 4 -> 2 -> 1 keeps it
+   a tidy block at every width, and 2x2 reads better than three-and-a-stray. */
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+@media (max-width:820px) { .stats { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:430px) { .stats { grid-template-columns:1fr; } }
 /* Baseline-aligned on one line rather than stacked. Keeps all four figures
    legible while giving back roughly half the vertical space, which is what
    lets the does appear without scrolling. */
