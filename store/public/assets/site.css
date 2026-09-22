@@ -188,8 +188,16 @@ a:hover { color:var(--rust); }
 .sched .go { padding:24px; text-align:right; }
 
 /* ---------- hero ---------- */
-.hero { padding:32px 0 24px; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,0.7fr); gap:44px; align-items:center; }
-.hero h1 { font-size:clamp(44px,6vw,76px); line-height:1.02; letter-spacing:-0.025em; margin:20px 0 24px; text-wrap:balance; }
+.hero { padding:32px 0 24px; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,0.66fr); gap:40px; align-items:center; }
+/* Sized so "Five does, two bucks," holds one line at the widest layout, with
+   headroom for "Seven does, three bucks," as the herd grows. text-wrap:balance
+   is deliberately off - it would even out the two lines and undo the break. */
+/* Sized so "Five does, two bucks," holds one line at the widest layout, with
+   headroom past "Twelve does, five bucks," as the herd grows. No nowrap: if it
+   ever did outgrow the column it should wrap, not push the page sideways. And
+   no text-wrap:balance either - balance evened out the two halves and undid
+   the deliberate break before "one little hill." */
+.hero h1 { font-size:clamp(38px,4.6vw,60px); line-height:1.06; letter-spacing:-0.022em; margin:0 0 20px; }
 .hero em { color:var(--moss); }
 /* The mark is already a circle with transparent corners, so it needs no
    frame - just room to breathe and a ceiling so it never outgrows the
