@@ -276,13 +276,11 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
   color:var(--muted);
 }
 
-/* Scrolls sideways on a phone rather than wrapping into a ragged block.
-   The mask fades the right edge so it is visibly scrollable. */
-.qp-row {
-  display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;
-  scrollbar-width:none; -webkit-overflow-scrolling:touch;
-}
-.qp-row::-webkit-scrollbar { display:none; }
+/* Wraps instead of scrolling. A sideways-scrolling row hid options off the
+   right edge with no affordance that they existed - the whole point of a
+   quick pick is seeing every choice at once. Five pills sit on one line;
+   a longer list simply becomes two. */
+.qp-row { display:flex; flex-wrap:wrap; gap:8px; }
 
 .qp {
   flex:none; display:inline-flex; align-items:center; gap:7px;
@@ -309,9 +307,4 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 
 @media (max-width:700px) {
   .quickpick { flex-direction:column; align-items:stretch; gap:10px; }
-  .qp-row {
-    margin-inline:-16px; padding-inline:16px;
-    -webkit-mask-image:linear-gradient(to right, #000 88%, transparent);
-            mask-image:linear-gradient(to right, #000 88%, transparent);
-  }
 }

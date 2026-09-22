@@ -171,6 +171,30 @@ than taking the store down.
 The split is deliberate: the web form cannot damage product copy or image URLs,
 only the numbers it is meant to change.
 
+
+## The animal quick pick
+
+Each product carries an `animals` array in `products.json`, and the filter row
+on the store is built from whatever is actually in the active catalogue. Three
+rules follow from that:
+
+- **A new animal needs no code change.** Tag a product `"Alpacas"` and an
+  Alpacas pill appears. `ANIMAL_ORDER` in `index.html` is a *sorting
+  preference*, not a permitted list — anything unrecognised simply sorts after
+  the named animals, alphabetically.
+- **`"Other"` always sorts last**, as the catch-all for one-off animals not
+  worth their own pill.
+- **An empty `animals` array is fine.** The product still sells; it just only
+  appears under Everything. Use that when a category would be noise.
+
+The row hides itself entirely below two options, and disappears from a filter
+the moment the last product for that animal is switched off — so it can never
+offer Sheep when nothing for sheep is in stock.
+
+It filters rather than groups because a product can serve several animals.
+Thorvin Kelp is for goats, chickens, sheep and ducks; grouping by animal would
+print the same bag four times down one page.
+
 ## The two Stripe calls
 
 Create the session — one parameter switches on manual capture:

@@ -307,6 +307,10 @@
    * offer "Sheep" when nothing for sheep is in stock. The choice lives in the
    * URL (?for=goats) so a customer can bookmark or share "the goat page".
    */
+  /* A preferred order, NOT a permitted list. Anything tagged on a product
+   * appears whether or not it is named here — it simply sorts after these,
+   * alphabetically. "Other" is always last, as the catch-all. A product with
+   * no animal at all is still sold; it just only shows under Everything. */
   var ANIMAL_ORDER = ['Goats', 'Chickens', 'Sheep', 'Cattle', 'Horses',
                       'Ducks', 'Turkeys', 'Pigs', 'Llamas', 'Rabbits', 'Garden'];
   var activeAnimal = '';
@@ -319,10 +323,22 @@
     return counts;
   }
 
+  function sortedAnimals(counts) {
+    return Object.keys(counts).sort(function (a, b) {
+      if (a === 'Other') return 1;
+      if (b === 'Other') return -1;
+      var ia = ANIMAL_ORDER.indexOf(a), ib = ANIMAL_ORDER.indexOf(b);
+      if (ia < 0 && ib < 0) return a.localeCompare(b);
+      if (ia < 0) return 1;
+      if (ib < 0) return -1;
+      return ia - ib;
+    });
+  }
+
   function renderQuickPick() {
     var host = document.getElementById('quickpick');
     var counts = animalCounts();
-    var available = ANIMAL_ORDER.filter(function (a) { return counts[a]; });
+    var available = sortedAnimals(counts);
 
     // One lonely filter is not a choice — don't clutter the page with it.
     if (available.length < 2) { host.hidden = true; return; }
@@ -395,8 +411,9 @@
       // a stale bookmark should land on the full store, not an empty page.
       var want = (new URLSearchParams(location.search).get('for') || '').toLowerCase();
       if (want) {
-        var match = ANIMAL_ORDER.filter(function (a) { return a.toLowerCase() === want; })[0];
-        if (match && animalCounts()[match]) activeAnimal = match;
+        var counts = animalCounts();
+        var match = Object.keys(counts).filter(function (a) { return a.toLowerCase() === want; })[0];
+        if (match) activeAnimal = match;
       }
       render();
     })
