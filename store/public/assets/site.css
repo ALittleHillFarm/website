@@ -220,7 +220,12 @@ a:hover { color:var(--rust); }
 /* The mark is already a circle with transparent corners, so it needs no
    frame - just room to breathe and a ceiling so it never outgrows the
    headline it is paired with. */
-.hero-mark { display:flex; justify-content:center; }
+/* The logo's grid column is narrower than half the hero (the text column
+   gets extra width so the headline holds two lines), so centering within the
+   column alone lands the mark near the right edge rather than centered on
+   the page's right half. Shift left by ~31% of the column's own width to
+   land its center at the midpoint of that conceptual right half instead. */
+.hero-mark { display:flex; justify-content:center; transform:translateX(-31%); }
 .hero-mark img { width:100%; max-width:290px; height:auto; display:block; }
 
 /* ---------- embed mode (Shopify iframe) ---------- */
@@ -231,6 +236,7 @@ body.embed .site-footer { margin-top:0; }
 @media (max-width:900px) {
   .split { grid-template-columns:minmax(0,1fr); gap:40px; }
   .hero { grid-template-columns:minmax(0,1fr); gap:36px; padding:48px 0 40px; }
+  .hero-mark { transform:none; }
   .goat-hero .inner { grid-template-columns:minmax(0,1fr); }
   .goat-hero .txt { padding:48px 0 40px; }
   .goat-hero .shot { min-height:0; margin-bottom:0; }
