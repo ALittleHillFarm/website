@@ -1,6 +1,6 @@
 # The farm site — goat pages, herd, breeding schedule.
 # Pure static: no code, just files. The store is a separate Worker
-# (store/wrangler.toml) deployed to store.alittlehillfarm.com.
+# (store/wrangler.toml).
 #
 # Rebuild + deploy:
 #   bash build-site.sh && npx wrangler deploy -c wrangler.site.toml
@@ -17,6 +17,12 @@ binding = "ASSETS"
 # 307-redirecting every internal link to an extensionless form.
 not_found_handling = "404-page"
 html_handling = "none"
+# The worker MUST run first. Without this, Cloudflare answers a browser
+# page-load of "/" straight from the asset layer - no file matches "/", so it
+# serves 404.html and the worker that maps "/" to index.html never runs. Plain
+# curl is not a page-load and took the worker path, so every command-line check
+# passed while every real visitor to the home page saw "That page wandered off".
+run_worker_first = true
 
 # Uncomment at cutover, once the apex is ready to leave Shopify:
 # [[routes]]
