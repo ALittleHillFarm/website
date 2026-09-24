@@ -262,6 +262,20 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .field label .lbl-note { font-weight:400; text-transform:none; letter-spacing:0;
   color:var(--muted); font-size:11px; }
 
+/* ---------- search: narrow the catalogue as you type ---------- */
+/* Same field vocabulary as the checkout form - card background, 2px corners -
+   with a drawn magnifier so it reads as search before anything is typed.
+   16px text stops iOS zooming the page on focus. */
+.store-search { margin:0 0 16px; max-width:520px; }
+.store-search input[type="search"] {
+  width:100%; font:inherit; font-size:16px; color:var(--ink);
+  background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%236B6353' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='7.5' cy='7.5' r='5.5'/%3E%3Cpath d='M11.6 11.6 16 16'/%3E%3C/svg%3E") no-repeat 13px 50%;
+  border:1px solid var(--line); border-radius:2px;
+  padding:11px 13px 11px 42px; min-height:46px;
+}
+.store-search input[type="search"]::placeholder { color:var(--muted); opacity:1; }
+.store-search input[type="search"]:focus-visible { outline:2px solid var(--rust); outline-offset:2px; }
+
 /* ---------- quick pick: filter the store by animal ---------- */
 /* Deliberately borrows the site nav's vocabulary — 2px corners, uppercase,
    wide letterspacing — so it reads as part of the farm site rather than a

@@ -293,8 +293,11 @@ exempt, taxable subtotal and tax collected.
 | Pickup locations, tax rate, discounts | `config.json` | commit + `wrangler deploy` |
 | The pre-order terms text | `config.json` — **bump `terms.version`** | commit + deploy |
 
-Set `active: true` on a product to put it on sale. Everything imported from
-Shopify is `active: false` — turn on only what you actually stock.
+Set `active: true` on a product to put it on sale. Everything that sold on
+Shopify between 2022 and September 2026 is on, except the bulk totes and
+Loyalty Senior Horse Pellets; the rest of the Shopify import is
+`active: false`. Products added from that sales report carry
+`cost_cents: 0` until a supplier cost is entered in `/admin`.
 
 Bumping `terms.version` matters: each sale stores the version the customer
 accepted, so old orders keep the wording they actually agreed to. That is the
