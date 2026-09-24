@@ -175,25 +175,46 @@ only the numbers it is meant to change.
 ## The animal quick pick
 
 Each product carries an `animals` array in `products.json`, and the filter row
-on the store is built from whatever is actually in the active catalogue. Three
+on the store is built from whatever is actually in the active catalogue. Four
 rules follow from that:
 
-- **A new animal needs no code change.** Tag a product `"Alpacas"` and an
-  Alpacas pill appears. `ANIMAL_ORDER` in `index.html` is a *sorting
-  preference*, not a permitted list — anything unrecognised simply sorts after
-  the named animals, alphabetically.
-- **`"Other"` always sorts last**, as the catch-all for one-off animals not
-  worth their own pill.
-- **An empty `animals` array is fine.** The product still sells; it just only
-  appears under Everything. Use that when a category would be noise.
+- **A new animal needs no code change.** Tag a product `"Alpacas"` and, once
+  enough of them are on sale, an Alpacas pill appears. `ANIMAL_ORDER` in
+  `index.html` is a *sorting preference*, not a permitted list — anything
+  unrecognised simply sorts after the named animals, alphabetically.
+- **An animal needs three products on sale to earn a pill** (`MIN_PER_PILL`).
+  Below that its products are listed under `"Other"` instead, so switching on a
+  single rabbit feed does not add a Rabbits pill with one bag behind it. Tag
+  the product accurately anyway; the pill appears by itself when the third
+  one goes on sale.
+- **`"Other"` always sorts last**, as the catch-all: products for animals below
+  the threshold, and products tagged for no animal at all (milk, hay hooks).
+- **An empty `animals` array is fine.** The product still sells, under
+  Everything and Other.
 
 The row hides itself entirely below two options, and disappears from a filter
 the moment the last product for that animal is switched off — so it can never
-offer Sheep when nothing for sheep is in stock.
+offer Sheep when nothing for sheep is in stock. A bookmarked `?for=rabbits`
+lands on Other while Rabbits is below the threshold.
 
 It filters rather than groups because a product can serve several animals.
 Thorvin Kelp is for goats, chickens, sheep and ducks; grouping by animal would
 print the same bag four times down one page.
+
+## Search
+
+A search box above the quick pick narrows the catalogue as the customer types.
+It runs in the browser against the same `/api/catalog` response — a hundred
+products is nothing to scan per keystroke, and it needs no endpoint, index or
+dependency. Every word must appear in the product's name, supplier, size,
+description, category or animals; punctuation is ignored (`corn free` finds
+Corn-Free) and a trailing plural `s` is dropped (`chickens` finds chicken).
+Products whose *name* matches rank first, so `kelp` leads with the kelp rather
+than every layer feed listing kelp as an ingredient.
+
+It combines with the quick pick, and both live in the URL (`?for=goats&q=pellet`)
+so any view can be bookmarked or texted. SKUs are not searchable, because the
+public catalogue does not expose them.
 
 ## The two Stripe calls
 

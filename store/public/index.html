@@ -37,6 +37,14 @@
     <p class="lede">Everything below is pre-ordered and consolidated into a bulk supplier order, then picked up locally. Add what you need, and the checkout page will show the exact price, any discount, and tax before you pay.</p>
   </section>
 
+  <!-- Search: filters the catalogue in the browser as you type. It narrows
+       together with the animal quick pick below, and lives in the URL (?q=)
+       so a search can be shared. -->
+  <form class="store-search" id="store-search" role="search" action="">
+    <label class="visually-hidden" for="q">Search the store</label>
+    <input type="search" id="q" name="q" placeholder="Search feed, minerals, bedding…" autocomplete="off" spellcheck="false">
+  </form>
+
   <!-- Quick pick: filled in by JS once the catalogue is known, so it only ever
        offers animals we actually stock something for. -->
   <nav class="quickpick" id="quickpick" aria-label="Filter by animal" hidden></nav>
@@ -185,27 +193,49 @@
     }
     var cart = loadCart();
 
-    // Narrow to the chosen animal first. Category grouping is kept either way,
-    // because a product can serve several animals and grouping BY animal would
-    // print the same bag of kelp five times down one page.
-    var shown = activeAnimal
-      ? catalog.filter(function (p) { return (p.animals || []).indexOf(activeAnimal) > -1; })
-      : catalog;
+    // Narrow to the chosen animal and the search words. Category grouping is
+    // kept either way, because a product can serve several animals and
+    // grouping BY animal would print the same bag of kelp five times down one
+    // page.
+    var words = searchWords(query);
+    var shown = catalog.filter(function (p) {
+      if (activeAnimal && p.pills.indexOf(activeAnimal) < 0) return false;
+      return matchesSearch(p, words);
+    });
+    // While searching, products whose NAME matches go first, and so does
+    // their category — "kelp" should lead with the kelp, not with every
+    // layer feed that lists kelp in its ingredients. Sort is stable, so
+    // catalogue order holds within each tier.
+    if (words.length) {
+      shown.sort(function (a, b) { return nameMatches(b, words) - nameMatches(a, words); });
+    }
 
     if (!shown.length) {
+      var what = words.length
+        ? 'Nothing matches “' + esc(query.trim()) + '”' + (activeAnimal ? ' under ' + esc(activeAnimal.toLowerCase()) : '') + '.'
+        : 'Nothing for ' + esc(activeAnimal.toLowerCase()) + ' in the store at the moment.';
       host.innerHTML =
-        '<p class="lede">Nothing for ' + esc(activeAnimal.toLowerCase()) + ' in the store at the moment.</p>' +
-        '<p><button type="button" class="btn ghost" data-animal="">Show everything</button></p>';
+        '<p class="lede">' + what + '</p>' +
+        '<p><button type="button" class="btn ghost" data-reset>Show everything</button></p>';
       return;
     }
 
-    // Group products by category, keeping the order they first appear in.
+    // Group products by category, feed first. Categories not named in
+    // CATEGORY_ORDER follow in the order they first appear. A search keeps
+    // the order its ranking produced instead.
     var order = [];
     var byCat = {};
     shown.forEach(function (p) {
       var cat = p.category || 'other';
       if (!byCat[cat]) { byCat[cat] = []; order.push(cat); }
       byCat[cat].push(p);
+    });
+    // Array sort is stable, so unnamed categories keep first-seen order.
+    if (!words.length) order.sort(function (a, b) {
+      var ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
+      if (ia < 0) ia = CATEGORY_ORDER.length;
+      if (ib < 0) ib = CATEGORY_ORDER.length;
+      return ia - ib;
     });
 
     host.innerHTML = order.map(function (cat) {
@@ -303,16 +333,41 @@
    */
   /* A preferred order, NOT a permitted list. Anything tagged on a product
    * appears whether or not it is named here — it simply sorts after these,
-   * alphabetically. "Other" is always last, as the catch-all. A product with
-   * no animal at all is still sold; it just only shows under Everything. */
+   * alphabetically. "Other" is always last, as the catch-all. */
   var ANIMAL_ORDER = ['Goats', 'Chickens', 'Sheep', 'Cattle', 'Horses',
                       'Ducks', 'Turkeys', 'Pigs', 'Llamas', 'Rabbits', 'Garden'];
+
+  /* An animal earns its own pill only once this many products are on sale for
+   * it. Below that its products go under "Other" instead, along with anything
+   * tagged for no animal at all — so switching on one pig feed does not add a
+   * Pigs pill with a single bag behind it. Everything still shows under
+   * Everything. */
+  var MIN_PER_PILL = 3;
+
+  var CATEGORY_ORDER = ['feed', 'mineral', 'bedding', 'supply', 'amendment', 'other'];
+
   var activeAnimal = '';
+  var query = '';
+
+  // Works out p.pills — the quick-pick buttons each product appears under —
+  // from p.animals and the threshold above. Run once per catalogue load.
+  function assignPills() {
+    var raw = {};
+    catalog.forEach(function (p) {
+      (p.animals || []).forEach(function (a) { raw[a] = (raw[a] || 0) + 1; });
+    });
+    catalog.forEach(function (p) {
+      var tags = p.animals || [];
+      var kept = tags.filter(function (a) { return a !== 'Other' && raw[a] >= MIN_PER_PILL; });
+      if (kept.length < tags.length || !kept.length) kept.push('Other');
+      p.pills = kept;
+    });
+  }
 
   function animalCounts() {
     var counts = {};
     catalog.forEach(function (p) {
-      (p.animals || []).forEach(function (a) { counts[a] = (counts[a] || 0) + 1; });
+      p.pills.forEach(function (a) { counts[a] = (counts[a] || 0) + 1; });
     });
     return counts;
   }
@@ -353,13 +408,56 @@
       '</div>';
   }
 
+  /* ---- search -------------------------------------------------------------
+   * Every word typed must appear somewhere in the product's name, supplier,
+   * size, description, category or animals. Punctuation is ignored, so
+   * "corn free" finds "Corn-Free", and a trailing plural s is dropped, so
+   * "chickens" finds "chicken". The catalogue is small enough to search in
+   * the browser on every keystroke. */
+  function fold(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  }
+
+  function searchWords(q) {
+    return fold(q).split(' ').filter(Boolean).map(function (w) {
+      return w.length > 3 && /[^s]s$/.test(w) ? w.slice(0, -1) : w;
+    });
+  }
+
+  function matchesSearch(p, words) {
+    if (!words.length) return true;
+    if (!p._hay) {
+      p._hay = ' ' + fold([p.name, p.supplier, p.unit, p.description, p.category,
+                           (p.animals || []).join(' ')].join(' ')) + ' ';
+    }
+    return words.every(function (w) { return p._hay.indexOf(w) > -1; });
+  }
+
+  function nameMatches(p, words) {
+    var name = ' ' + fold(p.name) + ' ';
+    return words.every(function (w) { return name.indexOf(w) > -1; }) ? 1 : 0;
+  }
+
+  // Keep ?for= and ?q= in the address bar, so any view can be bookmarked or
+  // texted to someone.
+  function syncUrl() {
+    var params = new URLSearchParams();
+    if (activeAnimal) params.set('for', activeAnimal.toLowerCase());
+    if (query.trim()) params.set('q', query.trim());
+    var qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+
   function setAnimal(value) {
     activeAnimal = value || '';
-    var url = activeAnimal
-      ? location.pathname + '?for=' + encodeURIComponent(activeAnimal.toLowerCase())
-      : location.pathname;
-    history.replaceState(null, '', url);
+    syncUrl();
     render();
+  }
+
+  function setQuery(value) {
+    query = value || '';
+    syncUrl();
+    renderCatalog();
   }
 
   function render() {
@@ -381,7 +479,21 @@
     if (removeBtn) { setQty(removeBtn.getAttribute('data-remove'), 0); return; }
 
     var pick = e.target.closest('[data-animal]');
-    if (pick) setAnimal(pick.getAttribute('data-animal'));
+    if (pick) { setAnimal(pick.getAttribute('data-animal')); return; }
+
+    if (e.target.closest('[data-reset]')) {
+      searchBox.value = '';
+      query = '';
+      setAnimal('');
+    }
+  });
+
+  var searchBox = document.getElementById('q');
+  searchBox.addEventListener('input', function () { setQuery(searchBox.value); });
+  // Results are already on screen; Enter just puts the phone keyboard away.
+  document.getElementById('store-search').addEventListener('submit', function (e) {
+    e.preventDefault();
+    searchBox.blur();
   });
 
   document.addEventListener('change', function (e) {
@@ -400,15 +512,25 @@
     })
     .then(function (data) {
       catalog = data.products || [];
+      assignPills();
 
       // Honour ?for=goats on arrival, but only if we actually stock it —
       // a stale bookmark should land on the full store, not an empty page.
-      var want = (new URLSearchParams(location.search).get('for') || '').toLowerCase();
+      // An animal too small for its own pill lands on Other, where its
+      // products now live.
+      var params = new URLSearchParams(location.search);
+      var want = (params.get('for') || '').toLowerCase();
       if (want) {
         var counts = animalCounts();
         var match = Object.keys(counts).filter(function (a) { return a.toLowerCase() === want; })[0];
+        var folded = catalog.some(function (p) {
+          return (p.animals || []).some(function (a) { return a.toLowerCase() === want; });
+        });
         if (match) activeAnimal = match;
+        else if (folded && counts.Other) activeAnimal = 'Other';
       }
+      query = params.get('q') || '';
+      searchBox.value = query;
       render();
     })
     .catch(function (err) {
