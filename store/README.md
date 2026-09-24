@@ -161,16 +161,14 @@ Both sites currently run on their `workers.dev` addresses:
 | | Test address | Real address |
 |---|---|---|
 | Farm site | `https://alhf-site.shiny-band-89b4.workers.dev/` | `https://alittlehillfarm.com/` |
-| Store | `https://alhf-store.shiny-band-89b4.workers.dev/` | `https://store.alittlehillfarm.com/` |
+| Store | `https://alhf-store.shiny-band-89b4.workers.dev/` | `https://store.alittlehillfarm.com/` — **live** |
 
-The pages link to each other by those test addresses, because the real ones
-still belong to Shopify (apex) or are not serving yet (`store`). In order:
+The store is on its real address. The store still links back to the farm
+site's test address, because the apex belongs to Shopify until step 3. In order:
 
-1. **Store domain.** `wrangler.toml` declares `store.alittlehillfarm.com` as a
-   custom domain. Confirm it shows *Active* under Workers & Pages → `alhf-store`
-   → Settings → Domains & Routes, and that `https://store.alittlehillfarm.com/`
-   loads. Then change `STORE_URL` in `build-goats.py` plus the Feed Store links
-   in the hand-written farm pages, rebuild, deploy.
+1. ~~**Store domain.**~~ Done 2026-09-24: `store.alittlehillfarm.com` serves
+   the store and every Feed Store link points at it. The `workers.dev` address
+   stays on only for the sandbox webhook.
 2. **Stripe live.** Create the live webhook against the real store address,
    put the live keys in `.env`, `npx wrangler secret bulk .env`, run the smoke
    test below. Deactivate the *Goat Breath* test product.

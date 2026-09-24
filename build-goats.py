@@ -25,7 +25,7 @@ from html import escape as esc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'goats')
-STORE_URL = 'https://alhf-store.shiny-band-89b4.workers.dev/'
+STORE_URL = 'https://store.alittlehillfarm.com/'
 
 
 # --------------------------------------------------------------------------
