@@ -26,11 +26,12 @@ binding = "DB"
 database_name = "alhf-store"
 database_id = "cbc7ed1f-6dfd-43f2-968c-5348a79dbdf9"
 
-# Uncomment once alittlehillfarm.com is active in Cloudflare, then set
-# workers_dev = false above.
-# [[routes]]
-# pattern = "store.alittlehillfarm.com"
-# custom_domain = true
+# The real address. workers_dev stays on as well, because the Stripe sandbox
+# webhook is registered against the workers.dev URL - switch it to
+# https://store.alittlehillfarm.com/api/webhook when you create the live one.
+[[routes]]
+pattern = "store.alittlehillfarm.com"
+custom_domain = true
 
 # Secrets are NOT set here. Put them in .env (gitignored) and run:
 #   npx wrangler secret bulk .env

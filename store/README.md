@@ -7,8 +7,8 @@ framework, no container. The only thing to keep patched is nothing.
 ```
 config.json    operational settings — pickup spots, tax rate, discounts, terms
 products.json  the catalog. edit, commit, deploy.
-schema.sql     the ledger — three tables
-worker.js      the entire application (642 lines)
+schema.sql     the ledger — four tables
+worker.js      the entire application (~1,000 lines)
 wrangler.toml  deploy config
 public/        the storefront
 ```
@@ -24,14 +24,14 @@ Read [DESIGN.md](DESIGN.md) for why it is shaped this way.
 Captured from live DNS on 2026-09-21. These are the records that must survive
 the move — verify each one in Cloudflare before switching nameservers.
 
-**Current state**
+**Status: done.** The zone is Active on Cloudflare (`janet` / `kyrie.ns.cloudflare.com`)
+and Proton mail verified healthy afterwards. Kept below as the record of what
+had to survive the move, and as the checklist if it ever has to be repeated.
 
-| | |
-|---|---|
-| Nameservers | `ns1-32.azure-dns.com`, `ns2-32.azure-dns.net`, `ns3-32.azure-dns.org`, `ns4-32.azure-dns.info` — **Azure DNS**, a paid resource to retire afterwards |
-| Apex `A` | `23.227.38.65` — Shopify |
-| `www` CNAME | `shops.myshopify.com` |
-| Email | Proton Mail, fully configured |
+> **Open item:** the apex and `www` records were imported **proxied** (orange
+> cloud). Shopify still answers, but it does not support being proxied and its
+> certificate renewals can fail behind it. Set both to **DNS only** until the
+> farm-site cutover below replaces them.
 
 **Every record that must exist in Cloudflare**
 
@@ -106,6 +106,7 @@ Enable ACH: **Settings → Payment methods → US bank account**. Turn on instan
 verification (Financial Connections), not micro-deposits.
 
 Add the webhook endpoint at `https://store.alittlehillfarm.com/api/webhook`
+(the sandbox one points at the `workers.dev` address — see *Going live* below)
 subscribed to exactly these events:
 
 - `checkout.session.completed`
@@ -150,6 +151,36 @@ npx wrangler deploy
 
 Add `store.alittlehillfarm.com` as a custom domain when prompted. The certificate
 is automatic and free.
+
+---
+
+## Going live — the switch from test addresses
+
+Both sites currently run on their `workers.dev` addresses:
+
+| | Test address | Real address |
+|---|---|---|
+| Farm site | `https://alhf-site.shiny-band-89b4.workers.dev/` | `https://alittlehillfarm.com/` |
+| Store | `https://alhf-store.shiny-band-89b4.workers.dev/` | `https://store.alittlehillfarm.com/` |
+
+The pages link to each other by those test addresses, because the real ones
+still belong to Shopify (apex) or are not serving yet (`store`). In order:
+
+1. **Store domain.** `wrangler.toml` declares `store.alittlehillfarm.com` as a
+   custom domain. Confirm it shows *Active* under Workers & Pages → `alhf-store`
+   → Settings → Domains & Routes, and that `https://store.alittlehillfarm.com/`
+   loads. Then change `STORE_URL` in `build-goats.py` plus the Feed Store links
+   in the hand-written farm pages, rebuild, deploy.
+2. **Stripe live.** Create the live webhook against the real store address,
+   put the live keys in `.env`, `npx wrangler secret bulk .env`, run the smoke
+   test below. Deactivate the *Goat Breath* test product.
+3. **Farm site.** Attach `alittlehillfarm.com` and `www` to `alhf-site`
+   (replacing the Shopify records), then change the farm links in
+   `store/public/*.html` back to the apex. Cancel Shopify only after both sites
+   have served real traffic for a few days.
+
+Find every remaining test address with:
+`grep -rl shiny-band-89b4 --include=*.html --include=*.py .`
 
 ---
 

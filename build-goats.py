@@ -106,7 +106,6 @@ CHROME_FOOT = '''</main>
       <h4>Elsewhere</h4>
       <ul>
         <li><a href="''' + STORE_URL + '''">Feed Store</a></li>
-        <li><a href="https://alittlehillfarm.com">alittlehillfarm.com</a></li>
       </ul>
     </div>
   </div>
