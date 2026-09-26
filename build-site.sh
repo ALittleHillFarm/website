@@ -3,6 +3,8 @@
 # Deliberately excludes store/, research/, dist-site/ and anything git-related.
 set -euo pipefail
 cd "$(dirname "$0")"
+python chrome.py          # shared nav + footer into the hand-written pages
+python build-goats.py     # goat pages from goats.json (same nav + footer)
 rm -rf dist-site && mkdir -p dist-site
 cp ./*.html dist-site/
 cp -r goats assets dist-site/

@@ -115,19 +115,62 @@
         {
           "src": "assets/photos/20240726_0066.jpg",
           "caption": "Summer 2024"
+        },
+        {
+          "src": "assets/photos/cookie_close_up_2025.jpg",
+          "caption": "Close-up, 2025"
         }
       ],
       "elite": null,
       "pedigree_named": {
-        "Sire": "IlenesRascals SD Jagermeister",
-        "Dam": "DLMG Farms LJ Melange",
+        "Sire": "IlenesRascals SD Jagermeister *B",
+        "Dam": "DLMG Farms LJ Melange 4*M",
         "Sire's sire": null,
         "Sire's dam": null,
         "Dam's sire": null,
         "Dam's dam": null
       },
-      "parents": [],
-      "sections": [],
+      "parents": [
+        {
+          "who": "Her sire",
+          "name": "IlenesRascals SD Jagermeister *B",
+          "lines": [
+            "S: ELITE Agape's Prize Saint Dismus ++*B",
+            "D: GCH DesertNanny Designer Cupcake 1*M EVEE90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/jagermeister.jpg",
+              "alt": "IlenesRascals SD Jagermeister *B"
+            }
+          ],
+          "credit": "PC: DLMG Farms"
+        },
+        {
+          "who": "Her dam",
+          "name": "DLMG Farms LJ Melange 4*M",
+          "lines": [
+            "S: GCH Almar Acres O Leroy Jethro G ++*B EEE90",
+            "D: SG Almar Acres AK Mocha Cream 3*M EVEE90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/melange.jpg",
+              "alt": "DLMG Farms LJ Melange 4*M"
+            }
+          ],
+          "credit": "PC: DLMG Farms"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Her sisters",
+          "paragraphs": [
+            "Littermate sister DLMG Farms JM Black Tie Affair VGGV85 scored 38 in fore udder as a yearling first freshener.",
+            "Paternal sister DLMG Farms JM Turbinado placed 7th Intermediate Kid at the 2023 ADGA Nationals."
+          ]
+        }
+      ],
       "sections_todo": [
         {
           "title": "Notes",
@@ -147,7 +190,7 @@
       "badge": null,
       "blurb": null,
       "hero": "assets/photos/20240726_0054_480x480.jpg",
-      "alpha_s1_casein": null,
+      "alpha_s1_casein": "A/B",
       "colour": null,
       "height": null,
       "dob_text": "February 21, 2023",
@@ -156,19 +199,70 @@
         {
           "src": "assets/photos/20240726_0054_480x480.jpg",
           "caption": "Summer 2024"
+        },
+        {
+          "src": "assets/photos/sugar.jpg",
+          "caption": "Out on the spools"
+        },
+        {
+          "src": "assets/photos/sugar_ff_udder_rear.jpg",
+          "caption": "FF udder, 11-hour fill — rear"
+        },
+        {
+          "src": "assets/photos/sugar_ff_udder_side.jpg",
+          "caption": "FF udder, 11-hour fill — side"
         }
       ],
       "elite": null,
       "pedigree_named": {
-        "Sire": "IlenesRascals SD Jagermeister",
-        "Dam": "DLMG Farms JT Cambria",
+        "Sire": "IlenesRascals SD Jagermeister *B",
+        "Dam": "DLMG Farms JT Cambria 3*M",
         "Sire's sire": null,
         "Sire's dam": null,
         "Dam's sire": null,
         "Dam's dam": null
       },
-      "parents": [],
-      "sections": [],
+      "parents": [
+        {
+          "who": "Her sire",
+          "name": "IlenesRascals SD Jagermeister *B",
+          "lines": [
+            "S: ELITE Agape's Prize Saint Dismus ++*B",
+            "D: GCH DesertNanny Designer Cupcake 1*M EVEE90"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/jagermeister.jpg",
+              "alt": "IlenesRascals SD Jagermeister *B"
+            }
+          ],
+          "credit": "PC: DLMG Farms"
+        },
+        {
+          "who": "Her dam",
+          "name": "DLMG Farms JT Cambria 3*M",
+          "lines": [
+            "S: Loperrized JS Jettie VEV87",
+            "D: GCH Cabrandywinfarms AKR Suri 2*M EEEV89"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/cambria.jpg",
+              "alt": "DLMG Farms JT Cambria 3*M"
+            }
+          ],
+          "credit": "PC: DLMG Farms"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Her sisters",
+          "paragraphs": [
+            "Littermate sister DLMG Farms JM Turbinado placed 7th Intermediate Kid at the 2023 ADGA Nationals.",
+            "Paternal sister DLMG Farms JM Black Tie Affair scored 38 in fore udder as a yearling first freshener."
+          ]
+        }
+      ],
       "sections_todo": [
         {
           "title": "Notes",
@@ -307,7 +401,7 @@
       "registered_name": "TUA Farms GCA Royal Tea",
       "kind": "Doe · Born April 2022",
       "badge": null,
-      "blurb": null,
+      "blurb": "Royal just missed the ADGA Elite list in 2025 at 94%. We are looking forward to having her on milk test again in 2026.",
       "hero": "assets/photos/20240726_0117.jpg",
       "alpha_s1_casein": null,
       "colour": null,
@@ -318,12 +412,24 @@
         {
           "src": "assets/photos/20240726_0117.jpg",
           "caption": "Summer 2024"
+        },
+        {
+          "src": "assets/photos/royal_tea_2025.jpg",
+          "caption": "At TUA Farms"
+        },
+        {
+          "src": "assets/photos/royal_tea_udder_rear.jpg",
+          "caption": "2F udder — rear"
+        },
+        {
+          "src": "assets/photos/royal_tea_udder_side.jpg",
+          "caption": "2F udder — side"
         }
       ],
       "elite": null,
       "pedigree_named": {
-        "Sire": "Gabhran Creek Adonis",
-        "Dam": "ELITE TUA Farms Peach Tea",
+        "Sire": "Gabhran Creek Adonis *B",
+        "Dam": "ELITE TUA Farms Peach Tea 3*M",
         "Sire's sire": null,
         "Sire's dam": null,
         "Dam's sire": null,
@@ -341,6 +447,25 @@
             {
               "src": "assets/photos/adonis.jpg",
               "alt": "Gabhran Creek Adonis *B"
+            }
+          ],
+          "credit": "PC: TUA Farms"
+        },
+        {
+          "who": "Her dam",
+          "name": "ELITE TUA Farms Peach Tea 3*M",
+          "lines": [
+            "S: Springwater WTM Aprcot Cobbler AI *B (Elite sire 2023, 2024, 2025)",
+            "D: TUA Farms SP Tea Party 2*M VVVE88"
+          ],
+          "photos": [
+            {
+              "src": "assets/photos/peach_tea_production_eval.png",
+              "alt": "Production evaluation"
+            },
+            {
+              "src": "assets/photos/peach_tea.jpg",
+              "alt": "ELITE TUA Farms Peach Tea 3*M"
             }
           ],
           "credit": "PC: TUA Farms"

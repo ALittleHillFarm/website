@@ -23,9 +23,10 @@ import os
 import re
 from html import escape as esc
 
+from chrome import nav, footer
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'goats')
-STORE_URL = 'https://store.alittlehillfarm.com/'
 
 
 # --------------------------------------------------------------------------
@@ -72,13 +73,7 @@ def chrome_head(title, desc):
         <span class="sub">Potlatch, Idaho · ADGA Registered</span>
       </span>
     </a>
-    <nav class="site-nav" aria-label="Main">
-      <a href="../index.html">Herd</a>
-      <a href="../does.html">Does</a>
-      <a href="../bucks.html">Bucks</a>
-      <a href="../breeding.html">2026 Kiddings</a>
-      <a href="{STORE_URL}">Feed Store</a>
-    </nav>
+    {nav(None, '../')}
   </div>
 </header>
 
@@ -86,34 +81,7 @@ def chrome_head(title, desc):
 '''
 
 
-CHROME_FOOT = '''</main>
-
-<footer class="site-footer" data-chrome>
-  <div class="cols">
-    <div>
-      <div class="mark">A Little Hill Farm</div>
-      <p style="font-size:14px;line-height:1.7">ADGA registered Nigerian Dwarf dairy goats in Potlatch, Idaho.</p>
-    </div>
-    <div>
-      <h4>The herd</h4>
-      <ul>
-        <li><a href="../does.html">Does</a></li>
-        <li><a href="../bucks.html">Bucks</a></li>
-        <li><a href="../breeding.html">2026 Kiddings</a></li>
-      </ul>
-    </div>
-    <div>
-      <h4>Elsewhere</h4>
-      <ul>
-        <li><a href="''' + STORE_URL + '''">Feed Store</a></li>
-      </ul>
-    </div>
-  </div>
-  <div class="fine">
-    <span>&copy; A Little Hill Farm</span>
-    <span>Potlatch, Idaho</span>
-  </div>
-</footer>
+CHROME_FOOT = '</main>\n\n' + footer('../') + '''
 </body>
 </html>
 '''
