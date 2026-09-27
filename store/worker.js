@@ -43,6 +43,9 @@ export default {
       if (path === '/api/checkout' && request.method === 'POST') return apiCheckout(request, env);
       if (path === '/api/webhook' && request.method === 'POST') return apiWebhook(request, env);
       if (path.startsWith('/media/')) return serveMedia(path, env);
+      if (path === '/product') return productPage(request, env);
+      if (path === '/sitemap.xml') return sitemap(request, env);
+      if (path === '/robots.txt') return robots(request);
 
       if (path === '/admin' || path.startsWith('/api/admin/')) {
         const denied = requireAdmin(request, env);
@@ -127,6 +130,94 @@ async function apiCatalog(env) {
       note: p.note || '',
     })),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Search engines and link previews
+// ---------------------------------------------------------------------------
+
+/**
+ * product.html fills itself in with JavaScript, which link previews and most
+ * crawlers never run. So the worker stamps each product's own name, photo,
+ * description and price into the page's <head> on the way out — a shared link
+ * to a bag of kelp shows the kelp.
+ */
+async function productPage(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  const url = new URL(request.url);
+  const id = url.searchParams.get('id');
+  if (!res.ok || !id) return res;
+  const p = activeFrom(await loadCatalog(env)).find((x) => x.id === id);
+  if (!p) return res;
+
+  const pageUrl = url.origin + '/product?id=' + encodeURIComponent(p.id);
+  const image = p.image ? new URL(p.image, url.origin).toString() : url.origin + '/assets/og-store.jpg';
+  const title = p.name + (p.unit ? ' (' + p.unit + ')' : '') + ' — A Little Hill Farm';
+  const plain = String(p.description || '').replace(/\s+/g, ' ').trim();
+  const desc = (plain.length > 180 ? plain.slice(0, 177).replace(/\s+\S*$/, '') + '…' : plain) ||
+    p.name + ' from A Little Hill Farm. Pre-order online, pick up locally.';
+  const price = (p.price_cents / 100).toFixed(2);
+  const ld = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: p.name,
+    image,
+    description: plain || undefined,
+    brand: p.supplier ? { '@type': 'Brand', name: p.supplier } : undefined,
+    offers: {
+      '@type': 'Offer',
+      price,
+      priceCurrency: 'USD',
+      availability: 'https://schema.org/PreOrder',
+      url: pageUrl,
+      seller: { '@type': 'Organization', name: 'A Little Hill Farm' },
+    },
+  };
+
+  const set = (value) => ({ element(e) { e.setAttribute('content', value); } });
+  return new HTMLRewriter()
+    .on('title', { element(e) { e.setInnerContent(title); } })
+    .on('meta[name="description"]', set(desc))
+    .on('meta[property="og:title"]', set(title))
+    .on('meta[property="og:description"]', set(desc))
+    .on('meta[property="og:url"]', set(pageUrl))
+    .on('meta[property="og:image"]', set(image))
+    .on('meta[property="og:type"]', set('product'))
+    .on('link[rel="canonical"]', { element(e) { e.setAttribute('href', pageUrl); } })
+    .on('head', {
+      element(e) {
+        e.onEndTag((end) => {
+          end.before(
+            '<meta property="product:price:amount" content="' + price + '">\n' +
+            '<meta property="product:price:currency" content="USD">\n' +
+            '<script type="application/ld+json">' + JSON.stringify(ld).replace(/</g, '\\u003c') + '</script>\n',
+            { html: true }
+          );
+        });
+      },
+    })
+    .transform(res);
+}
+
+async function sitemap(request, env) {
+  const origin = new URL(request.url).origin;
+  const urls = [origin + '/', origin + '/policies'].concat(
+    activeFrom(await loadCatalog(env)).map((p) => origin + '/product?id=' + encodeURIComponent(p.id))
+  );
+  const body = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map((u) => '  <url><loc>' + u.replace(/&/g, '&amp;') + '</loc></url>').join('\n') +
+    '\n</urlset>\n';
+  return new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8' } });
+}
+
+function robots(request) {
+  const origin = new URL(request.url).origin;
+  return new Response(
+    'User-agent: *\nDisallow: /admin\nDisallow: /api/\nDisallow: /checkout\nDisallow: /thanks\n\n' +
+      'Sitemap: ' + origin + '/sitemap.xml\n',
+    { headers: { 'content-type': 'text/plain; charset=utf-8' } }
+  );
 }
 
 // ---------------------------------------------------------------------------

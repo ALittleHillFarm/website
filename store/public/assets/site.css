@@ -1,9 +1,11 @@
-/* A Little Hill Farm — site styles
-   Everything the goat pages need. The header and footer are the only
-   "chrome"; add ?embed=1 to any URL to hide them (see site.js) so the
-   same pages can be dropped into Shopify inside an iframe. */
+/* A Little Hill Farm — site styles, shared by the farm site and the store
+   (store/public/assets/site.css is a copy — keep them identical).
+   The header and footer are the only "chrome"; add ?embed=1 to any URL to
+   hide them (see site.js). */
 
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,300;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* Fonts are linked from each page's <head> (preconnect + stylesheet) rather
+   than @import-ed here, which would make the browser fetch this file before
+   it even learns the fonts exist. */
 
 :root {
   --paper:#F3EEE4; --card:#FBF8F2; --ink:#1E1B16; --body:#4A443A;
@@ -339,3 +341,10 @@ body.embed .site-footer { margin-top:0; }
   .kit section { padding:22px 20px; }
   .cta { padding:28px 22px; }
 }
+
+/* ---------- tap-to-enlarge photos (gallery, parents) ---------- */
+a.zoom { display:block; cursor:zoom-in; }
+.lightbox { position:fixed; inset:0; z-index:100; background:rgba(20,19,16,.92); display:flex; align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
+.lightbox img { max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+.lightbox .close { position:absolute; top:14px; right:18px; background:none; border:none; color:#F3EEE4; font-size:34px; line-height:1; cursor:pointer; padding:6px 10px; }
+.lightbox figcaption { position:absolute; bottom:18px; left:0; right:0; text-align:center; color:#D5CEBE; font-size:13px; letter-spacing:.06em; }

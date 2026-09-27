@@ -13,7 +13,9 @@ binding = "ASSETS"
 # Without this, Cloudflare serves a matching asset BEFORE the Worker runs, so
 # /admin would be returned straight from the edge cache and never hit the auth
 # check. Force the Worker to run first for anything admin-related.
-run_worker_first = ["/admin", "/admin/*", "/api/*"]
+# /product, /sitemap.xml and /robots.txt run first too: the worker stamps each
+# product's own details into its page for link previews and search engines.
+run_worker_first = ["/admin", "/admin/*", "/api/*", "/product", "/sitemap.xml", "/robots.txt"]
 
 # Uploaded photos (products now, goats later). Served through /media/* by the
 # worker rather than made public, so we control content-type and caching.
