@@ -1,6 +1,8 @@
-# The farm site — goat pages, herd, breeding schedule.
-# Pure static: no code, just files. The store is a separate Worker
-# (store/wrangler.toml).
+# The farm site — herd, goat pages, guide, about.
+# Static pages from dist-site/, plus site-worker.js, which adds the shared
+# header/footer and renders the goats from the store's database. The store is
+# a separate Worker (store/wrangler.toml) that shares that database and the
+# photo bucket; the admin screen that edits the goats lives there.
 #
 # Rebuild + deploy:
 #   bash build-site.sh && npx wrangler deploy -c wrangler.site.toml
@@ -23,6 +25,17 @@ html_handling = "none"
 # curl is not a page-load and took the worker path, so every command-line check
 # passed while every real visitor to the home page saw "That page wandered off".
 run_worker_first = true
+
+# The herd (goats table). Same database the store and its admin screen use.
+[[d1_databases]]
+binding = "DB"
+database_name = "alhf-store"
+database_id = "cbc7ed1f-6dfd-43f2-968c-5348a79dbdf9"
+
+# Goat photos uploaded from the admin screen, served at /media/<file>.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "alhf-media"
 
 # Uncomment at cutover, once the apex is ready to leave Shopify:
 # [[routes]]

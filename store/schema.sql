@@ -133,3 +133,25 @@ CREATE TABLE product_settings (
   note          TEXT,           -- e.g. "out until spring"
   updated_at    TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- goats — the herd, edited from /admin (Goats tab) and rendered live by the
+-- farm site's worker (site/goats.js). Both workers bind this same database.
+--
+-- data holds everything the farm writes, as JSON: name, registered name,
+-- birth date, photos, badge, pedigree names, parents, extra facts and notes.
+-- registry holds what was harvested from genetics.adga.org (grandparents,
+-- production evaluation), or NULL. site/goats.js normalize() documents both.
+--
+-- status 'hidden' takes a goat off every page without deleting her record —
+-- the right move for a sold or retired animal.
+-- ---------------------------------------------------------------------------
+CREATE TABLE goats (
+  id          TEXT PRIMARY KEY,                -- URL slug, fixed at creation
+  sort        INTEGER NOT NULL DEFAULT 100,    -- roster order, low first
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'hidden')),
+  template    TEXT NOT NULL DEFAULT 'doe' CHECK (template IN ('doe', 'buck')),
+  data        TEXT NOT NULL,
+  registry    TEXT,
+  updated_at  TEXT NOT NULL
+);
