@@ -102,8 +102,17 @@ npx wrangler d1 execute alhf-store --remote --file=schema.sql
 Create the account. **Do not enable surcharging** — this is a cash-discount
 program and needs no registration. See DESIGN.md for why that distinction matters.
 
-Enable ACH: **Settings → Payment methods → US bank account**. Turn on instant
-verification (Financial Connections), not micro-deposits.
+Enable ACH: **Settings → Payment methods → US bank account**. Instant bank
+verification is requested by the code on every checkout
+(`verification_method: instant` in worker.js), so there is no dashboard switch
+to find. Surcharging is off unless you apply for it — leave it that way.
+
+**API key.** Use a *restricted* key, not the full secret key: Developers → API
+keys → Create restricted key → Custom permissions, and grant only
+**Checkout Sessions: Write** and **PaymentIntents: Write**. Those are the only
+two things the store does (create a checkout; capture or cancel a payment). A
+leaked restricted key cannot issue refunds, move payouts or read your
+customers. `push-secrets.py` accepts `rk_live_…` keys.
 
 Add the webhook endpoint at `https://store.alittlehillfarm.com/api/webhook`
 (the sandbox one points at the `workers.dev` address — see *Going live* below)
@@ -120,13 +129,10 @@ subscribed to exactly these events:
 gets recorded. Without it the admin screen keeps offering to capture a hold the
 bank has already released.
 
-Set **Radar rules to Review, not Block**, at least at first:
-
-```
-Review if :card_country: != 'US'
-Review if :amount_in_usd: > 300
-Block  if Postal code verification fails based on risk score
-```
+**Radar.** Leave the default rules as they are. Custom rules need Radar for
+Fraud Teams (a paid add-on), and this store does not need them: every card
+order from a customer who isn't marked trusted is already held for review
+before it is charged. That review *is* the fraud control.
 
 ### 4. Secrets and deploy
 

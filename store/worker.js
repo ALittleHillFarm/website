@@ -460,8 +460,12 @@ async function apiCheckout(request, env, ctx) {
   form.set('metadata[terms_version]', config.terms.version);
 
   if (method === 'ach') {
-    // ACH cannot authorize-then-capture, so review happens before the debit.
+    // ACH cannot authorize-then-capture: it debits at checkout, with no review
+    // step (DESIGN.md, "ACH notes"). Instant verification only — the customer
+    // signs in to their bank. No micro-deposit fallback, which would leave the
+    // order unpaid for days while two test deposits cleared.
     form.set('payment_method_types[0]', 'us_bank_account');
+    form.set('payment_method_options[us_bank_account][verification_method]', 'instant');
   } else {
     form.set('payment_method_types[0]', 'card');
     if (!autoCapture) form.set('payment_intent_data[capture_method]', 'manual');
