@@ -129,7 +129,11 @@ def main():
     # admin-level API key) must never reach the live worker, so the upload is
     # built from an allow-list. The temporary file matches .gitignore's
     # ".env.*" and is deleted straight after. wrangler prints key names only.
-    upload = {k: values[k] for k in REQUIRED + OPTIONAL if values.get(k)}
+    # --without KEY holds one back, e.g. an email key whose domain isn't verified yet.
+    held = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == '--without']
+    upload = {k: values[k] for k in REQUIRED + OPTIONAL if values.get(k) and k not in held}
+    for k in held:
+        print(f'  holding back {k} (not uploaded this time)')
     tmp = os.path.join(HERE, '.env.upload.json')
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
