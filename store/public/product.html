@@ -177,28 +177,69 @@
             '<p class="meta">' + meta.join(' · ') + '</p>' +
             '<p class="pd-price">' + money(p.price_cents) + ' <span class="unit">list price</span></p>' +
             '<div class="pd-desc">' + (desc || '<p class="meta">No description available.</p>') + '</div>' +
-            '<div class="pd-actions">' +
-              '<div class="qty">' +
-                '<button type="button" id="dec" aria-label="Decrease quantity">−</button>' +
-                '<label class="visually-hidden" for="pd-qty">Quantity</label>' +
-                '<input type="number" id="pd-qty" min="0" max="999" inputmode="numeric" value="' + cartQty(p.id) + '">' +
-                '<button type="button" id="inc" aria-label="Increase quantity">+</button>' +
-              '</div>' +
-              '<a class="btn" href="index.html">Done — back to the store</a>' +
-            '</div>' +
+            '<div id="pd-actions" aria-live="polite"></div>' +
             '<p class="cart note">Bank transfer and cash both carry a discount, and Idaho sales tax is added. Checkout shows the real total before you pay.</p>' +
           '</div>' +
         '</div>';
 
-      var input = document.getElementById('pd-qty');
-      function commit(v) {
-        v = Math.max(0, Math.min(999, Math.floor(Number(v)) || 0));
-        input.value = v;
-        setQty(p.id, v);
+      /* Two states. Not in the cart: pick a quantity, then "Add to cart".
+       * In the cart: say so, let the quantity be changed (0 removes it), and
+       * offer checkout. Nothing changes the cart until a button is pressed,
+       * and every change says what it did — this page has no cart panel to
+       * show it, unlike the store's front page. */
+      var actions = document.getElementById('pd-actions');
+      var clamp = function (v) { return Math.max(0, Math.min(999, Math.floor(Number(v)) || 0)); };
+
+      function stepper(value, min) {
+        return '<div class="qty">' +
+          '<button type="button" data-step="-1" aria-label="Decrease quantity">−</button>' +
+          '<label class="visually-hidden" for="pd-qty">Quantity</label>' +
+          '<input type="number" id="pd-qty" min="' + min + '" max="999" inputmode="numeric" value="' + value + '">' +
+          '<button type="button" data-step="1" aria-label="Increase quantity">+</button>' +
+        '</div>';
       }
-      document.getElementById('dec').addEventListener('click', function () { commit(Number(input.value) - 1); });
-      document.getElementById('inc').addEventListener('click', function () { commit(Number(input.value) + 1); });
-      input.addEventListener('change', function () { commit(input.value); });
+
+      function renderActions(note) {
+        var inCart = cartQty(p.id);
+        if (!inCart) {
+          actions.innerHTML =
+            '<div class="pd-actions">' + stepper(1, 1) +
+              '<button type="button" class="btn" data-act="add">Add to cart</button>' +
+            '</div>' + (note ? '<p class="pd-note">' + note + '</p>' : '');
+          return;
+        }
+        actions.innerHTML =
+          '<p class="pd-incart">' + (note || 'In your cart') + ' — <strong>' + inCart + '</strong></p>' +
+          '<div class="pd-actions">' + stepper(inCart, 0) +
+            '<a class="btn" href="index.html?cart=1">Check out →</a>' +
+            '<a class="link-u" href="index.html">Keep shopping</a>' +
+          '</div>';
+      }
+
+      actions.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('button');
+        if (!b) return;
+        var input = document.getElementById('pd-qty');
+        if (b.getAttribute('data-step')) {
+          var min = Number(input.getAttribute('min'));
+          var v = Math.max(min, clamp(Number(input.value) + Number(b.getAttribute('data-step'))));
+          input.value = v;
+          if (cartQty(p.id)) { setQty(p.id, v); renderActions(v ? 'Updated' : 'Removed from your cart'); }
+          return;
+        }
+        if (b.getAttribute('data-act') === 'add') {
+          setQty(p.id, Math.max(1, clamp(input.value)));
+          renderActions('Added to your cart');
+        }
+      });
+      actions.addEventListener('change', function (e) {
+        if (e.target.id !== 'pd-qty' || !cartQty(p.id)) return;
+        var v = clamp(e.target.value);
+        setQty(p.id, v);
+        renderActions(v ? 'Updated' : 'Removed from your cart');
+      });
+
+      renderActions();
     })
     .catch(function () {
       notFound('Could not load the store right now. Please try again in a moment.');

@@ -362,8 +362,13 @@
   /* A preferred order, NOT a permitted list. Anything tagged on a product
    * appears whether or not it is named here — it simply sorts after these,
    * alphabetically. "Other" is always last, as the catch-all. */
-  var ANIMAL_ORDER = ['Goats', 'Chickens', 'Sheep', 'Cattle', 'Horses',
-                      'Ducks', 'Turkeys', 'Pigs', 'Llamas', 'Rabbits', 'Garden'];
+  var ANIMAL_ORDER = ['Goats', 'Chickens', 'Sheep', 'Cattle', 'Horses', 'Rabbits'];
+
+  /* Never given their own pill, however many products carry the tag — the
+   * farm's choice, to keep the row short. Their products appear under
+   * "Other" (and under Everything, and in search). The tags stay on the
+   * products, so un-listing one here brings its pill back. */
+  var ALWAYS_OTHER = ['Ducks', 'Turkeys', 'Pigs', 'Llamas', 'Garden'];
 
   /* An animal earns its own pill only once this many products are on sale for
    * it. Below that its products go under "Other" instead, along with anything
@@ -386,7 +391,9 @@
     });
     catalog.forEach(function (p) {
       var tags = p.animals || [];
-      var kept = tags.filter(function (a) { return a !== 'Other' && raw[a] >= MIN_PER_PILL; });
+      var kept = tags.filter(function (a) {
+        return a !== 'Other' && ALWAYS_OTHER.indexOf(a) === -1 && raw[a] >= MIN_PER_PILL;
+      });
       if (kept.length < tags.length || !kept.length) kept.push('Other');
       p.pills = kept;
     });
