@@ -30,6 +30,7 @@
     <nav class="site-nav" aria-label="Main">
       <a href="https://alhf-site.shiny-band-89b4.workers.dev/">Herd</a>
       <a href="index.html">Farm Store</a>
+      <a href="/account" data-account-link hidden>Log in</a>
     </nav>
   </div>
 </header>
@@ -57,6 +58,9 @@
       <form id="checkout-form" novalidate>
 
         <h2 class="serif" style="font-size:22px;margin-bottom:16px">Your details</h2>
+        <!-- Filled once /api/me answers (assets/account-link.js): who is signed
+             in, or an invitation to log in. Guests can always carry on. -->
+        <div id="acct-banner"></div>
         <div class="form-grid">
           <div class="field span2">
             <label for="f-name">Full name</label>
@@ -366,6 +370,33 @@
   }
 
   emailField.addEventListener('blur', fetchQuote);
+
+  // Signed-in customers: fill in their details and lock the email, because a
+  // tax exemption applies only to the signed-in customer's own email. Guests
+  // get an invitation to log in, and can ignore it.
+  function onMe(me) {
+    var banner = document.getElementById('acct-banner');
+    if (!banner || !me) return;
+    var m = me.methods || {};
+    if (me.signed_in) {
+      var nameF = document.getElementById('f-name');
+      var phoneF = document.getElementById('f-phone');
+      emailField.value = me.email;
+      emailField.readOnly = true;
+      if (!nameF.value && me.name) nameF.value = me.name;
+      if (!phoneF.value && me.phone) phoneF.value = me.phone;
+      banner.innerHTML = '<p class="alert success">Logged in as <strong>' + esc(me.email) + '</strong>.' +
+        (me.tax_exempt ? ' Your tax exemption is applied.' : '') +
+        ' <a href="/account">Not you?</a></p>';
+      fetchQuote();
+    } else if (m.email || m.google) {
+      banner.innerHTML = '<p class="hint" style="margin:-6px 0 16px">Have an account? ' +
+        '<a href="/account?return=' + encodeURIComponent('/checkout') + '">Log in</a> for your saved details' +
+        ' and any tax exemption — or just continue as a guest.</p>';
+    }
+  }
+  if (window.alhfMe) onMe(window.alhfMe);
+  document.addEventListener('alhf:me', function (e) { onMe(e.detail); });
   termsCheck.addEventListener('change', updateSubmitEnabled);
 
   form.addEventListener('submit', function (e) {
@@ -409,5 +440,6 @@
   init();
 })();
 </script>
+<script src="assets/account-link.js"></script>
 </body>
 </html>

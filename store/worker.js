@@ -16,6 +16,9 @@
  *   STRIPE_WEBHOOK_SECRET  secret
  *   ADMIN_PASSWORD         secret
  *   NOTIFY_URL             secret, optional — where alerts go (see Alerts)
+ *   SESSION_SECRET         secret — signs customer sign-in cookies (see sign-in)
+ *   RESEND_API_KEY         secret, optional — sends sign-in codes and order emails
+ *   GOOGLE_CLIENT_ID/SECRET  secrets, optional — "Sign in with Google"
  *   MEDIA                  R2 bucket of uploaded photos
  */
 
@@ -39,7 +42,11 @@ export default {
     const path = new URL(request.url).pathname;
 
     try {
-      if (path === '/api/config') return apiConfig();
+      if (path === '/api/me' || path.startsWith('/api/auth/') || path.startsWith('/auth/google')) {
+        const res = await authRoutes(path, request, env);
+        if (res) return res;
+      }
+      if (path === '/api/config') return apiConfig(env);
       if (path === '/api/catalog') return apiCatalog(env);
       if (path === '/api/quote' && request.method === 'POST') return apiQuote(request, env);
       if (path === '/api/checkout' && request.method === 'POST') return apiCheckout(request, env, ctx);
@@ -106,8 +113,9 @@ async function loadCatalog(env) {
 
 const activeFrom = (products) => products.filter((p) => p.active);
 
-function apiConfig() {
+function apiConfig(env) {
   return json({
+    sign_in: authMethods(env),
     pickup_locations: config.pickup_locations
       .filter((l) => l.active)
       .map(({ id, label }) => ({ id, label })),
@@ -135,6 +143,8 @@ async function apiCatalog(env) {
       // Which animals this is for, driving the quick-pick filter on the store.
       animals: p.animals || [],
       note: p.note || '',
+      // Rank on the store's default "Popular" view; 0 = not in it.
+      popular: p.popular || 0,
     })),
   });
 }
@@ -337,7 +347,8 @@ function publicQuote(q) {
 async function apiQuote(request, env) {
   try {
     const { body, method } = await readCart(request);
-    const customer = body.email ? await getCustomer(env, body.email) : null;
+    // Special terms (tax exemption) only for the signed-in customer's own email.
+    const customer = await customerFor(request, env, body.email);
     return json(publicQuote(priceCart(body.items, method, customer, await loadCatalog(env))));
   } catch (err) {
     if (err instanceof BadRequest) return json({ error: err.message }, 400);
@@ -377,7 +388,15 @@ async function apiCheckout(request, env, ctx) {
   const pickupOk = config.pickup_locations.some((l) => l.active && l.id === pickup);
   if (!pickupOk) return json({ error: 'choose a pickup location' }, 400);
 
-  const customer = await getCustomer(env, email);
+  // A customer's tax exemption and trusted status apply only when they are
+  // signed in as this email. A guest who types a known customer's email is
+  // treated as a new customer — before sign-in existed, typing it was enough.
+  const customer = await customerFor(request, env, email);
+  if (customer) {
+    // Keep the details they just used, so next checkout is pre-filled.
+    await env.DB.prepare('UPDATE customers SET name = ?, phone = COALESCE(?, phone) WHERE email = ?')
+      .bind(name, phone || null, email).run();
+  }
 
   let quote;
   try {
@@ -444,6 +463,7 @@ async function apiCheckout(request, env, ctx) {
   // Cash never touches Stripe, so no webhook will announce it — do it here.
   if (method === 'cash') {
     ctx.waitUntil(notifyNewOrder(env, saleId));
+    ctx.waitUntil(sendOrderConfirmation(env, saleId));
     return json({ sale_id: saleId, redirect_url: null, total_cents: quote.total_cents });
   }
 
@@ -569,7 +589,10 @@ async function apiWebhook(request, env, ctx) {
           .bind(status, obj.payment_intent || null, saleId)
           .run();
         // Only the first completion of a pending sale is a new order.
-        if (done.meta && done.meta.changes) ctx.waitUntil(notifyNewOrder(env, saleId));
+        if (done.meta && done.meta.changes) {
+          ctx.waitUntil(notifyNewOrder(env, saleId));
+          ctx.waitUntil(sendOrderConfirmation(env, saleId));
+        }
       }
       break;
     }
@@ -713,6 +736,344 @@ async function serveMedia(path, env) {
   headers.set('x-content-type-options', 'nosniff');
   headers.set('content-security-policy', "default-src 'none'; sandbox");
   return new Response(obj.body, { headers });
+}
+
+// ---------------------------------------------------------------------------
+// Customer sign-in and email
+//
+// Two ways in, both passwordless:
+//   - a six-digit code emailed to the customer (needs RESEND_API_KEY)
+//   - Sign in with Google (needs GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+// Either one needs SESSION_SECRET, which signs the session cookie. With no
+// SESSION_SECRET the Log in link simply doesn't appear.
+//
+// Signing in is optional — guests can always check out. What it changes:
+// a customer's tax exemption and "trusted" status (cash at pickup, no hold
+// on the card) apply ONLY when they are signed in as that email. Before
+// sign-in existed, typing someone else's email at checkout was enough.
+//
+// The session is a signed cookie (email + expiry, HMAC-SHA256), so there is
+// no session table to clean up. Login codes live in login_codes, hashed.
+// ---------------------------------------------------------------------------
+
+const SESSION_COOKIE = 'alhf_session';
+const SESSION_DAYS = 60;
+const CODE_MINUTES = 10;
+const CODE_ATTEMPTS = 5;
+const CODES_PER_HOUR = 5;
+
+const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromB64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+async function hmac(secret, text) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return b64url(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
+}
+
+function authMethods(env) {
+  const on = !!env.SESSION_SECRET;
+  return {
+    email: on && (!!env.RESEND_API_KEY || env.DEV_EMAIL_LOG === '1'),
+    google: on && !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET,
+  };
+}
+
+function readCookie(request, name) {
+  const all = request.headers.get('cookie') || '';
+  const m = all.split(/;\s*/).find((c) => c.startsWith(name + '='));
+  return m ? decodeURIComponent(m.slice(name.length + 1)) : '';
+}
+
+function cookieHeader(name, value, maxAgeSeconds) {
+  return name + '=' + encodeURIComponent(value) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAgeSeconds;
+}
+
+async function makeSession(env, email) {
+  const payload = b64url(new TextEncoder().encode(JSON.stringify({
+    e: email, x: Date.now() + SESSION_DAYS * 24 * 3600 * 1000,
+  })));
+  return payload + '.' + (await hmac(env.SESSION_SECRET, payload));
+}
+
+/** The signed-in email, or '' for a guest. Never throws. */
+async function sessionEmail(request, env) {
+  if (!env.SESSION_SECRET) return '';
+  const raw = readCookie(request, SESSION_COOKIE);
+  const dot = raw.lastIndexOf('.');
+  if (dot < 1) return '';
+  const payload = raw.slice(0, dot);
+  if (!timingSafeEqual(raw.slice(dot + 1), await hmac(env.SESSION_SECRET, payload))) return '';
+  try {
+    const s = JSON.parse(new TextDecoder().decode(fromB64url(payload)));
+    return s && s.x > Date.now() && typeof s.e === 'string' ? s.e : '';
+  } catch {
+    return '';
+  }
+}
+
+/** The customer record whose special terms apply to this request: only the
+ *  signed-in customer's, and only when the order is in their own email. */
+async function customerFor(request, env, email) {
+  const who = await sessionEmail(request, env);
+  if (!who || !email || who !== String(email).trim().toLowerCase()) return null;
+  return getCustomer(env, who);
+}
+
+function signedInResponse(res, cookieValue) {
+  const out = new Response(res.body, res);
+  out.headers.append('set-cookie', cookieHeader(SESSION_COOKIE, cookieValue, SESSION_DAYS * 24 * 3600));
+  out.headers.set('cache-control', 'no-store');
+  return out;
+}
+
+const cleanEmail = (v) => {
+  const e = String(v || '').trim().toLowerCase().slice(0, 254);
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : '';
+};
+
+/** Ensure a customers row exists for someone who has signed in, so the admin
+ *  can later mark them trusted or tax-exempt. Never downgrades a record. */
+async function rememberCustomer(env, email, name) {
+  await env.DB.prepare(
+    'INSERT INTO customers (email, name, created_at) VALUES (?,?,?)' +
+      ' ON CONFLICT(email) DO UPDATE SET name = COALESCE(customers.name, excluded.name)'
+  ).bind(email, name || null, new Date().toISOString()).run();
+}
+
+async function authRoutes(path, request, env) {
+  const methods = authMethods(env);
+
+  if (path === '/api/me') {
+    const email = await sessionEmail(request, env);
+    if (!email) return json({ signed_in: false, methods }, 200);
+    const c = (await getCustomer(env, email)) || {};
+    const orders = (await env.DB.prepare(
+      "SELECT id, sold_at, status, payment_method, total_cents, items_json, fulfillment FROM sales" +
+        " WHERE customer_email = ? AND status NOT IN ('pending','abandoned') ORDER BY sold_at DESC LIMIT 50"
+    ).bind(email).all()).results || [];
+    const res = json({
+      signed_in: true,
+      methods,
+      email,
+      name: c.name || '',
+      phone: c.phone || '',
+      tax_exempt: !!c.tax_exempt,
+      trusted: !!c.trusted,
+      orders: orders.map((o) => ({
+        id: o.id, sold_at: o.sold_at, status: o.status, payment_method: o.payment_method,
+        total_cents: o.total_cents, pickup: String(o.fulfillment || '').replace(/^pickup:/, ''),
+        items: JSON.parse(o.items_json || '[]').map((l) => ({ name: l.name, unit: l.unit, qty: l.qty })),
+      })),
+    });
+    res.headers.set('cache-control', 'no-store');
+    return res;
+  }
+
+  if (path === '/api/auth/logout' && request.method === 'POST') {
+    const res = json({ ok: true });
+    res.headers.append('set-cookie', cookieHeader(SESSION_COOKIE, '', 0));
+    return res;
+  }
+
+  // ---- emailed code -------------------------------------------------------
+  if (path === '/api/auth/code' && request.method === 'POST') {
+    if (!methods.email) return json({ error: 'email sign-in is not available' }, 400);
+    const b = await request.json().catch(() => ({}));
+    const email = cleanEmail(b.email);
+    if (!email) return json({ error: 'enter a valid email address' }, 400);
+
+    const since = new Date(Date.now() - 3600 * 1000).toISOString();
+    const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_codes WHERE email = ? AND created_at > ?')
+      .bind(email, since).first();
+    if (recent && recent.n >= CODES_PER_HOUR) {
+      return json({ error: 'Too many codes requested. Wait a while, then try again.' }, 429);
+    }
+
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+    await env.DB.prepare(
+      'INSERT INTO login_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?,?,?,0,?)'
+    ).bind(email, await hmac(env.SESSION_SECRET, email + ':' + code),
+      new Date(Date.now() + CODE_MINUTES * 60 * 1000).toISOString(), new Date().toISOString()).run();
+
+    const sent = await sendEmail(env, {
+      to: email,
+      subject: 'Your sign-in code: ' + code,
+      text: 'Your A Little Hill Farm sign-in code is ' + code + '.\n\nIt works for ' + CODE_MINUTES +
+        ' minutes. If you did not ask for it, you can ignore this email.',
+      html: emailShell('<p style="margin:0 0 14px">Your sign-in code is</p>' +
+        '<p style="font-size:32px;letter-spacing:6px;font-weight:600;margin:0 0 18px;color:#1E1B16">' + code + '</p>' +
+        '<p style="margin:0;color:#6B6353">It works for ' + CODE_MINUTES +
+        ' minutes. If you did not ask for it, you can ignore this email.</p>'),
+    });
+    if (!sent.sent) return json({ error: 'Could not send the email just now. Please try again in a minute.' }, 502);
+    // Same answer whether or not we have seen this email before.
+    return json({ ok: true });
+  }
+
+  if (path === '/api/auth/verify' && request.method === 'POST') {
+    if (!methods.email) return json({ error: 'email sign-in is not available' }, 400);
+    const b = await request.json().catch(() => ({}));
+    const email = cleanEmail(b.email);
+    const code = String(b.code || '').replace(/\D/g, '');
+    const row = email && await env.DB.prepare(
+      'SELECT rowid AS rid, code_hash, expires_at, attempts FROM login_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1'
+    ).bind(email).first();
+    const bad = json({ error: 'That code is not right, or it has expired. Ask for a new one.' }, 400);
+    if (!row || code.length !== 6 || Date.parse(row.expires_at) < Date.now() || row.attempts >= CODE_ATTEMPTS) return bad;
+    await env.DB.prepare('UPDATE login_codes SET attempts = attempts + 1 WHERE rowid = ?').bind(row.rid).run();
+    if (!timingSafeEqual(row.code_hash, await hmac(env.SESSION_SECRET, email + ':' + code))) return bad;
+
+    await env.DB.prepare('DELETE FROM login_codes WHERE email = ?').bind(email).run();
+    await rememberCustomer(env, email, null);
+    return signedInResponse(json({ ok: true }), await makeSession(env, email));
+  }
+
+  // ---- Google -------------------------------------------------------------
+  if (path === '/auth/google') {
+    if (!methods.google) return Response.redirect(new URL('/account', request.url).toString(), 302);
+    const url = new URL(request.url);
+    const state = b64url(crypto.getRandomValues(new Uint8Array(18)));
+    const back = safeReturn(url.searchParams.get('return'));
+    const google = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    google.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+    google.searchParams.set('redirect_uri', url.origin + '/auth/google/callback');
+    google.searchParams.set('response_type', 'code');
+    google.searchParams.set('scope', 'openid email profile');
+    google.searchParams.set('state', state);
+    google.searchParams.set('prompt', 'select_account');
+    const res = new Response(null, { status: 302, headers: { location: google.toString() } });
+    // Ties the callback to this browser (and remembers where to go after).
+    res.headers.append('set-cookie', cookieHeader('alhf_oauth', state + '|' + back, 600));
+    return res;
+  }
+
+  if (path === '/auth/google/callback') {
+    const url = new URL(request.url);
+    const [state, back] = readCookie(request, 'alhf_oauth').split('|');
+    const fail = (why) => Response.redirect(url.origin + '/account?error=' + encodeURIComponent(why), 302);
+    if (!methods.google) return fail('Google sign-in is not available');
+    if (!state || url.searchParams.get('state') !== state) return fail('That sign-in link expired. Please try again.');
+    if (!url.searchParams.get('code')) return fail('Google sign-in was cancelled.');
+
+    const token = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: url.searchParams.get('code'),
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: url.origin + '/auth/google/callback',
+        grant_type: 'authorization_code',
+      }),
+    }).then((r) => r.json()).catch(() => ({}));
+    if (!token.id_token) return fail('Google did not confirm the sign-in. Please try again.');
+
+    // The ID token came straight from Google's token endpoint over TLS, in
+    // exchange for our client secret, so its claims can be read directly
+    // (Google's documented exception to verifying the signature).
+    let claims = {};
+    try { claims = JSON.parse(new TextDecoder().decode(fromB64url(token.id_token.split('.')[1]))); } catch { /* checked below */ }
+    const email = cleanEmail(claims.email);
+    if (!email || claims.email_verified !== true || claims.aud !== env.GOOGLE_CLIENT_ID) {
+      return fail('Google did not share a verified email address.');
+    }
+    await rememberCustomer(env, email, cleanText(claims.name, 80));
+    const res = new Response(null, { status: 302, headers: { location: url.origin + (back || '/account') } });
+    res.headers.append('set-cookie', cookieHeader('alhf_oauth', '', 0));
+    return signedInResponse(res, await makeSession(env, email));
+  }
+
+  return null;
+}
+
+// Only ever send someone back to a page on this site.
+function safeReturn(v) {
+  const s = String(v || '');
+  return /^\/[A-Za-z0-9/_?=&.%-]*$/.test(s) && !s.startsWith('//') ? s : '/account';
+}
+
+// ---------------------------------------------------------------------------
+// Email (Resend). Off until RESEND_API_KEY is set; callers carry on either way.
+// ---------------------------------------------------------------------------
+
+async function sendEmail(env, { to, subject, text, html }) {
+  // Local testing only (store/.dev.vars): print the email instead of sending.
+  // Never set DEV_EMAIL_LOG on the live store.
+  if (env.DEV_EMAIL_LOG === '1') {
+    console.log('[dev email] to ' + to + ' | ' + subject + ' | ' + text.replace(/\s+/g, ' ').slice(0, 300));
+    return { sent: true };
+  }
+  if (!env.RESEND_API_KEY) return { sent: false, reason: 'RESEND_API_KEY is not set' };
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: config.email.from,
+        reply_to: config.email.reply_to,
+        to: [to],
+        subject,
+        text,
+        html,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    return { sent: true };
+  } catch (err) {
+    console.error('email failed: ' + err);
+    return { sent: false, reason: String(err.message || err) };
+  }
+}
+
+function emailShell(inner) {
+  return '<div style="background:#F3EEE4;padding:28px 12px;font-family:Georgia,serif">' +
+    '<div style="max-width:520px;margin:0 auto;background:#FBF8F2;border:1px solid #E3DCCE;padding:28px 28px 22px;' +
+    'font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#4A443A">' +
+    '<div style="font-family:Georgia,serif;font-size:22px;color:#1E1B16;margin-bottom:18px">A Little Hill Farm</div>' +
+    inner +
+    '<p style="margin:22px 0 0;font-size:12px;color:#6B6353;border-top:1px solid #E3DCCE;padding-top:14px">' +
+    'A Little Hill Farm · Potlatch, Idaho · Reply to this email to reach us.</p></div></div>';
+}
+
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** The customer's copy of a new order. Sent once, when the order is placed. */
+async function sendOrderConfirmation(env, saleId) {
+  if (!env.RESEND_API_KEY && env.DEV_EMAIL_LOG !== '1') return;
+  const s = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(saleId).first();
+  if (!s || !s.customer_email) return;
+  const lines = JSON.parse(s.items_json || '[]');
+  const pickupId = String(s.fulfillment || '').replace(/^pickup:/, '');
+  const pickup = (config.pickup_locations.find((l) => l.id === pickupId) || {}).label || pickupId;
+  const how = s.payment_method === 'cash' ? 'You will pay in cash at pickup.'
+    : s.payment_method === 'ach' ? 'Your bank transfer is on its way. Bank payments take a few business days to settle.'
+    : s.status === 'captured' ? 'Your card has been charged.'
+    : 'Your card is authorized but not charged yet. We charge it when we place the supplier order.';
+  const rows = lines.map((l) =>
+    '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) + (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') +
+    '</td><td style="padding:6px 0;text-align:right">' + dollars(l.line_total_cents != null ? l.line_total_cents : (l.unit_price_cents || 0) * (l.qty || 0)) + '</td></tr>').join('');
+  const html = emailShell(
+    '<p style="margin:0 0 14px">Thank you' + (s.customer_name ? ', ' + escHtml(String(s.customer_name).split(' ')[0]) : '') +
+    ' — your order is in.</p>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
+    '<table style="width:100%;font-size:14px;margin:0 0 16px">' +
+      '<tr><td>Subtotal</td><td style="text-align:right">' + dollars(s.subtotal_cents) + '</td></tr>' +
+      '<tr><td>Idaho sales tax' + (s.tax_exempt ? ' (exempt)' : '') + '</td><td style="text-align:right">' + dollars(s.tax_cents) + '</td></tr>' +
+      '<tr><td style="font-weight:600;color:#1E1B16">Total</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(s.total_cents) + '</td></tr>' +
+    '</table>' +
+    '<p style="margin:0 0 10px"><strong>Payment.</strong> ' + escHtml(how) + '</p>' +
+    '<p style="margin:0 0 10px"><strong>Pickup.</strong> ' + escHtml(pickup) + '. We will email you when your order is ready and set a time.</p>' +
+    '<p style="margin:0 0 10px"><strong>Timing.</strong> ' + escHtml(config.terms.text) + '</p>' +
+    '<p style="margin:0;color:#6B6353;font-size:13px">Order reference: ' + escHtml(s.id.slice(0, 8)) + '</p>');
+  const text = 'Thank you — your order is in.\n\n' +
+    lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')).join('\n') +
+    '\n\nTotal: ' + dollars(s.total_cents) + '\n\nPayment: ' + how + '\nPickup: ' + pickup +
+    '. We will email you when your order is ready.\n\n' + config.terms.text + '\n\nOrder reference: ' + s.id.slice(0, 8);
+  await sendEmail(env, { to: s.customer_email, subject: 'Your A Little Hill Farm order — ' + dollars(s.total_cents), text, html });
 }
 
 // ---------------------------------------------------------------------------

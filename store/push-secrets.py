@@ -14,13 +14,14 @@ password like abc#def silently uploads as "abc". And a live Stripe key paired
 with a sandbox webhook secret fails every payment confirmation, quietly.
 """
 import os
+import secrets
 import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV = os.path.join(HERE, '.env')
 REQUIRED = ['ADMIN_PASSWORD', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
-OPTIONAL = ['NOTIFY_URL']
+OPTIONAL = ['SESSION_SECRET', 'RESEND_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'NOTIFY_URL']
 
 
 def read_env(path):
@@ -57,6 +58,14 @@ def describe(key, v):
         return 'webhook signing secret' if v.startswith('whsec_') else 'not a webhook secret (should start whsec_)'
     if key == 'ADMIN_PASSWORD':
         return f'{len(v)} characters' + ('' if len(v) >= 12 else ' — use at least 12')
+    if key == 'SESSION_SECRET':
+        return f'{len(v)} characters' + ('' if len(v) >= 32 else ' — too short, delete the line to regenerate')
+    if key == 'RESEND_API_KEY':
+        return 'Resend API key' if v.startswith('re_') else 'not a Resend key (should start re_)'
+    if key == 'GOOGLE_CLIENT_ID':
+        return 'Google OAuth client ID' if v.endswith('.apps.googleusercontent.com') else 'should end .apps.googleusercontent.com'
+    if key == 'GOOGLE_CLIENT_SECRET':
+        return 'Google OAuth client secret' if v.startswith('GOCSPX-') else 'set (unusual format — check it)'
     if key == 'NOTIFY_URL':
         host = v.split('/')[2] if v.count('/') >= 2 else '?'
         return f'set ({host})' if v.startswith('https://') else 'should start https://'
@@ -67,6 +76,15 @@ def main():
     if not os.path.exists(ENV):
         sys.exit('No store/.env file. Create it with the keys: ' + ', '.join(REQUIRED))
     values, problems = read_env(ENV)
+
+    # Customer sign-in cookies are signed with SESSION_SECRET. Nobody needs to
+    # know it, so make one if it is missing — written to .env, never shown.
+    if 'SESSION_SECRET' not in values:
+        ends_clean = open(ENV, encoding='utf-8').read().endswith(chr(10))
+        with open(ENV, 'a', encoding='utf-8') as f:
+            f.write(('' if ends_clean else chr(10)) + 'SESSION_SECRET=' + secrets.token_urlsafe(48) + chr(10))
+        print('Generated SESSION_SECRET in .env (not shown).')
+        values, problems = read_env(ENV)
 
     print('store/.env:')
     for key in REQUIRED + OPTIONAL:
@@ -84,6 +102,12 @@ def main():
             problems.append(f'{key}: {d}')
     if values.get('NOTIFY_URL') and not values['NOTIFY_URL'].startswith('https://'):
         problems.append('NOTIFY_URL should start https://')
+    for key in ('SESSION_SECRET', 'RESEND_API_KEY', 'GOOGLE_CLIENT_ID'):
+        d = describe(key, values.get(key, ''))
+        if key in values and (d == 'EMPTY' or d.startswith('not ') or d.startswith('should ') or '—' in d):
+            problems.append(f'{key}: {d}')
+    if bool(values.get('GOOGLE_CLIENT_ID')) != bool(values.get('GOOGLE_CLIENT_SECRET')):
+        problems.append('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET go together — set both or neither')
 
     if problems:
         print('\nNot uploaded — fix these first:')

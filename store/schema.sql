@@ -165,3 +165,17 @@ CREATE TABLE alert_state (
   value       TEXT NOT NULL,        -- 'up' | 'failing' | 'down'
   updated_at  TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- login_codes — six-digit sign-in codes emailed to customers. Only a keyed
+-- hash is stored. A code lasts ten minutes and allows five guesses; a
+-- successful sign-in deletes every code for that email.
+-- ---------------------------------------------------------------------------
+CREATE TABLE login_codes (
+  email       TEXT NOT NULL,
+  code_hash   TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX login_codes_email ON login_codes (email, created_at);

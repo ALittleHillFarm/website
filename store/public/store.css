@@ -375,3 +375,23 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 /* product page: add-to-cart states */
 .pd-incart { font-size:15px; color:var(--moss-ink); margin:0 0 12px; }
 .pd-note { font-size:14px; color:var(--muted); margin-top:10px; }
+
+/* ---------- customer account ---------- */
+[data-account-link] { font-weight:600; }
+.signin { max-width:420px; }
+.signin .btn.google { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; background:#fff; color:var(--ink); border:1px solid #C9BFA9; }
+.signin .btn.google:hover { background:var(--line-soft); color:var(--ink); }
+.signin .btn.google .g { font-family:Arial,sans-serif; font-weight:700; font-size:16px; color:#4285F4; letter-spacing:0; }
+.signin .or { display:flex; align-items:center; gap:12px; margin:22px 0; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.14em; }
+.signin .or::before, .signin .or::after { content:""; flex:1; height:1px; background:var(--line); }
+.signin form .btn { margin-top:4px; }
+.form-msg { font-size:14px; color:var(--muted); margin-top:12px; min-height:1.4em; }
+.form-msg.err { color:var(--rust); }
+.acct-card { display:flex; justify-content:space-between; gap:18px; flex-wrap:wrap; align-items:flex-start; background:var(--card); border:1px solid var(--line); padding:22px 24px; margin-bottom:12px; }
+.acct-card .v { font-family:var(--serif); font-size:22px; margin-top:4px; overflow-wrap:anywhere; }
+.acct-card .sub { font-size:14px; color:var(--muted); margin-top:4px; }
+.acct-order { border-top:1px solid var(--line); padding:16px 0; }
+.acct-order .top { display:flex; justify-content:space-between; gap:12px; font-size:15px; }
+.acct-order .items { font-size:14px; color:var(--body); margin-top:6px; line-height:1.6; }
+.acct-order .items .muted { color:var(--muted); }
+.acct-order .st { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--moss-ink); margin-top:8px; }

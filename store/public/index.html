@@ -37,6 +37,7 @@
     <nav class="site-nav" aria-label="Main">
       <a href="https://alhf-site.shiny-band-89b4.workers.dev/">Herd</a>
       <a href="index.html" aria-current="page">Farm Store</a>
+      <a href="/account" data-account-link hidden>Log in</a>
     </nav>
   </div>
 </header>
@@ -194,6 +195,7 @@
   }
 
   function catLabel(cat) {
+    if (cat === POPULAR_GROUP) return 'Our most popular';
     var s = String(cat || 'other');
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
@@ -227,7 +229,8 @@
     // page.
     var words = searchWords(query);
     var shown = catalog.filter(function (p) {
-      if (activeAnimal && p.pills.indexOf(activeAnimal) < 0) return false;
+      if (activeAnimal === POPULAR) { if (!p.popular) return false; }
+      else if (activeAnimal && p.pills.indexOf(activeAnimal) < 0) return false;
       return matchesSearch(p, words);
     });
     // While searching, products whose NAME matches go first, and so does
@@ -253,13 +256,17 @@
     // the order its ranking produced instead.
     var order = [];
     var byCat = {};
+    // Popular is one list in order of how well each sells, not grouped.
+    if (activeAnimal === POPULAR && !words.length) {
+      shown.sort(function (a, b) { return a.popular - b.popular; });
+    }
     shown.forEach(function (p) {
-      var cat = p.category || 'other';
+      var cat = activeAnimal === POPULAR && !words.length ? POPULAR_GROUP : (p.category || 'other');
       if (!byCat[cat]) { byCat[cat] = []; order.push(cat); }
       byCat[cat].push(p);
     });
     // Array sort is stable, so unnamed categories keep first-seen order.
-    if (!words.length) order.sort(function (a, b) {
+    if (!words.length && activeAnimal !== POPULAR) order.sort(function (a, b) {
       var ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
       if (ia < 0) ia = CATEGORY_ORDER.length;
       if (ib < 0) ib = CATEGORY_ORDER.length;
@@ -377,6 +384,13 @@
    * Everything. */
   var MIN_PER_PILL = 3;
 
+  /* "Popular" — the default view. Products carry a popular rank in
+   * products.json (1 = best seller); this pill shows those, in rank order.
+   * It is not a category: a product in Popular still appears under its
+   * animals, or under Other. */
+  var POPULAR = 'Popular';
+  var POPULAR_GROUP = '__popular';
+
   var CATEGORY_ORDER = ['feed', 'mineral', 'bedding', 'supply', 'amendment', 'other'];
 
   var activeAnimal = '';
@@ -397,6 +411,10 @@
       if (kept.length < tags.length || !kept.length) kept.push('Other');
       p.pills = kept;
     });
+  }
+
+  function popularCount() {
+    return catalog.filter(function (p) { return p.popular; }).length;
   }
 
   function animalCounts() {
@@ -438,6 +456,7 @@
     host.innerHTML =
       '<span class="qp-label">Shopping for</span>' +
       '<div class="qp-row">' +
+        (popularCount() ? pill(POPULAR, 'Popular', popularCount()) : '') +
         pill('', 'Everything', catalog.length) +
         available.map(function (a) { return pill(a, a, counts[a]); }).join('') +
       '</div>';
@@ -477,7 +496,8 @@
   // texted to someone.
   function syncUrl() {
     var params = new URLSearchParams();
-    if (activeAnimal) params.set('for', activeAnimal.toLowerCase());
+    if (activeAnimal === '') params.set('for', 'all');
+    else if (activeAnimal !== POPULAR) params.set('for', activeAnimal.toLowerCase());
     if (query.trim()) params.set('q', query.trim());
     var qs = params.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
@@ -491,6 +511,12 @@
 
   function setQuery(value) {
     query = value || '';
+    // Searching from the Popular view searches the whole store — otherwise a
+    // search for something that simply isn't a best seller finds nothing.
+    if (query.trim() && activeAnimal === POPULAR) {
+      activeAnimal = '';
+      renderQuickPick();
+    }
     syncUrl();
     renderCatalog();
   }
@@ -555,7 +581,15 @@
       // products now live.
       var params = new URLSearchParams(location.search);
       var want = (params.get('for') || '').toLowerCase();
-      if (want) {
+      if (want === 'all') {
+        activeAnimal = '';
+      } else if (want === 'popular') {
+        activeAnimal = popularCount() ? POPULAR : '';
+      } else if (!want) {
+        // No choice in the address: open on Popular, unless arriving with a
+        // search (?q=), which should cover everything.
+        activeAnimal = popularCount() && !params.get('q') ? POPULAR : '';
+      } else {
         var counts = animalCounts();
         var match = Object.keys(counts).filter(function (a) { return a.toLowerCase() === want; })[0];
         var folded = catalog.some(function (p) {
@@ -594,5 +628,6 @@
   history.replaceState(null, '', location.pathname);
 })();
 </script>
+<script src="assets/account-link.js"></script>
 </body>
 </html>

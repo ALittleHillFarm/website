@@ -496,6 +496,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 3,
       "description": "Our Certified Organic, Soy-Free 17% Protein Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with organic kelp and alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength and organic flaxseed to increase the omega-3 content of the eggs.\n\nMade exclusively with North American Organic Grains.",
       "image": "/assets/products/f50-layer_f50-layer.jpg",
       "tags": "Chicken, Johnson's",
@@ -591,6 +592,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 12,
       "description": "Our Certified Organic, Soy-Free, Low Starch 19% Protein Grower/Broiler Feed is a complete nutritional feed of cracked and milled grain",
       "image": "/assets/products/f40-broilr-nc_f40-no-corn-broiler_e19b7b32-32b3-461e-a62c-a74127e7410f.jpg",
       "animals": [
@@ -609,6 +611,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 6,
       "description": "Our 17% Protein Low Starch Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with kelp, organic alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength and organic flaxseed to increase the omega-3 content of the eggs. Made without corn, this feed is ideal for flocks living in hot climates.\n\nMade exclusively with North American Organic Grains.\n\nBecause our feeds are milled on the same equipment, we do not guarantee that the finished product will be 100% free of corn.\n\nIf you have an allergy concern, we recommend consulting with your physician to ensure this product is right for your flock.",
       "image": "/assets/products/f50-layer-nc_f50-no-corn-layer_e979333a-fb0c-45f5-b7e6-0538f88ed3eb.jpg",
       "tags": "Chicken, Johnson's",
@@ -1238,6 +1241,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 7,
       "description": "Our Certified Organic 15% Protein feed for Goats is formulated to support growth, lactation, gestation, and general management of goats.\n\nMade exclusively with North American Organic Grains, this feed is balanced with probiotics, kelp, and other minerals to best meet your herd’s needs.\n\nFeed 1 to 2 lbs. per head per day for general maintenance and gestation diets. Feed 1 lb. grain per 3 lbs. milk production per day for lactating goats.\n\nFeed as a supplement to good quality forage.\n\nFeeding rate may be adjusted as needed for animal size, amount of production desired, and amount/quality of forage available.",
       "image": "/assets/products/f40-goat_f40-goat-feed_8b552124-40ea-45af-966c-f4d290db818b.jpg",
       "tags": "Goat",
@@ -1274,6 +1278,7 @@
       "taxable": true,
       "category": "other",
       "active": true,
+      "popular": 1,
       "description": "Raw Nigerian Dwarf goat milk, known for its high butterfat content, creaminess, and delightful taste!",
       "image": "",
       "animals": []
@@ -1290,6 +1295,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 4,
       "description": "Our Certified Organic 15% Protein Goat Pellets capture all the quality ingredients of our classic Goat Feed in an easy to feed pellet that helps to support growth, lactation, gestation, and general management of goats.\n\nMade exclusively with North American Organic Grains, this feed is balanced with probiotics, kelp, and other minerals to best meet your herd’s needs.\n\nFeed 1 to 2 lbs. per head per day for general maintenance and gestation diets. Feed 1 lb. grain per 3 lbs. milk production per day for lactating goats.\n\nFeed as a supplement to good quality forage.\n\nFeeding rate may be adjusted as needed for animal size, amount of production desired, and amount/quality of forage available.",
       "image": "/assets/products/f40-goat-p_f40-goat-pellets_5192885b-2b75-4756-ac83-b2ac1fd9d8f5.jpg",
       "tags": "Goat",
@@ -1384,6 +1390,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 10,
       "description": "Our Certified Organic, soy-free, 17% protein Power Pellet Layer feed is a complete nutritional feed of cracked and milled grains.",
       "image": "/assets/products/f40-layer-pwr_1.png",
       "animals": [
@@ -1708,6 +1715,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 9,
       "description": "With highly digestible fiber, New Country Organics Non-GMO Beet Pulp Pellets are a great supplement for horses of all life stages and all",
       "image": "/assets/products/f40-beet_f40-beet-pulp-pellets_2_be83c23b-d2ba-4e5a-9d7f-41fc8ee14cde.jpg",
       "animals": [
@@ -1873,6 +1881,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 5,
       "description": "Our 17% Protein Low Starch Pastured Perfect Layer Feed is a complete nutritional feed of cracked and milled grain that's supplemented with kelp, organic alfalfa, and Poultry Nutri-Balancer.\n\nDesigned for adult laying hens, our layer feed is formulated with additional calcium for eggshell strength.\n\nMade exclusively with North American Organic Grains.\n\nBecause our feeds are milled on the same equipment, we do not guarantee that the finished product will be 100% free of corn.\n\nIf you have an allergy concern, we recommend consulting with your physician to ensure this product is right for your flock.",
       "image": "/assets/products/f40-layer-pasture_f40-layer-pasture_68070547-49f3-42e9-a9a4-1996a3641f17.jpg",
       "tags": "Chicken, Johnson's",
@@ -2023,6 +2032,7 @@
       "taxable": true,
       "category": "feed",
       "active": true,
+      "popular": 11,
       "description": "Fortified with vitamins, minerals, and probiotics, our beautiful rabbit pellets are a great boost to your bunny’s diet.",
       "image": "/assets/products/f40-rabbit_f40-rabbit_bc8ea595-8322-431e-9e5e-abb02595263e.jpg",
       "animals": [
@@ -2248,6 +2258,7 @@
       "taxable": true,
       "category": "amendment",
       "active": true,
+      "popular": 2,
       "description": "Sea-90 Soil Mineralizer Plus offers a complete spectrum of minerals and trace elements to naturally supercharge soil health and fertility.",
       "image": "/assets/products/sea90soilmineralizerfrontbag.png",
       "animals": [
@@ -2460,6 +2471,7 @@
       "taxable": true,
       "category": "mineral",
       "active": true,
+      "popular": 8,
       "description": "Thorvin Kelp is the finest Certified Organic nutrient source on the market today. Kelp contains a range of minerals and vitamins often deficient in soils and feed and has a broad array of uses in agriculture and product formulations.\n\nKelp is a valuable renewable resource for animal health. The most valuable kelps grow in cold, mineral-rich waters and grow more slowly. These kelps collect minerals, vitamins, enzymes, amino acids and other beneficial bioactive properties. Thorvin carefully captures and preserves these nutrients using the most effective drying and storing methods in order to deliver the most consistently effective products derived from these kelps.\n\nFor animal feeding programs, average intake levels on a free choice basis (per head per day) are as follows: Livestock: 1 to 4 ounces Dogs: ½ to 1 teaspoon per animal per day Cats: ¼ teaspoon per animal per day Poultry: 1-2% of feed ration. \n\n*Please DO NOT feed Thorvin Kelp directly to Rabbits. The level of iodine in the kind of kelp Thorvin provides is very high. While for many animals this is a benefit, rabbits are sensitive to iodine.\n\n**Note that because this product is bagged in a mill which handles organic grains, it may not be completely free of small pieces of organic grain.",
       "image": "/assets/products/f50-kelp-thrvn_thorvin_6f78040a-94fb-443c-b161-2dcbb0a43eb7.jpg",
       "tags": "Cattle, Chicken, Duck, Goat, Horse, Johnson's, Llama, Minerals, Pig/Swine, Sheep, Turkey",
@@ -2808,5 +2820,6 @@
         "Goats"
       ]
     }
-  ]
+  ],
+  "_popular_note": "popular: rank on the store's default \"Popular\" view (1 = first). Set from Shopify units sold 2022-01 to 2026-09; edit freely. Absent = not in Popular."
 }

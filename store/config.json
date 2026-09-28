@@ -4,6 +4,11 @@
   "_farm_url_note": "Where the farm site lives, for the admin Goats tab's \"View page\" links and photo previews. Change to https://alittlehillfarm.com at cutover.",
   "store_url": "https://store.alittlehillfarm.com",
   "_store_url_note": "The store's own public address, used in alert links and the site checks.",
+  "email": {
+    "from": "A Little Hill Farm <orders@mail.alittlehillfarm.com>",
+    "reply_to": "christine@alittlehillfarm.com",
+    "_note": "Sender for sign-in codes and order confirmations (Resend). The from-domain must be verified in Resend; replies go to reply_to."
+  },
   "tax": {
     "idaho_rate_bps": 600,
     "_note": "Basis points. 600 = 6.00%. Product-level `taxable` is the default; a customer marked tax_exempt overrides it to zero."

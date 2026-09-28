@@ -335,6 +335,39 @@ webhook keeps failing — worth leaving on in Stripe's notification settings.
 
 ---
 
+## Customer sign-in and order emails
+
+Customers can log in (top right, "Log in") with **Google** or with a
+**six-digit code emailed to them** — no passwords. Guests can always check
+out. Logging in pre-fills checkout, lists their orders, and is the only way a
+customer's **tax exemption** or **trusted** status applies: those are keyed to
+the signed-in email, so typing someone else's email at checkout gets nothing.
+New orders also get an automatic confirmation email.
+
+Each part switches on when its keys are in `.env` and `python push-secrets.py`
+has run; until then the Log in link simply doesn't appear.
+
+| Key | What it turns on | Where it comes from |
+|---|---|---|
+| `SESSION_SECRET` | signs the login cookie | made automatically by `push-secrets.py` |
+| `RESEND_API_KEY` | emailed codes + order confirmations | resend.com → API Keys (sending access) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google" | Google Cloud console → OAuth client |
+
+**Resend:** add the domain `mail.alittlehillfarm.com` in Resend and create
+the DNS records it lists in Cloudflare (DNS only, grey cloud). They live on
+the `mail.` subdomain, so Proton mail on the main domain is untouched. Emails
+come from `config.json` → `email.from`; replies go to `email.reply_to`.
+
+**Google:** in console.cloud.google.com create a project, set up the OAuth
+consent screen (External; app name, support email, logo), then Credentials →
+Create OAuth client ID → Web application, with authorized redirect URI
+`https://store.alittlehillfarm.com/auth/google/callback`.
+
+For local testing, `DEV_EMAIL_LOG=1` in `.dev.vars` prints emails (and sign-in
+codes) to the `wrangler dev` log instead of sending them. Never set it live.
+
+---
+
 ## Changing things
 
 | To change | Edit | Then |
