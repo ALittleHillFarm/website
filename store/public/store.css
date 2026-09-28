@@ -253,7 +253,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
   text-decoration:underline; text-underline-offset:3px; padding:6px 0; }
 .photo-btn:hover { color:var(--ink); }
 .inv-photo input[type="file"]:focus-visible + .upload-status,
-.inv-photo input[type="file"]:focus-visible ~ .photo-btn { outline:2px solid var(--rust); outline-offset:2px; }
+.inv-photo input[type="file"]:focus-visible ~ .photo-btn { outline:2px solid var(--moss); outline-offset:2px; }
 .upload-status { font-size:11px; line-height:1.5; margin-top:4px; max-width:120px; color:var(--muted); }
 .upload-status.ok  { color:var(--moss, #4a6741); }
 .upload-status.bad { color:var(--rust); }
@@ -274,7 +274,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
   padding:11px 13px 11px 42px; min-height:46px;
 }
 .store-search input[type="search"]::placeholder { color:var(--muted); opacity:1; }
-.store-search input[type="search"]:focus-visible { outline:2px solid var(--rust); outline-offset:2px; }
+.store-search input[type="search"]:focus-visible { outline:2px solid var(--moss); outline-offset:2px; }
 
 /* ---------- quick pick: filter the store by animal ---------- */
 /* Deliberately borrows the site nav's vocabulary — 2px corners, uppercase,
@@ -306,7 +306,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
   transition:background-color .12s ease, color .12s ease, border-color .12s ease;
 }
 .qp:hover { background:var(--line-soft); color:var(--ink); border-color:#C9BFA9; }
-.qp:focus-visible { outline:2px solid var(--rust); outline-offset:2px; }
+.qp:focus-visible { outline:2px solid var(--moss); outline-offset:2px; }
 
 .qp[aria-pressed="true"] {
   background:var(--moss); color:var(--on-moss); border-color:var(--moss);

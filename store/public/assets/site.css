@@ -32,7 +32,8 @@ h1,h2,h3,h4,p,figure,dl,dd,ul { margin:0; }
 ul { padding:0; list-style:none; }
 a { color:var(--moss-ink); }
 a:hover { color:var(--rust); }
-:focus-visible { outline:2px solid var(--rust); outline-offset:3px; }
+/* Focus rings are green: red reads as "something is wrong" on a form. */
+:focus-visible { outline:2px solid var(--moss); outline-offset:3px; }
 
 .wrap { max-width:var(--wrap); margin:0 auto; padding:0 28px; }
 .serif { font-family:var(--serif); font-weight:400; letter-spacing:-0.02em; }
@@ -280,7 +281,7 @@ body.embed .site-footer { margin-top:0; }
 /* Goat photos on the roster pages link through to the full profile.
    The anchor is purely a wrapper — it must not add underline or spacing. */
 .shot-link { display:block; text-decoration:none; color:inherit; }
-.shot-link:focus-visible { outline:2px solid var(--rust); outline-offset:3px; }
+.shot-link:focus-visible { outline:2px solid var(--moss); outline-offset:3px; }
 
 /* ---------- about, guide, contact, policies ---------- */
 .story { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,0.9fr); gap:56px; align-items:start; margin-bottom:72px; }
