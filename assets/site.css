@@ -10,7 +10,12 @@
 :root {
   --paper:#F3EEE4; --card:#FBF8F2; --ink:#1E1B16; --body:#4A443A;
   --muted:#6B6353; --line:#E3DCCE; --line-soft:#EAE3D6;
-  --moss:#46563C; --rust:#B0553A; --gold:#9C7B2E; --dark:#2A2A24;
+  --moss:#59803D; --rust:#C6282F;
+  /* Brand colours (2026-09): green #59803D, red #C6282F. The green is for
+     fills and large type; small green text uses --moss-ink, a darker shade
+     of it that stays readable (WCAG AA 4.5:1) on the cream background.
+     Text on a green fill is pure white for the same reason. */
+  --moss-ink:#4F7336; --on-moss:#fff; --gold:#9C7B2E; --dark:#2A2A24;
   --serif:'Newsreader',Georgia,serif; --sans:'Hanken Grotesk',system-ui,sans-serif;
   --wrap:1180px;
 }
@@ -25,7 +30,7 @@ img { max-width:100%; display:block; }
 [id] { scroll-margin-top:110px; }
 h1,h2,h3,h4,p,figure,dl,dd,ul { margin:0; }
 ul { padding:0; list-style:none; }
-a { color:var(--moss); }
+a { color:var(--moss-ink); }
 a:hover { color:var(--rust); }
 :focus-visible { outline:2px solid var(--rust); outline-offset:3px; }
 
@@ -48,7 +53,7 @@ a:hover { color:var(--rust); }
 .site-nav { display:flex; gap:4px; flex-wrap:wrap; }
 .site-nav a { font-size:12px; letter-spacing:0.1em; text-transform:uppercase; text-decoration:none; color:var(--muted); padding:9px 14px; border-radius:2px; border:1px solid transparent; }
 .site-nav a:hover { color:var(--ink); border-color:var(--line); }
-.site-nav a[aria-current="page"] { background:var(--moss); border-color:var(--moss); color:var(--card); }
+.site-nav a[aria-current="page"] { background:var(--moss); border-color:var(--moss); color:var(--on-moss); }
 
 .site-footer { background:var(--dark); color:#D5CEBE; margin-top:96px; }
 .site-footer .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:40px; padding:56px 28px 44px; max-width:var(--wrap); margin:0 auto; }
@@ -68,10 +73,10 @@ a:hover { color:var(--rust); }
 .rule-head a { font-size:12px; letter-spacing:0.12em; text-transform:uppercase; text-decoration:none; color:var(--rust); }
 .badge { display:inline-block; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; background:var(--gold); color:#fff; padding:5px 10px; border-radius:2px; }
 .badge.rust { background:var(--rust); }
-.btn { display:inline-block; font-family:inherit; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; background:var(--moss); color:var(--card); border:none; padding:12px 22px; border-radius:2px; cursor:pointer; text-decoration:none; }
+.btn { display:inline-block; font-family:inherit; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; background:var(--moss); color:var(--on-moss); border:none; padding:12px 22px; border-radius:2px; cursor:pointer; text-decoration:none; }
 .btn:hover { background:var(--ink); color:var(--card); }
-.btn.ghost { background:none; color:var(--moss); border:1px solid #C9BFA9; }
-.btn.ghost:hover { background:var(--moss); color:var(--card); }
+.btn.ghost { background:none; color:var(--moss-ink); border:1px solid #C9BFA9; }
+.btn.ghost:hover { background:var(--moss); color:var(--on-moss); }
 .link-u { font-size:12px; letter-spacing:0.08em; text-transform:uppercase; text-decoration:none; border-bottom:1px solid #C9BFA9; padding-bottom:2px; }
 
 /* Fixed counts rather than auto-fit. auto-fit packs in whatever fits, which

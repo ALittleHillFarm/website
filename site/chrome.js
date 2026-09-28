@@ -117,7 +117,7 @@ export function headExtras({ origin, path, title, description, image, imageAlt, 
 <link rel="icon" href="/assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#46563C">
+<meta name="theme-color" content="#59803D">
 <link rel="canonical" href="${esc(canonical)}">
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:type" content="${esc(type || 'website')}">

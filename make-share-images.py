@@ -26,8 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS = 'C:/Windows/Fonts/'
 PAPER = (243, 238, 228)
 INK = (30, 27, 22)
-MOSS = (70, 86, 60)
-RUST = (176, 85, 58)
+MOSS = (79, 115, 54)     # --moss-ink: brand green #59803D, darkened for text on cream
+RUST = (198, 40, 47)     # brand red #C6282F
 MUTED = (107, 99, 83)
 W, H = 1200, 630
 
