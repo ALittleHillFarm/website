@@ -52,8 +52,14 @@ def call(method, url, token, body=None):
         sys.exit(f'{method} {url.split("?")[0]} failed: HTTP {e.code} {e.read().decode()[:300]}')
 
 
+def resend_key():
+    # A dedicated full-access setup key if there is one, else the store's key
+    # (which then needs full access for this one-time step).
+    return env_value('RESEND_SETUP_KEY') or env_value('RESEND_API_KEY')
+
+
 def resend(method, path, body=None):
-    return call(method, 'https://api.resend.com' + path, env_value('RESEND_SETUP_KEY'), body)
+    return call(method, 'https://api.resend.com' + path, resend_key(), body)
 
 
 def cf(method, path, body=None):
@@ -76,8 +82,9 @@ def fqdn(name):
         return DOMAIN
     if name.endswith(ROOT):
         return name
-    # Resend gives names relative to the domain it was asked to verify.
-    return name + '.' + DOMAIN if not name.endswith(DOMAIN) else name
+    # Resend gives names relative to the ZONE (the root domain), e.g.
+    # "resend._domainkey.mail" -> resend._domainkey.mail.alittlehillfarm.com.
+    return name + '.' + ROOT
 
 
 def report(dom):
@@ -94,7 +101,7 @@ def main():
         print('Removed ' + ' and '.join(SETUP_KEYS) + ' from .env. Delete them in Resend and Cloudflare too.')
         return
 
-    missing = [k for k in SETUP_KEYS if not env_value(k)]
+    missing = [k for k in ('CLOUDFLARE_DNS_TOKEN',) if not env_value(k)] + ([] if resend_key() else ['RESEND_SETUP_KEY'])
     if missing:
         sys.exit('Add to store/.env first: ' + ', '.join(missing))
 
