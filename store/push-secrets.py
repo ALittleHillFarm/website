@@ -13,6 +13,7 @@ Why check first: wrangler reads .env with '#' as a comment marker, so a
 password like abc#def silently uploads as "abc". And a live Stripe key paired
 with a sandbox webhook secret fails every payment confirmation, quietly.
 """
+import json
 import os
 import secrets
 import subprocess
@@ -94,7 +95,7 @@ def main():
             print(f'  {key:22} MISSING')
             problems.append(f'{key} is missing')
     for key in sorted(set(values) - set(REQUIRED) - set(OPTIONAL)):
-        print(f'  {key:22} (extra key — it will be uploaded too)')
+        print(f'  {key:22} (setup-only — stays in .env, never uploaded)')
 
     for key in REQUIRED:
         d = describe(key, values.get(key, ''))
@@ -124,8 +125,19 @@ def main():
         return
 
     print('\nUploading...')
-    # wrangler prints only key names. Its output is passed through unchanged.
-    r = subprocess.run('npx wrangler secret bulk .env', cwd=HERE, shell=True)
+    # Only the keys the store uses. Setup-only keys in .env (a DNS token, an
+    # admin-level API key) must never reach the live worker, so the upload is
+    # built from an allow-list. The temporary file matches .gitignore's
+    # ".env.*" and is deleted straight after. wrangler prints key names only.
+    upload = {k: values[k] for k in REQUIRED + OPTIONAL if values.get(k)}
+    tmp = os.path.join(HERE, '.env.upload.json')
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(upload, f)
+        r = subprocess.run('npx wrangler secret bulk .env.upload.json', cwd=HERE, shell=True)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     if r.returncode:
         sys.exit(r.returncode)
     print('\nDone. Secrets take a minute to reach every Cloudflare location — '
