@@ -124,6 +124,7 @@ subscribed to exactly these events:
 - `payment_intent.succeeded`
 - `payment_intent.canceled`
 - `charge.dispute.created`
+- `payment_intent.payment_failed` — a bank transfer bounced
 
 `payment_intent.canceled` is not optional. It is how an expired authorization
 gets recorded. Without it the admin screen keeps offering to capture a hold the

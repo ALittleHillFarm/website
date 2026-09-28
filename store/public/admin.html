@@ -70,7 +70,9 @@
       <div class="field">
         <label for="status-filter">Status</label>
         <select id="status-filter">
-          <option value="authorized" selected>Authorized (awaiting capture)</option>
+          <option value="authorized" selected>Authorized (card held — awaiting capture)</option>
+          <option value="processing">Processing (bank transfer on its way)</option>
+          <option value="failed">Failed (bank transfer bounced)</option>
           <option value="captured">Captured</option>
           <option value="pending">Pending</option>
           <option value="canceled">Canceled</option>
@@ -333,6 +335,8 @@
 
   var STATUS_BADGE = {
     authorized: 'badge',
+    processing: 'badge muted',
+    failed: 'badge rust',
     captured: 'badge moss',
     canceled: 'badge rust',
     recorded: 'badge muted',
@@ -369,7 +373,7 @@
             '<h3>' + esc(sale.customer_name || 'Unnamed customer') + '</h3>' +
             '<div class="email">' + esc(sale.customer_email || '') + '</div>' +
           '</div>' +
-          '<span class="' + badgeClass + '">' + esc(sale.status) + '</span>' +
+          '<span class="' + badgeClass + '">' + esc(sale.status === 'captured' ? 'paid' : sale.status) + '</span>' +
         '</div>' +
         '<div class="facts">' +
           '<div><div class="label">Total</div><div class="v">' + money(sale.total_cents) + '</div></div>' +

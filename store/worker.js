@@ -579,8 +579,11 @@ async function apiWebhook(request, env, ctx) {
     case 'checkout.session.completed': {
       const saleId = obj.client_reference_id || (obj.metadata && obj.metadata.sale_id);
       if (saleId) {
-        // 'paid' means it settled; otherwise we are holding an authorization.
-        const status = obj.payment_status === 'paid' ? 'captured' : 'authorized';
+        // 'paid' means it settled. Otherwise a card is being HELD (authorized,
+        // ours to capture) while a bank transfer is PROCESSING — the debit is
+        // already on its way and settles in a few business days, or fails.
+        const isBank = (obj.payment_method_types || []).includes('us_bank_account');
+        const status = obj.payment_status === 'paid' ? 'captured' : isBank ? 'processing' : 'authorized';
         const done = await env.DB.prepare(
           "UPDATE sales SET status = ?," +
             ' stripe_payment_intent = COALESCE(?, stripe_payment_intent)' +
@@ -601,9 +604,27 @@ async function apiWebhook(request, env, ctx) {
       await setStatusByIntent(env, obj.id, 'authorized');
       break;
 
+    // Card captured, or a bank transfer settled.
     case 'payment_intent.succeeded':
       await setStatusByIntent(env, obj.id, 'captured');
       break;
+
+    // A bank transfer bounced (closed account, insufficient funds...). Only
+    // bank payments land here: a declined card never completes checkout.
+    case 'payment_intent.payment_failed': {
+      const r = await env.DB.prepare("UPDATE sales SET status = 'failed' WHERE stripe_payment_intent = ? AND status = 'processing'")
+        .bind(obj.id).run();
+      if (r.meta && r.meta.changes) {
+        ctx.waitUntil(notify(env, {
+          title: 'Bank payment failed',
+          message: 'A ' + dollars(obj.amount) + ' bank transfer did not go through. Contact the customer before ordering their items.',
+          priority: 4,
+          tags: 'warning',
+          click: adminUrl(),
+        }));
+      }
+      break;
+    }
 
     // The authorization-expiry case. Without this, the admin list would keep
     // showing a hold the bank has already released.
@@ -1341,7 +1362,7 @@ async function attentionItems(env) {
   const items = [];
   const rows = (await env.DB.prepare(
     "SELECT id, sold_at, status, payment_method, total_cents, notes FROM sales" +
-      " WHERE status IN ('authorized','awaiting_cash','pending')" +
+      " WHERE status IN ('authorized','awaiting_cash','pending','processing','failed')" +
       " OR (notes LIKE '%DISPUTE OPENED%' AND sold_at >= ?)" +
       ' ORDER BY sold_at'
   ).bind(new Date(now - 90 * DAY).toISOString()).all()).results || [];
@@ -1380,6 +1401,23 @@ async function attentionItems(env) {
       level: 'urgent',
       text: stuck.length + (stuck.length === 1 ? ' checkout has' : ' checkouts have') +
         ' had no word from Stripe for over two days. Stripe may not be reaching the store — check the webhook in the Stripe dashboard.',
+    });
+  }
+  const failed = rows.filter((r) => r.status === 'failed');
+  if (failed.length) {
+    items.push({
+      level: 'urgent',
+      text: failed.length + (failed.length === 1 ? ' bank transfer has' : ' bank transfers have') +
+        ' failed — contact the customer before ordering their items.',
+    });
+  }
+  // Bank transfers normally settle in about four business days.
+  const slow = rows.filter((r) => r.status === 'processing' && now - Date.parse(r.sold_at) > 7 * DAY);
+  if (slow.length) {
+    items.push({
+      level: 'todo',
+      text: slow.length + (slow.length === 1 ? ' bank transfer is' : ' bank transfers are') +
+        ' still processing after a week — check them in the Stripe dashboard.',
     });
   }
   const disputes = rows.filter((r) => /DISPUTE OPENED/.test(r.notes || ''));

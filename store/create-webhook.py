@@ -33,6 +33,7 @@ EVENTS = [
     'payment_intent.succeeded',
     'payment_intent.canceled',
     'charge.dispute.created',
+    'payment_intent.payment_failed',
 ]
 
 

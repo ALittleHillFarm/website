@@ -105,6 +105,8 @@
   // ---- signed in ----------------------------------------------------------
   var STATUS = {
     authorized: 'Received — card held, not charged yet',
+    processing: 'Received — bank payment processing',
+    failed: 'Payment did not go through — please contact us',
     captured: 'Paid',
     awaiting_cash: 'Received — pay cash at pickup',
     recorded: 'Paid in person',
