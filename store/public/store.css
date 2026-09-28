@@ -381,7 +381,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .signin { max-width:420px; }
 .signin .btn.google { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; background:#fff; color:var(--ink); border:1px solid #C9BFA9; }
 .signin .btn.google:hover { background:var(--line-soft); color:var(--ink); }
-.signin .btn.google .g { font-family:Arial,sans-serif; font-weight:700; font-size:16px; color:#4285F4; letter-spacing:0; }
+.signin .btn.google .g { flex:none; display:block; }
 .signin .or { display:flex; align-items:center; gap:12px; margin:22px 0; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.14em; }
 .signin .or::before, .signin .or::after { content:""; flex:1; height:1px; background:var(--line); }
 .signin form .btn { margin-top:4px; }

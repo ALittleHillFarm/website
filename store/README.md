@@ -184,7 +184,9 @@ site's test address, because the apex belongs to Shopify until step 3. In order:
 2. **Stripe live.** Create the live webhook against the real store address,
    put the live keys in `.env`, `npx wrangler secret bulk .env`, run the smoke
    test below. Deactivate the *Goat Breath* test product.
-3. **Farm site.** Attach `alittlehillfarm.com` and `www` to `alhf-site`
+3. ~~**Farm site.**~~ Done 2026-09-28: `alittlehillfarm.com` and `www` serve
+   `alhf-site` (www 301s to the apex; the workers.dev address stays on for old
+   links). Original step: attach `alittlehillfarm.com` and `www` to `alhf-site`
    (replacing the Shopify records), then change the farm links in
    `store/public/*.html` back to the apex, and set `farm_url` in
    `config.json` to `https://alittlehillfarm.com` (the Goats tab's links and

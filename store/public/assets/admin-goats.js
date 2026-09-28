@@ -153,7 +153,7 @@
         '<div class="field"><label for="g-new-type">Doe or buck</label><select id="g-new-type"><option value="doe">Doe</option><option value="buck">Buck</option></select></div>' +
         '<button type="submit" class="btn">Add goat</button>' +
       '</form>' +
-      '<p class="field hint" style="margin-top:-6px">A new goat starts <strong>hidden</strong>, so nobody sees a half-finished page. Switch her to “Shown” when she’s ready.</p>' +
+      '<p class="field hint" style="margin:16px 0 0">A new goat starts <strong>hidden</strong>, so nobody sees a half-finished page. Switch her to “Shown” when she’s ready.</p>' +
       group('doe', 'Does') + group('buck', 'Bucks');
   }
 

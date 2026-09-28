@@ -10,6 +10,9 @@
 name = "alhf-site"
 compatibility_date = "2026-09-21"
 main = "site-worker.js"
+# Keep the old workers.dev address answering too, so links shared before the
+# move (and bookmarks) still work. Canonical tags point search at the real domain.
+workers_dev = true
 
 [assets]
 directory = "./dist-site"
@@ -37,7 +40,12 @@ database_id = "cbc7ed1f-6dfd-43f2-968c-5348a79dbdf9"
 binding = "MEDIA"
 bucket_name = "alhf-media"
 
-# Uncomment at cutover, once the apex is ready to leave Shopify:
-# [[routes]]
-# pattern = "alittlehillfarm.com"
-# custom_domain = true
+# The real address (moved off Shopify 2026-09-28). www redirects to the apex
+# in site-worker.js.
+[[routes]]
+pattern = "alittlehillfarm.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.alittlehillfarm.com"
+custom_domain = true

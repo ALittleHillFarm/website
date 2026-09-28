@@ -36,6 +36,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // One address for the farm: www goes to the bare domain, path and all.
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4);
+      return Response.redirect(url.toString(), 301);
+    }
+
     const moved = oldShopifyAddress(url.pathname);
     if (moved) return Response.redirect(new URL(moved, url).toString(), 301);
 

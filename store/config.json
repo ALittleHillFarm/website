@@ -1,7 +1,7 @@
 {
   "_comment": "Operational settings. Edit here, commit, deploy. No code changes needed.",
-  "farm_url": "https://alhf-site.shiny-band-89b4.workers.dev",
-  "_farm_url_note": "Where the farm site lives, for the admin Goats tab's \"View page\" links and photo previews. Change to https://alittlehillfarm.com at cutover.",
+  "farm_url": "https://alittlehillfarm.com",
+  "_farm_url_note": "Where the farm site lives, for the admin Goats tab's links and the site checks.",
   "store_url": "https://store.alittlehillfarm.com",
   "_store_url_note": "The store's own public address, used in alert links and the site checks.",
   "email": {
