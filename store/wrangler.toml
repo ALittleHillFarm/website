@@ -1,10 +1,19 @@
 name = "alhf-store"
 main = "worker.js"
 compatibility_date = "2026-09-20"
+# Lets the site checks (Alerts in worker.js) fetch our own public addresses
+# the way a visitor would, instead of being refused as a worker calling a
+# worker on the same account.
+compatibility_flags = ["global_fetch_strictly_public"]
 
 # Deploys to <your-subdomain>.workers.dev until DNS is live on Cloudflare.
 # Set to false once the custom domain below is active.
 workers_dev = true
+
+# Alerts: site checks every 30 minutes, and the morning digest at 14:00 UTC
+# (7am Pacific daylight time, 6am standard). See the Alerts section of worker.js.
+[triggers]
+crons = ["*/30 * * * *", "0 14 * * *"]
 
 # The storefront. Anything the worker does not route is served from here.
 [assets]

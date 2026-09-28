@@ -155,3 +155,13 @@ CREATE TABLE goats (
   registry    TEXT,
   updated_at  TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- alert_state — what the alert checks last saw, so an alert fires once when
+-- something changes (a site goes down, comes back) instead of every run.
+-- ---------------------------------------------------------------------------
+CREATE TABLE alert_state (
+  key         TEXT PRIMARY KEY,     -- e.g. 'site:https://store.alittlehillfarm.com/api/catalog'
+  value       TEXT NOT NULL,        -- 'up' | 'failing' | 'down'
+  updated_at  TEXT NOT NULL
+);

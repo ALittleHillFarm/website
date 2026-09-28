@@ -49,12 +49,16 @@
     <button type="button" role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Record a sale</button>
     <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
     <button type="button" role="tab" id="tab-inventory" aria-controls="panel-inventory" aria-selected="false">Inventory</button>
+    <button type="button" role="tab" id="tab-goats" aria-controls="panel-goats" aria-selected="false">Goats</button>
   </div>
 
   <!-- ============================================================ -->
   <!-- Orders — review, capture, cancel, and track the notify checklist -->
   <!-- ============================================================ -->
   <section id="panel-orders" class="tab-panel" role="tabpanel" aria-labelledby="tab-orders" tabindex="0">
+    <!-- Filled from /api/admin/attention: expiring holds, orders to review,
+         cash to collect, Stripe silence, disputes, sites down. -->
+    <div id="attention" aria-live="polite"></div>
     <h2 class="serif" style="font-size:22px;margin-bottom:6px">Orders</h2>
     <p class="lede" style="font-size:14px;margin-bottom:20px">
       <strong>Authorized</strong> means the customer's card is on hold but has not been charged yet — that's the normal state
@@ -193,6 +197,17 @@
 
     <div id="inventory-msg"></div>
     <div class="inv-list" id="inventory-list"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Goats — the herd pages on the farm site (assets/admin-goats.js) -->
+  <!-- ============================================================ -->
+  <section id="panel-goats" class="tab-panel" role="tabpanel" aria-labelledby="tab-goats" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Goats</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      Everything on the herd pages of the farm website. Changes go live as soon as you press <strong>Save</strong>.
+      Use the arrows to change the order goats appear in on the Does and Bucks pages.</p>
+    <div id="goats-app"><p class="lede">Loading…</p></div>
   </section>
 
 </div>
@@ -373,7 +388,36 @@
     host.innerHTML = msg ? '<p class="' + (isError ? 'alert error' : 'lede') + '">' + esc(msg) + '</p>' : '';
   }
 
+  // "Needs attention" — the same list the morning alert sends.
+  function loadAttention() {
+    var host = document.getElementById('attention');
+    getJSON('/api/admin/attention').then(function (data) {
+      var items = data.items || [];
+      var list = items.length
+        ? '<ul>' + items.map(function (i) {
+            return '<li class="' + (i.level === 'urgent' ? 'urgent' : '') + '">' + esc(i.text) + '</li>';
+          }).join('') + '</ul>'
+        : '<p>Nothing needs attention right now.</p>';
+      var phone = data.alerts_configured
+        ? 'Alerts to your phone are on. <button type="button" class="link-btn" id="test-alert">Send a test alert</button>'
+        : 'Alerts to your phone are not set up yet (see the store README, “Alerts”).';
+      host.innerHTML = '<div class="attention' + (items.some(function (i) { return i.level === 'urgent'; }) ? ' has-urgent' : '') + '">' +
+        '<h2 class="serif">Needs attention</h2>' + list + '<p class="phone">' + phone + '</p></div>';
+    }).catch(function () { host.innerHTML = ''; });
+  }
+
+  document.getElementById('attention').addEventListener('click', function (e) {
+    if (!e.target || e.target.id !== 'test-alert') return;
+    e.target.disabled = true;
+    getJSON('/api/admin/test-alert', { method: 'POST' }).then(function () {
+      e.target.textContent = 'Sent — check your phone';
+    }).catch(function (err) {
+      e.target.textContent = 'Could not send: ' + err.message;
+    });
+  });
+
   function loadOrders() {
+    loadAttention();
     var status = document.getElementById('status-filter').value;
     setOrdersMessage('Loading…');
     var url = '/api/admin/sales' + (status ? '?status=' + encodeURIComponent(status) : '');
@@ -962,7 +1006,12 @@
     }
 
     say('Uploading…');
-    fetch('/api/admin/upload', { method: 'POST', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } })
+    // Shrink to 1200px in the browser first (assets/admin-goats.js): a phone
+    // photo drops from megabytes to ~150 KB and loses its GPS metadata.
+    (window.shrinkPhoto ? window.shrinkPhoto(file, 1200, 0.85) : Promise.resolve(file))
+      .then(function (body) {
+        return fetch('/api/admin/upload', { method: 'POST', body: body, headers: { 'content-type': body.type || 'application/octet-stream' } });
+      })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) { say(res.d.error || 'Upload failed.', 'bad'); return; }
@@ -1012,5 +1061,6 @@
   }).then(loadOrders);
 })();
 </script>
+<script src="assets/admin-goats.js"></script>
 </body>
 </html>

@@ -15,6 +15,8 @@
  *   STRIPE_SECRET_KEY      secret
  *   STRIPE_WEBHOOK_SECRET  secret
  *   ADMIN_PASSWORD         secret
+ *   NOTIFY_URL             secret, optional — where alerts go (see Alerts)
+ *   MEDIA                  R2 bucket of uploaded photos
  */
 
 import catalog from './products.json';
@@ -33,15 +35,15 @@ const json = (data, status = 200) =>
 // ---------------------------------------------------------------------------
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
 
     try {
       if (path === '/api/config') return apiConfig();
       if (path === '/api/catalog') return apiCatalog(env);
       if (path === '/api/quote' && request.method === 'POST') return apiQuote(request, env);
-      if (path === '/api/checkout' && request.method === 'POST') return apiCheckout(request, env);
-      if (path === '/api/webhook' && request.method === 'POST') return apiWebhook(request, env);
+      if (path === '/api/checkout' && request.method === 'POST') return apiCheckout(request, env, ctx);
+      if (path === '/api/webhook' && request.method === 'POST') return apiWebhook(request, env, ctx);
       if (path.startsWith('/media/')) return serveMedia(path, env);
       if (path === '/product') return productPage(request, env);
       if (path === '/sitemap.xml') return sitemap(request, env);
@@ -59,6 +61,11 @@ export default {
       console.error(err && err.stack ? err.stack : String(err));
       return json({ error: 'internal_error' }, 500);
     }
+  },
+
+  // Cron triggers (wrangler.toml): site checks and the morning digest.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(scheduled(event, env));
   },
 };
 
@@ -342,7 +349,7 @@ async function apiQuote(request, env) {
 // Checkout
 // ---------------------------------------------------------------------------
 
-async function apiCheckout(request, env) {
+async function apiCheckout(request, env, ctx) {
   let body;
   let method;
   try {
@@ -434,8 +441,9 @@ async function apiCheckout(request, env) {
     )
     .run();
 
-  // Cash never touches Stripe.
+  // Cash never touches Stripe, so no webhook will announce it — do it here.
   if (method === 'cash') {
+    ctx.waitUntil(notifyNewOrder(env, saleId));
     return json({ sale_id: saleId, redirect_url: null, total_cents: quote.total_cents });
   }
 
@@ -520,7 +528,7 @@ async function stripe(env, method, path, form, idempotencyKey) {
 // Webhook — signature verified by hand, no SDK
 // ---------------------------------------------------------------------------
 
-async function apiWebhook(request, env) {
+async function apiWebhook(request, env, ctx) {
   const sig = request.headers.get('stripe-signature') || '';
   const raw = await request.text();
 
@@ -549,13 +557,15 @@ async function apiWebhook(request, env) {
       if (saleId) {
         // 'paid' means it settled; otherwise we are holding an authorization.
         const status = obj.payment_status === 'paid' ? 'captured' : 'authorized';
-        await env.DB.prepare(
+        const done = await env.DB.prepare(
           "UPDATE sales SET status = ?," +
             ' stripe_payment_intent = COALESCE(?, stripe_payment_intent)' +
             " WHERE id = ? AND status = 'pending'"
         )
           .bind(status, obj.payment_intent || null, saleId)
           .run();
+        // Only the first completion of a pending sale is a new order.
+        if (done.meta && done.meta.changes) ctx.waitUntil(notifyNewOrder(env, saleId));
       }
       break;
     }
@@ -593,6 +603,13 @@ async function apiWebhook(request, env) {
       )
         .bind(new Date().toISOString(), obj.payment_intent)
         .run();
+      ctx.waitUntil(notify(env, {
+        title: 'Payment dispute opened',
+        message: 'A customer disputed a ' + dollars(obj.amount) + ' payment. Respond in the Stripe dashboard before the deadline.',
+        priority: 5,
+        tags: 'warning',
+        click: 'https://dashboard.stripe.com/disputes',
+      }));
       break;
   }
 
@@ -695,6 +712,395 @@ async function serveMedia(path, env) {
 }
 
 // ---------------------------------------------------------------------------
+// Goats — the herd, edited from the admin screen's Goats tab
+//
+// Rows live in the `goats` table (schema.sql). The farm site's worker reads
+// the same table and renders the pages (site/goats.js at the repo root), so
+// a save here is live on the next page load. Everything the form sends is
+// rebuilt field by field below: unknown keys are dropped, text is trimmed
+// and length-capped, and a photo must be a path we issued or one of the
+// site's own photos. The site escapes everything again when it renders.
+// ---------------------------------------------------------------------------
+
+const PHOTO_PATH = /^(\/media\/[a-f0-9-]{8,}\.(jpg|png|gif|webp)|\/assets\/photos\/(thumbs\/)?[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp))$/;
+
+function cleanText(v, max) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function cleanPara(v, max) {
+  // Paragraph text keeps its words but not stray whitespace runs.
+  return String(v == null ? '' : v).replace(/[ \t]+/g, ' ').trim().slice(0, max);
+}
+
+function cleanPhoto(p) {
+  if (!p || typeof p !== 'object') return null;
+  const src = String(p.src || '');
+  if (!PHOTO_PATH.test(src)) throw new BadRequest('a photo path was not one this site issued');
+  const out = { src };
+  if (p.thumb) {
+    if (!PHOTO_PATH.test(String(p.thumb))) throw new BadRequest('a thumbnail path was not one this site issued');
+    out.thumb = String(p.thumb);
+  }
+  const caption = cleanText(p.caption, 120);
+  if (caption) out.caption = caption;
+  const alt = cleanText(p.alt, 160);
+  if (alt) out.alt = alt;
+  return out;
+}
+
+function cleanGoatData(d, previous) {
+  if (!d || typeof d !== 'object') throw new BadRequest('missing goat data');
+  const name = cleanText(d.name, 60);
+  if (!name) throw new BadRequest('every goat needs a name');
+  const dob = String(d.dob || '');
+  if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) throw new BadRequest('date of birth must be a date');
+
+  let elite = null;
+  if (d.elite && (d.elite.year || d.elite.percentile)) {
+    const year = String(d.elite.year || '').trim();
+    const pct = d.elite.percentile === '' || d.elite.percentile == null ? null : Number(d.elite.percentile);
+    if (year && !/^\d{4}$/.test(year)) throw new BadRequest('Elite year must be four digits, like 2025');
+    if (pct != null && (!Number.isInteger(pct) || pct < 1 || pct > 100)) {
+      throw new BadRequest('Elite percentile must be a whole number from 1 to 100');
+    }
+    elite = { title: cleanText(d.elite.title, 40) || 'ADGA Elite Doe', year, percentile: pct };
+  }
+
+  const ped = d.pedigree || {};
+  return {
+    name,
+    registered_name: cleanText(d.registered_name, 120),
+    dob,
+    reg: cleanText(d.reg, 20).toUpperCase(),
+    alpha_s1_casein: cleanText(d.alpha_s1_casein, 12).toUpperCase(),
+    colour: cleanText(d.colour, 120),
+    height: cleanText(d.height, 40),
+    dna_on_file: !!d.dna_on_file,
+    badge: cleanText(d.badge, 80),
+    badge_tone: d.badge_tone === 'rust' ? 'rust' : '',
+    blurb: cleanPara(d.blurb, 600),
+    hero: d.hero ? cleanPhoto(d.hero) : null,
+    gallery: (Array.isArray(d.gallery) ? d.gallery : []).slice(0, 24).map(cleanPhoto).filter(Boolean),
+    elite,
+    pedigree: {
+      sire: cleanText(ped.sire, 120), dam: cleanText(ped.dam, 120),
+      ss: cleanText(ped.ss, 120), sd: cleanText(ped.sd, 120),
+      ds: cleanText(ped.ds, 120), dd: cleanText(ped.dd, 120),
+    },
+    parents: (Array.isArray(d.parents) ? d.parents : []).slice(0, 2).map((p) => ({
+      who: cleanText(p && p.who, 30),
+      name: cleanText(p && p.name, 120),
+      credit: cleanText(p && p.credit, 80),
+      lines: (Array.isArray(p && p.lines) ? p.lines : []).slice(0, 8).map((l) => cleanText(l, 160)).filter(Boolean),
+      photos: (Array.isArray(p && p.photos) ? p.photos : []).slice(0, 4).map(cleanPhoto).filter(Boolean),
+    })),
+    facts: (Array.isArray(d.facts) ? d.facts : []).slice(0, 8)
+      .map((f) => ({ label: cleanText(f && f.label, 40), value: cleanText(f && f.value, 160) }))
+      .filter((f) => f.label && f.value),
+    sections: (Array.isArray(d.sections) ? d.sections : []).slice(0, 8)
+      .map((s) => ({
+        title: cleanText(s && s.title, 60),
+        paragraphs: (Array.isArray(s && s.paragraphs) ? s.paragraphs : []).slice(0, 12)
+          .map((t) => cleanPara(t, 2000)).filter(Boolean),
+      }))
+      .filter((s) => s.title && s.paragraphs.length),
+    // Writing prompts from the original import. Shown in the form, never on
+    // the site, and not editable — carried over from what was stored.
+    prompts: (previous && previous.prompts) || [],
+  };
+}
+
+function slugify(name) {
+  return String(name).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'goat';
+}
+
+async function adminGoats(request, env) {
+  if (request.method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT * FROM goats ORDER BY template, sort, id').all()).results || [];
+    return json({
+      farm_url: config.farm_url,
+      goats: rows.map((r) => ({
+        id: r.id, sort: r.sort, status: r.status, template: r.template, updated_at: r.updated_at,
+        data: JSON.parse(r.data || '{}'),
+        // Only what the form needs: ADGA's names, shown as "blank = this".
+        registry: r.registry ? (({ sire, dam, grandparents, dna_on_file, dob }) =>
+          ({ sire, dam, grandparents, dna_on_file, dob }))(JSON.parse(r.registry)) : null,
+      })),
+    });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const now = new Date().toISOString();
+  const template = b.template === 'buck' ? 'buck' : 'doe';
+
+  try {
+    if (b.action === 'create') {
+      const name = cleanText(b.name, 60);
+      if (!name) throw new BadRequest('every goat needs a name');
+      const base = slugify(name);
+      let id = base;
+      for (let n = 2; await env.DB.prepare('SELECT 1 FROM goats WHERE id = ?').bind(id).first(); n++) id = base + '-' + n;
+      const last = await env.DB.prepare('SELECT MAX(sort) AS s FROM goats WHERE template = ?').bind(template).first();
+      const data = cleanGoatData({ name, parents: [{ who: '' }, { who: '' }] }, null);
+      // New goats start hidden, so a half-filled page never goes public.
+      await env.DB.prepare(
+        'INSERT INTO goats (id, sort, status, template, data, registry, updated_at) VALUES (?,?,?,?,?,NULL,?)'
+      ).bind(id, ((last && last.s) || 0) + 10, 'hidden', template, JSON.stringify(data), now).run();
+      return json({ ok: true, id });
+    }
+
+    const row = await env.DB.prepare('SELECT * FROM goats WHERE id = ?').bind(String(b.id || '')).first();
+    if (!row) return json({ error: 'no goat with that id' }, 404);
+
+    if (b.action === 'save') {
+      // Two people editing the same goat: the second save must not silently
+      // erase the first. The form sends back the version it loaded.
+      if (b.updated_at !== row.updated_at) {
+        return json({ error: 'This goat was changed somewhere else since you opened it. Reload it, then make your change again.' }, 409);
+      }
+      const data = cleanGoatData(b.data, JSON.parse(row.data || '{}'));
+      const status = b.status === 'active' ? 'active' : 'hidden';
+      await env.DB.prepare('UPDATE goats SET data = ?, status = ?, template = ?, updated_at = ? WHERE id = ?')
+        .bind(JSON.stringify(data), status, template, now, row.id).run();
+      return json({ ok: true, updated_at: now });
+    }
+
+    if (b.action === 'move') {
+      const dir = b.direction === 'up' ? -1 : 1;
+      const list = (await env.DB.prepare('SELECT id, sort FROM goats WHERE template = ? ORDER BY sort, id')
+        .bind(row.template).all()).results;
+      const i = list.findIndex((g) => g.id === row.id);
+      const j = i + dir;
+      if (j < 0 || j >= list.length) return json({ ok: true, unchanged: true });
+      [list[i], list[j]] = [list[j], list[i]];
+      // Renumber the whole group so ties and gaps can never confuse the order.
+      await env.DB.batch(list.map((g, k) =>
+        env.DB.prepare('UPDATE goats SET sort = ? WHERE id = ?').bind((k + 1) * 10, g.id)));
+      return json({ ok: true });
+    }
+
+    if (b.action === 'delete') {
+      const name = JSON.parse(row.data || '{}').name || row.id;
+      if (cleanText(b.confirm_name, 60).toLowerCase() !== String(name).toLowerCase()) {
+        throw new BadRequest('type the goat\'s name exactly to confirm deleting');
+      }
+      await env.DB.prepare('DELETE FROM goats WHERE id = ?').bind(row.id).run();
+      return json({ ok: true });
+    }
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
+// ---------------------------------------------------------------------------
+// Alerts — what needs attention, and telling someone about it
+//
+// notify() posts to NOTIFY_URL (a secret). Leave it unset and nothing is
+// ever sent anywhere; the admin screen's "Needs attention" box still works.
+// It speaks ntfy (https://ntfy.sh — free phone push, no account: install
+// the app, subscribe to a long random topic, set NOTIFY_URL to
+// https://ntfy.sh/<that-topic>) and Discord/Slack-style JSON webhooks.
+//
+// Messages carry order totals and counts only — never a customer's name,
+// email or phone — because the notification service can read them.
+//
+// Two cron triggers (wrangler.toml) drive the checks below:
+//   every 30 min   are both websites answering? Alert when one goes down
+//                  (two failures in a row) and again when it recovers.
+//   daily, 7am PT  card holds about to expire, orders waiting for review,
+//                  cash still to collect, checkouts Stripe never confirmed.
+// ---------------------------------------------------------------------------
+
+const DAY = 24 * 60 * 60 * 1000;
+const HOLD_DAYS = 7;          // how long a card authorization lasts
+const DIGEST_CRON = '0 14 * * *';
+
+async function notify(env, { title, message, priority, tags, click }) {
+  if (!env.NOTIFY_URL) return { sent: false, reason: 'NOTIFY_URL is not set' };
+  const url = String(env.NOTIFY_URL);
+  try {
+    let res;
+    if (/discord(app)?\.com\/api\/webhooks|hooks\.slack\.com/.test(url)) {
+      const text = '**' + title + '**\n' + message + (click ? '\n' + click : '');
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(/slack/.test(url) ? { text } : { content: text }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } else {
+      const headers = { title, priority: String(priority || 3) };
+      if (tags) headers.tags = tags;
+      if (click) headers.click = click;
+      res = await fetch(url, { method: 'POST', headers, body: message, signal: AbortSignal.timeout(8000) });
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return { sent: true };
+  } catch (err) {
+    console.error('notify failed: ' + err);
+    return { sent: false, reason: String(err.message || err) };
+  }
+}
+
+const dollars = (cents) => '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
+const adminUrl = () => String(config.store_url || '').replace(/\/+$/, '') + '/admin';
+
+/** Tell the farm a new order came in. Called once per order. */
+async function notifyNewOrder(env, saleId) {
+  const s = await env.DB.prepare('SELECT total_cents, payment_method, status, items_json FROM sales WHERE id = ?')
+    .bind(saleId).first();
+  if (!s) return;
+  let items = 0;
+  try { items = JSON.parse(s.items_json || '[]').reduce((n, l) => n + (Number(l.qty) || 0), 0); } catch { /* count stays 0 */ }
+  const how = s.payment_method === 'cash' ? 'cash at pickup'
+    : s.status === 'captured' ? 'paid by ' + (s.payment_method === 'ach' ? 'bank transfer' : 'card')
+    : s.payment_method === 'ach' ? 'bank transfer, processing'
+    : 'card held, not yet charged — review and capture';
+  return notify(env, {
+    title: 'New order: ' + dollars(s.total_cents),
+    message: (items ? items + (items === 1 ? ' item, ' : ' items, ') : '') + how + '.',
+    tags: 'shopping_cart',
+    click: adminUrl(),
+  });
+}
+
+/** Everything that needs a person, newest problems first. Shared by the
+ *  admin screen and the morning digest. */
+async function attentionItems(env) {
+  const now = Date.now();
+  const items = [];
+  const rows = (await env.DB.prepare(
+    "SELECT id, sold_at, status, payment_method, total_cents, notes FROM sales" +
+      " WHERE status IN ('authorized','awaiting_cash','pending')" +
+      " OR (notes LIKE '%DISPUTE OPENED%' AND sold_at >= ?)" +
+      ' ORDER BY sold_at'
+  ).bind(new Date(now - 90 * DAY).toISOString()).all()).results || [];
+
+  const held = rows.filter((r) => r.status === 'authorized' && r.payment_method === 'card');
+  for (const r of held) {
+    const left = HOLD_DAYS - (now - Date.parse(r.sold_at)) / DAY;
+    if (left <= 2) {
+      items.push({
+        level: 'urgent',
+        text: 'A ' + dollars(r.total_cents) + ' card hold ' +
+          (left <= 0 ? 'has probably expired' : 'expires in about ' + Math.max(1, Math.round(left * 24)) + ' hours') +
+          ' — capture or cancel it on the Orders tab.',
+      });
+    }
+  }
+  if (held.length) {
+    items.push({
+      level: 'todo',
+      text: held.length + (held.length === 1 ? ' order is' : ' orders are') + ' waiting for review (card held, not charged).',
+    });
+  }
+  const cash = rows.filter((r) => r.status === 'awaiting_cash');
+  if (cash.length) {
+    items.push({
+      level: 'todo',
+      text: cash.length + ' cash ' + (cash.length === 1 ? 'order' : 'orders') + ' to collect at pickup (' +
+        dollars(cash.reduce((n, r) => n + r.total_cents, 0)) + ').',
+    });
+  }
+  // Stripe expires an unfinished checkout after 24 hours and tells us so.
+  // A 'pending' row older than two days means that message never arrived.
+  const stuck = rows.filter((r) => r.status === 'pending' && now - Date.parse(r.sold_at) > 2 * DAY);
+  if (stuck.length) {
+    items.push({
+      level: 'urgent',
+      text: stuck.length + (stuck.length === 1 ? ' checkout has' : ' checkouts have') +
+        ' had no word from Stripe for over two days. Stripe may not be reaching the store — check the webhook in the Stripe dashboard.',
+    });
+  }
+  const disputes = rows.filter((r) => /DISPUTE OPENED/.test(r.notes || ''));
+  if (disputes.length) {
+    items.push({
+      level: 'urgent',
+      text: disputes.length + (disputes.length === 1 ? ' payment dispute' : ' payment disputes') +
+        ' opened in the last 90 days — answer them in the Stripe dashboard before the deadline.',
+    });
+  }
+  const down = (await env.DB.prepare("SELECT key, value, updated_at FROM alert_state WHERE key LIKE 'site:%' AND value = 'down'")
+    .all()).results || [];
+  for (const d of down) {
+    items.unshift({ level: 'urgent', text: d.key.slice(5) + ' is not answering (since ' + d.updated_at.slice(0, 16).replace('T', ' ') + ' UTC).' });
+  }
+  return items;
+}
+
+async function morningDigest(env) {
+  const items = await attentionItems(env);
+  if (!items.length) return;
+  const urgent = items.some((i) => i.level === 'urgent');
+  await notify(env, {
+    title: 'Farm store: ' + items.length + (items.length === 1 ? ' thing needs' : ' things need') + ' attention',
+    message: items.map((i) => '• ' + i.text).join('\n'),
+    priority: urgent ? 4 : 3,
+    tags: urgent ? 'warning' : 'clipboard',
+    click: adminUrl(),
+  });
+}
+
+/** Are both websites answering like a browser would see them? */
+async function siteChecks(env) {
+  const targets = [
+    [String(config.farm_url || '').replace(/\/+$/, '') + '/', 'A Little Hill Farm'],
+    [String(config.farm_url || '').replace(/\/+$/, '') + '/does.html', 'A Little Hill Farm'],
+    [String(config.store_url || '').replace(/\/+$/, '') + '/api/catalog', '"products"'],
+  ];
+  const results = [];
+  for (const [url, expect] of targets) {
+    let ok = false;
+    let why = '';
+    try {
+      // Browser page-load headers: the asset layer answers those differently
+      // from a plain fetch, which is exactly how the home page once 404'd
+      // for every visitor while command-line checks passed.
+      const res = await fetch(url, {
+        headers: { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document', accept: 'text/html,application/json' },
+        signal: AbortSignal.timeout(10000),
+        cf: { cacheTtl: 0 },
+      });
+      const body = await res.text();
+      ok = res.status === 200 && body.includes(expect);
+      why = ok ? '' : 'HTTP ' + res.status;
+    } catch (err) {
+      why = String(err.message || err);
+    }
+    results.push({ url, ok, why });
+
+    const key = 'site:' + url;
+    const prev = await env.DB.prepare('SELECT value FROM alert_state WHERE key = ?').bind(key).first();
+    const was = prev ? prev.value : 'up';
+    // One failure can be a blip; two in a row (an hour apart at most) is real.
+    const next = ok ? 'up' : was === 'up' ? 'failing' : 'down';
+    if (next !== was) {
+      await env.DB.prepare(
+        'INSERT INTO alert_state (key, value, updated_at) VALUES (?,?,?)' +
+          ' ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+      ).bind(key, next, new Date().toISOString()).run();
+      if (next === 'down') {
+        await notify(env, { title: 'Website down', message: url + ' is not answering (' + why + ').', priority: 5, tags: 'rotating_light', click: url });
+      } else if (next === 'up' && was === 'down') {
+        await notify(env, { title: 'Website back up', message: url + ' is answering again.', tags: 'white_check_mark', click: url });
+      }
+    }
+  }
+  console.log('site checks: ' + results.map((r) => (r.ok ? 'ok ' : 'FAIL ') + r.url + (r.why ? ' (' + r.why + ')' : '')).join('; '));
+  return results;
+}
+
+async function scheduled(event, env) {
+  if (event.cron === DIGEST_CRON) await morningDigest(env);
+  else await siteChecks(env);
+}
+
+// ---------------------------------------------------------------------------
 // Admin
 // ---------------------------------------------------------------------------
 
@@ -735,6 +1141,22 @@ async function adminRoutes(path, request, env) {
     res.headers.set('x-robots-tag', 'noindex, nofollow');
     res.headers.set('referrer-policy', 'no-referrer');
     return res;
+  }
+
+  if (path === '/api/admin/goats') return adminGoats(request, env);
+
+  if (path === '/api/admin/attention') {
+    return json({ items: await attentionItems(env), alerts_configured: !!env.NOTIFY_URL });
+  }
+
+  if (path === '/api/admin/test-alert' && request.method === 'POST') {
+    const r = await notify(env, {
+      title: 'Test alert from the farm store',
+      message: 'If you can read this on your phone, store alerts are working.',
+      tags: 'white_check_mark',
+      click: adminUrl(),
+    });
+    return json(r, r.sent ? 200 : 400);
   }
 
   if (path === '/api/admin/sales') {

@@ -7,8 +7,8 @@ framework, no container. The only thing to keep patched is nothing.
 ```
 config.json    operational settings — pickup spots, tax rate, discounts, terms
 products.json  the catalog. edit, commit, deploy.
-schema.sql     the ledger — four tables
-worker.js      the entire application (~1,000 lines)
+schema.sql     every table: the ledger, customers, product settings, goats, alert state
+worker.js      the entire application (~1,500 lines)
 wrangler.toml  deploy config
 public/        the storefront
 ```
@@ -174,8 +174,10 @@ site's test address, because the apex belongs to Shopify until step 3. In order:
    test below. Deactivate the *Goat Breath* test product.
 3. **Farm site.** Attach `alittlehillfarm.com` and `www` to `alhf-site`
    (replacing the Shopify records), then change the farm links in
-   `store/public/*.html` back to the apex. Cancel Shopify only after both sites
-   have served real traffic for a few days.
+   `store/public/*.html` back to the apex, and set `farm_url` in
+   `config.json` to `https://alittlehillfarm.com` (the Goats tab's links and
+   the site checks use it). Cancel Shopify only after both sites have served
+   real traffic for a few days.
 
 Find every remaining test address with:
 `grep -rl shiny-band-89b4 --include=*.html --include=*.py .`
@@ -282,6 +284,44 @@ the same ledger, so the quarterly report covers everything, not just the website
 **Quarterly Idaho filing.** Admin → Tax report, enter the quarter dates. Gross,
 exempt, taxable subtotal and tax collected.
 
+**The herd pages.** Admin → Goats. Add a goat, change her photos, notes,
+pedigree or badge, reorder the Does and Bucks pages with the arrows, or set
+a sold goat to *Hidden*. Saving is publishing — the farm site reads the same
+database, so the change is live on the next page load. New goats start
+hidden. Photos are shrunk in the browser before upload (and lose their GPS
+tag), so upload straight from the phone.
+
+**Needs attention.** The box at the top of the Orders tab lists card holds
+about to expire, orders waiting for review, cash to collect, checkouts Stripe
+never confirmed, disputes, and a website that is down. The morning alert
+sends the same list.
+
+---
+
+## Alerts
+
+The store can push alerts to a phone: each new order, a payment dispute, a
+website going down (and coming back), and a 7am digest of anything in *Needs
+attention*. Messages carry totals and counts only — never a customer's name
+or contact details.
+
+It is off until `NOTIFY_URL` is set. The simplest option is
+[ntfy](https://ntfy.sh) — free, no account:
+
+1. Install the ntfy app on each phone that should get alerts.
+2. Make up a long, unguessable topic name (anyone who knows it can read the
+   alerts), e.g. `alhf-` followed by 20 random letters and digits.
+3. Subscribe to that topic in the app on each phone.
+4. `printf '%s' 'https://ntfy.sh/<your-topic>' | npx wrangler secret put NOTIFY_URL`
+5. Admin → Orders → *Send a test alert*.
+
+A Discord or Slack incoming-webhook URL works in step 4 too.
+
+The site checks run every 30 minutes and look at pages the way a browser
+does (`siteChecks` in worker.js); one failure is ignored as a blip, two in a
+row send the alert. Stripe separately emails the account owner when its
+webhook keeps failing — worth leaving on in Stripe's notification settings.
+
 ---
 
 ## Changing things
@@ -292,6 +332,8 @@ exempt, taxable subtotal and tax collected.
 | A genuinely new product, or its name/photo/description | `products.json` | commit + `wrangler deploy` |
 | Pickup locations, tax rate, discounts | `config.json` | commit + `wrangler deploy` |
 | The pre-order terms text | `config.json` — **bump `terms.version`** | commit + deploy |
+| **A goat's page, photos, order, or shown/hidden** | **`/admin` → Goats** | **nothing — live on save** |
+| Where alerts go | `NOTIFY_URL` secret (see *Alerts*) | `wrangler secret put` |
 
 Set `active: true` on a product to put it on sale. Everything that sold on
 Shopify between 2022 and September 2026 is on, except the bulk totes and
