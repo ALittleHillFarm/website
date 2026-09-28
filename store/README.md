@@ -133,9 +133,14 @@ Block  if Postal code verification fails based on risk score
 Put the values in `.env` (gitignored), then:
 
 ```bash
-npx wrangler secret bulk .env
+python push-secrets.py     # checks .env without printing values, then uploads it
 npx wrangler deploy
 ```
+
+`push-secrets.py --check` reports each key's kind (live or test Stripe key,
+webhook secret, password length) and refuses to upload a `#`, an empty value,
+or a malformed key. It never prints a secret, so it is safe to have an AI
+assistant run it for you.
 
 > **Never put a `#` in a secret.** Wrangler parses `.env` with `#` as a comment
 > marker, so `ADMIN_PASSWORD=abc#def` uploads silently as just `abc`. Quoting
