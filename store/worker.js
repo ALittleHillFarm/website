@@ -180,7 +180,11 @@ async function productPage(request, env) {
     '@type': 'Product',
     name: p.name,
     image,
-    description: plain || undefined,
+    // Google wants a description on every product; some have none in the
+    // catalog, so say plainly what it is.
+    description: plain ||
+      (p.name + (p.unit ? ', ' + p.unit : '') + (p.supplier ? ', from ' + p.supplier : '') +
+        '. Pre-ordered through A Little Hill Farm and picked up locally in North Idaho.'),
     brand: p.supplier ? { '@type': 'Brand', name: p.supplier } : undefined,
     offers: {
       '@type': 'Offer',
@@ -189,6 +193,23 @@ async function productPage(request, env) {
       availability: 'https://schema.org/PreOrder',
       url: pageUrl,
       seller: { '@type': 'Organization', name: 'A Little Hill Farm' },
+      // Pickup only — we don't ship (policies.html#pickup).
+      availableDeliveryMethod: 'https://schema.org/OnSitePickup',
+      shippingDetails: {
+        '@type': 'OfferShippingDetails',
+        doesNotShip: true,
+        shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'US' },
+      },
+      // The store's return policy (policies.html#returns): 10 days, in person.
+      hasMerchantReturnPolicy: {
+        '@type': 'MerchantReturnPolicy',
+        applicableCountry: 'US',
+        returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        merchantReturnDays: 10,
+        returnMethod: 'https://schema.org/ReturnInStore',
+        returnFees: 'https://schema.org/FreeReturn',
+        merchantReturnLink: url.origin + '/policies#returns',
+      },
     },
   };
 
