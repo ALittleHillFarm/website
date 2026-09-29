@@ -14,7 +14,8 @@
  *   ASSETS                 static storefront files
  *   STRIPE_SECRET_KEY      secret
  *   STRIPE_WEBHOOK_SECRET  secret
- *   ADMIN_PASSWORD         secret
+ *   ADMIN_EMAILS           secret — who may use /admin once signed in
+ *   ADMIN_PASSWORD         secret — emergency admin login only (/admin?password)
  *   NOTIFY_URL             secret, optional — where alerts go (see Alerts)
  *   SESSION_SECRET         secret — signs customer sign-in cookies (see sign-in)
  *   RESEND_API_KEY         secret, optional — sends sign-in codes and order emails
@@ -57,7 +58,7 @@ export default {
       if (path === '/robots.txt') return robots(request);
 
       if (path === '/admin' || path.startsWith('/api/admin/')) {
-        const denied = requireAdmin(request, env);
+        const denied = await requireAdmin(request, env, path);
         if (denied) return denied;
         return adminRoutes(path, request, env);
       }
@@ -878,6 +879,7 @@ async function authRoutes(path, request, env) {
       signed_in: true,
       methods,
       email,
+      is_admin: adminEmails(env).includes(email),
       name: c.name || '',
       phone: c.phone || '',
       tax_exempt: !!c.tax_exempt,
@@ -1507,27 +1509,61 @@ async function scheduled(event, env) {
 // Admin
 // ---------------------------------------------------------------------------
 
-function requireAdmin(request, env) {
+/** The approved admin emails, from the ADMIN_EMAILS secret (kept out of the
+ *  public repo). Comma- or space-separated. */
+function adminEmails(env) {
+  return String(env.ADMIN_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+}
+
+/** Who is using the admin: a signed-in approved email, or 'password' for the
+ *  emergency ADMIN_PASSWORD login. '' = nobody allowed. */
+async function adminIdentity(request, env) {
+  const who = await sessionEmail(request, env);
+  if (who && adminEmails(env).includes(who)) return who;
+
+  // Emergency fallback, if sign-in is ever broken: HTTP Basic with
+  // ADMIN_PASSWORD. The browser only asks for it at /admin?password.
   const header = request.headers.get('authorization') || '';
-  const unauthorized = new Response('Authentication required', {
-    status: 401,
-    headers: { 'www-authenticate': 'Basic realm="A Little Hill Farm"' },
-  });
-
-  if (!header.startsWith('Basic ')) return unauthorized;
-
-  let decoded;
-  try {
-    decoded = atob(header.slice(6));
-  } catch {
-    return unauthorized;
+  if (header.startsWith('Basic ') && env.ADMIN_PASSWORD) {
+    let decoded = '';
+    try { decoded = atob(header.slice(6)); } catch { /* not base64 */ }
+    const password = decoded.slice(decoded.indexOf(':') + 1);
+    if (timingSafeEqual(password, env.ADMIN_PASSWORD)) return 'password';
   }
+  return '';
+}
 
-  const password = decoded.slice(decoded.indexOf(':') + 1);
-  if (!env.ADMIN_PASSWORD || !timingSafeEqual(password, env.ADMIN_PASSWORD)) {
-    return unauthorized;
+/** null = go ahead; otherwise the response to send instead. */
+async function requireAdmin(request, env, path) {
+  const url = new URL(request.url);
+  if (await adminIdentity(request, env)) {
+    // Admin changes must come from our own pages. SameSite cookies already
+    // stop other sites riding the session; this is the second lock.
+    const origin = request.headers.get('origin');
+    if (request.method !== 'GET' && origin && origin !== url.origin) {
+      return json({ error: 'request came from another site' }, 403);
+    }
+    return null;
   }
-  return null;
+  if (path === '/admin') {
+    if (url.searchParams.has('password')) {
+      return new Response('Authentication required', {
+        status: 401, headers: { 'www-authenticate': 'Basic realm="A Little Hill Farm"' },
+      });
+    }
+    const who = await sessionEmail(request, env);
+    if (who) {
+      return new Response(
+        '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">' +
+          '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.6">' +
+          '<h1 style="font-weight:500">Not an admin account</h1><p>You are signed in as <strong>' + escHtml(who) +
+          '</strong>, which is not on the admin list.</p><p><a href="/account">Your account</a> — log out there and sign in with an admin email.</p>',
+        { status: 403, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    }
+    return Response.redirect(url.origin + '/account?return=' + encodeURIComponent('/admin'), 302);
+  }
+  // No WWW-Authenticate here: a missing session must not pop up a password box.
+  return json({ error: 'Sign in with an admin account.' }, 401);
 }
 
 async function adminRoutes(path, request, env) {

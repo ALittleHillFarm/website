@@ -41,7 +41,7 @@
   <section class="page-head" style="padding-bottom:24px">
     <p class="eyebrow">Staff only</p>
     <h1 class="serif" style="font-size:clamp(32px,4vw,46px)">Order review console</h1>
-    <p class="lede">Your browser will ask for the admin username and password the first time this page talks to the server.</p>
+    <p class="lede" id="admin-who">Signed in with your own account. <a href="/account">Account &amp; log out</a></p>
   </section>
 
   <div class="tabs" role="tablist" aria-label="Admin sections">
@@ -1056,6 +1056,16 @@
   document.getElementById('inv-search').addEventListener('input', renderInventoryList);
   document.getElementById('inv-show-all').addEventListener('change', renderInventoryList);
   document.getElementById('refresh-inventory').addEventListener('click', loadInventory);
+
+  // Who is signed in (a shared password is only the emergency fallback).
+  getJSON('/api/me').then(function (me) {
+    var el = document.getElementById('admin-who');
+    if (me && me.signed_in) {
+      el.innerHTML = 'Signed in as <strong>' + esc(me.email) + '</strong> · <a href="/account">Account &amp; log out</a>';
+    } else {
+      el.textContent = 'Signed in with the emergency admin password.';
+    }
+  }).catch(function () {});
 
   // ---- boot ---------------------------------------------------------------
   getJSON('/api/config').then(function (config) {

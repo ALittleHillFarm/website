@@ -138,7 +138,8 @@
       (me.tax_exempt ? '<p class="hint">Your tax exemption is applied automatically when you check out while logged in.</p>' : '') +
       '<div class="rule-head" style="margin-top:36px"><h2 class="serif" style="font-size:26px">Your orders</h2><div class="rule"></div></div>' +
       (orders || '<p class="empty-note">No orders yet. <a href="index.html">Browse the store</a>.</p>') +
-      '<p style="margin-top:36px"><a class="btn" href="index.html">Shop the store</a> ' +
+      '<p style="margin-top:36px">' + (me.is_admin ? '<a class="btn" href="/admin">Open the admin →</a> ' : '') +
+        '<a class="btn' + (me.is_admin ? ' ghost' : '') + '" href="index.html">Shop the store</a> ' +
         '<button type="button" class="btn ghost" id="logout">Log out</button></p>';
     document.getElementById('logout').addEventListener('click', function () {
       post('/api/auth/logout').then(function () { location.href = 'index.html'; });

@@ -22,7 +22,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV = os.path.join(HERE, '.env')
 REQUIRED = ['ADMIN_PASSWORD', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
-OPTIONAL = ['SESSION_SECRET', 'RESEND_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'NOTIFY_URL']
+OPTIONAL = ['ADMIN_EMAILS', 'SESSION_SECRET', 'RESEND_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'NOTIFY_URL']
 
 
 def read_env(path):
@@ -59,6 +59,10 @@ def describe(key, v):
         return 'webhook signing secret' if v.startswith('whsec_') else 'not a webhook secret (should start whsec_)'
     if key == 'ADMIN_PASSWORD':
         return f'{len(v)} characters' + ('' if len(v) >= 12 else ' — use at least 12')
+    if key == 'ADMIN_EMAILS':
+        emails = [e for e in v.replace(';', ',').replace(' ', ',').split(',') if e]
+        bad = [e for e in emails if '@' not in e]
+        return f'{len(emails)} admin email(s)' + (f' — not emails: {len(bad)}' if bad else '')
     if key == 'SESSION_SECRET':
         return f'{len(v)} characters' + ('' if len(v) >= 32 else ' — too short, delete the line to regenerate')
     if key == 'RESEND_API_KEY':
