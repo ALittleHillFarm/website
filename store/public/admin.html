@@ -73,6 +73,7 @@
           <option value="authorized" selected>Authorized (card held — awaiting capture)</option>
           <option value="processing">Processing (bank transfer on its way)</option>
           <option value="failed">Failed (bank transfer bounced)</option>
+          <option value="refunded">Refunded</option>
           <option value="captured">Captured</option>
           <option value="pending">Pending</option>
           <option value="canceled">Canceled</option>
@@ -338,6 +339,7 @@
     processing: 'badge muted',
     failed: 'badge rust',
     captured: 'badge moss',
+    refunded: 'badge muted',
     canceled: 'badge rust',
     recorded: 'badge muted',
     pending: 'badge muted'
@@ -360,6 +362,11 @@
         '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Capture</button>' +
         '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Capture partial…</button>';
     }
+    if (sale.status === 'captured' || sale.status === 'recorded') {
+      actions += '<button type="button" class="btn small ghost" data-action="refund" data-sale="' + esc(sale.id) +
+        '" data-left="' + (Number(sale.total_cents) - Number(sale.refunded_cents || 0)) +
+        '" data-method="' + esc(sale.payment_method || '') + '">Refund…</button>';
+    }
     if (sale.status === 'authorized' || sale.status === 'pending') {
       actions += '<button type="button" class="btn small rust" data-action="cancel" data-sale="' + esc(sale.id) + '">Cancel</button>';
     }
@@ -380,6 +387,8 @@
           '<div><div class="label">Pickup</div><div class="v">' + esc(pickupLabel(sale.fulfillment)) + '</div></div>' +
           '<div><div class="label">Placed</div><div class="v">' + esc(timeAgo(sale.sold_at)) + '</div></div>' +
           '<div><div class="label">Payment</div><div class="v">' + esc(sale.payment_method || '') + '</div></div>' +
+          (Number(sale.refunded_cents) > 0
+            ? '<div><div class="label">Refunded</div><div class="v">' + money(sale.refunded_cents) + '</div></div>' : '') +
         '</div>' +
         '<div class="checklist">' + checklist + '</div>' +
         (actions ? '<div class="actions">' + actions + '</div>' : '') +
@@ -460,6 +469,22 @@
       var cents = Math.round(parseFloat(dollars) * 100);
       if (!isFinite(cents) || cents <= 0) { window.alert('Enter a dollar amount greater than zero.'); return; }
       job = runAction('/api/admin/capture', { sale_id: saleId, amount_cents: cents });
+    } else if (action === 'refund') {
+      var leftCents = Number(btn.getAttribute('data-left'));
+      var viaStripe = ['card', 'ach'].indexOf(btn.getAttribute('data-method')) > -1;
+      var amt = window.prompt(
+        'Refund how much, in dollars? Up to ' + money(leftCents) + '.\n\n' +
+        (viaStripe
+          ? 'This sends money back through Stripe. Stripe keeps its processing fee, so a refund costs about 3% of the sale. The customer is emailed.'
+          : 'Cash/check: this only records that you handed the money back. The customer is emailed.'),
+        (leftCents / 100).toFixed(2));
+      if (amt === null) return;
+      var refundCents = Math.round(parseFloat(amt) * 100);
+      if (!isFinite(refundCents) || refundCents <= 0 || refundCents > leftCents) {
+        window.alert('Enter an amount between $0.01 and ' + money(leftCents) + '.'); return;
+      }
+      if (!window.confirm('Refund ' + money(refundCents) + '? This cannot be undone.')) return;
+      job = runAction('/api/admin/refund', { sale_id: saleId, amount_cents: refundCents });
     } else if (action === 'cancel') {
       var ok = window.confirm(
         'Cancel this order?\n\nThis costs nothing — the card was only ever authorized, not charged. ' +
@@ -546,6 +571,14 @@
         '<div><div class="n">' + money(r.tax_collected_cents) + '</div><div class="l">Tax collected</div></div>' +
         '<div><div class="n">' + money(r.exempt_cents) + '</div><div class="l">Exempt sales</div></div>' +
       '</section>' +
+      (Number(r.refunds) > 0
+        ? '<div class="by-category" style="margin-bottom:22px">' +
+            '<div class="row"><span>Refunds given in this period <span class="n">(' + Number(r.refunds) + ')</span></span><span>−' + money(r.refunds_cents) + '</span></div>' +
+            '<div class="row"><span>Tax refunded</span><span>−' + money(r.refunded_tax_cents) + '</span></div>' +
+            '<div class="row"><span><strong>Net sales</strong></span><span><strong>' + money(r.net_gross_cents) + '</strong></span></div>' +
+            '<div class="row"><span><strong>Net tax to report</strong></span><span><strong>' + money(r.net_tax_cents) + '</strong></span></div>' +
+          '</div>'
+        : '') +
       '<h3 class="serif" style="font-size:18px;margin-bottom:4px">By category</h3>' +
       '<div class="by-category">' + (rows || '<p class="empty-note">No sales in this period.</p>') + '</div>';
   }

@@ -81,7 +81,9 @@ CREATE TABLE sales (
   -- checklist, e.g. {"received":"2026-09-20","supplier_ordered":null,...}
   notified_json         TEXT,
 
-  notes                 TEXT
+  notes                 TEXT,
+  refunded_cents        INTEGER NOT NULL DEFAULT 0,  -- running total refunded
+  refunded_at           TEXT                         -- when the latest refund was given
 );
 
 CREATE INDEX idx_sales_sold_at   ON sales (sold_at);

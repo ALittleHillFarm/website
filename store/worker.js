@@ -645,6 +645,19 @@ async function apiWebhook(request, env, ctx) {
       break;
     }
 
+    // A refund - from the admin's Refund button or straight from the Stripe
+    // dashboard. amount_refunded is the running total, so replays and
+    // several partial refunds all land correctly.
+    case 'charge.refunded':
+      if (obj.payment_intent) {
+        await env.DB.prepare(
+          'UPDATE sales SET refunded_cents = ?, refunded_at = ?,' +
+            " status = CASE WHEN ? >= total_cents THEN 'refunded' ELSE status END" +
+            ' WHERE stripe_payment_intent = ? AND refunded_cents < ?'
+        ).bind(obj.amount_refunded, new Date().toISOString(), obj.amount_refunded, obj.payment_intent, obj.amount_refunded).run();
+      }
+      break;
+
     case 'charge.dispute.created':
       await env.DB.prepare(
         "UPDATE sales SET notes = COALESCE(notes,'') || ' [DISPUTE OPENED ' || ? || ']'" +
@@ -1735,7 +1748,18 @@ async function adminRoutes(path, request, env) {
         ' COALESCE(SUM(cogs_cents),0)     AS cogs_cents,' +
         ' COALESCE(SUM(CASE WHEN tax_exempt=1 THEN total_cents ELSE 0 END),0) AS exempt_cents' +
         ' FROM sales' +
-        " WHERE status IN ('captured','recorded') AND sold_at >= ? AND sold_at < ?"
+        " WHERE status IN ('captured','recorded','refunded') AND sold_at >= ? AND sold_at < ?"
+    )
+      .bind(from, to)
+      .first();
+
+    // Refunds count in the period they were GIVEN, not the period of the sale:
+    // a September sale refunded in October reduces October's sales tax.
+    // Tax on a refund is its share of that sale's tax.
+    const refunds = await env.DB.prepare(
+      'SELECT COUNT(*) AS n, COALESCE(SUM(refunded_cents),0) AS cents,' +
+        ' COALESCE(SUM(CASE WHEN total_cents > 0 THEN ROUND(refunded_cents * 1.0 * tax_cents / total_cents) ELSE 0 END),0) AS tax_cents' +
+        ' FROM sales WHERE refunded_cents > 0 AND refunded_at >= ? AND refunded_at < ?'
     )
       .bind(from, to)
       .first();
@@ -1745,7 +1769,7 @@ async function adminRoutes(path, request, env) {
         ' COALESCE(SUM(total_cents),0) AS total_cents,' +
         ' COALESCE(SUM(cogs_cents),0)  AS cogs_cents' +
         ' FROM sales' +
-        " WHERE status IN ('captured','recorded') AND sold_at >= ? AND sold_at < ?" +
+        " WHERE status IN ('captured','recorded','refunded') AND sold_at >= ? AND sold_at < ?" +
         ' GROUP BY category ORDER BY total_cents DESC'
     )
       .bind(from, to)
@@ -1756,8 +1780,14 @@ async function adminRoutes(path, request, env) {
       ...row,
       // Schedule F wants revenue and COGS separately. Revenue excludes the
       // sales tax we collected on the state's behalf — that is not income.
-      revenue_cents: row.subtotal_cents,
-      gross_margin_cents: row.subtotal_cents - row.cogs_cents,
+      refunds: refunds.n,
+      refunds_cents: refunds.cents,
+      refunded_tax_cents: refunds.tax_cents,
+      // What to report: collected minus refunded in this period.
+      net_gross_cents: row.gross_cents - refunds.cents,
+      net_tax_cents: row.tax_collected_cents - refunds.tax_cents,
+      revenue_cents: row.subtotal_cents - (refunds.cents - refunds.tax_cents),
+      gross_margin_cents: row.subtotal_cents - (refunds.cents - refunds.tax_cents) - row.cogs_cents,
       by_category: byCategory.results.map((c) => ({
         ...c,
         gross_margin_cents: c.total_cents - c.cogs_cents,
@@ -1857,6 +1887,54 @@ async function adminRoutes(path, request, env) {
 
     await env.DB.prepare("UPDATE sales SET status = 'captured' WHERE id = ?").bind(sale_id).run();
     return json({ ok: true, captured_cents: captured });
+  }
+
+  // Give money back on a paid order - all of it or part. Card and bank
+  // payments are refunded through Stripe (which keeps its processing fee);
+  // cash and check are just recorded, since the money is handed back by hand.
+  if (path === '/api/admin/refund') {
+    const { sale_id, amount_cents } = await request.json();
+    const sale = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(sale_id).first();
+    if (!sale) return json({ error: 'not found' }, 404);
+    if (!['captured', 'recorded'].includes(sale.status)) {
+      return json({ error: 'only a paid order can be refunded (this one is ' + sale.status + ')' }, 400);
+    }
+    const left = sale.total_cents - (sale.refunded_cents || 0);
+    const amount = amount_cents == null ? left : Math.round(Number(amount_cents));
+    if (!Number.isFinite(amount) || amount < 1 || amount > left) {
+      return json({ error: 'refund must be between $0.01 and ' + dollars(left) }, 400);
+    }
+    if (sale.stripe_payment_intent) {
+      const form = new URLSearchParams({ payment_intent: sale.stripe_payment_intent, amount: String(amount) });
+      form.set('metadata[sale_id]', sale.id);
+      try {
+        await stripe(env, 'POST', '/refunds', form, 'rf_' + sale.id + '_' + (sale.refunded_cents || 0) + '_' + amount);
+      } catch (err) {
+        return json({ error: String(err.message || err) }, 502);
+      }
+    }
+    const total = (sale.refunded_cents || 0) + amount;
+    await env.DB.prepare(
+      'UPDATE sales SET refunded_cents = ?, refunded_at = ?,' +
+        " status = CASE WHEN ? >= total_cents THEN 'refunded' ELSE status END WHERE id = ?"
+    ).bind(total, new Date().toISOString(), total, sale.id).run();
+
+    if (sale.customer_email) {
+      const how = sale.stripe_payment_intent
+        ? 'It goes back to the ' + (sale.payment_method === 'ach' ? 'bank account' : 'card') +
+          ' you paid with and usually appears within 5-10 business days.'
+        : 'We will hand it back to you in person.';
+      await sendEmail(env, {
+        to: sale.customer_email,
+        subject: 'Refund from A Little Hill Farm: ' + dollars(amount),
+        text: 'We have refunded ' + dollars(amount) + ' on your order ' + sale.id.slice(0, 8) + '. ' + how +
+          '\n\nQuestions? Just reply to this email.',
+        html: emailShell('<p style="margin:0 0 12px">We have refunded <strong>' + dollars(amount) +
+          '</strong> on your order.</p><p style="margin:0 0 12px">' + escHtml(how) + '</p>' +
+          '<p style="margin:0;color:#6B6353;font-size:13px">Order reference: ' + escHtml(sale.id.slice(0, 8)) + '</p>'),
+      });
+    }
+    return json({ ok: true, refunded_cents: total, fully: total >= sale.total_cents });
   }
 
   if (path === '/api/admin/cancel') {
