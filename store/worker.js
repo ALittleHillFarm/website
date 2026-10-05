@@ -28,6 +28,12 @@ import config from './config.json';
 
 const STRIPE = 'https://api.stripe.com/v1';
 
+/** The short order number shown everywhere: emails, admin, account page, Stripe. */
+const orderRef = (saleId) => String(saleId).slice(0, 8);
+
+const pickupLabel = (id) =>
+  (config.pickup_locations.find((l) => l.id === String(id || '').replace(/^pickup:/, '')) || {}).label || String(id || '');
+
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
@@ -500,6 +506,19 @@ async function apiCheckout(request, env, ctx) {
   form.set('metadata[sale_id]', saleId);
   form.set('metadata[pickup]', pickup);
   form.set('metadata[terms_version]', config.terms.version);
+
+  // What a person sees in the Stripe dashboard and its emails instead of a
+  // bare pi_... id: the same short order number the customer and admin use,
+  // who bought it, and what. Stripe caps descriptions at 1000 characters.
+  const ref = orderRef(saleId);
+  const itemsText = quote.lines.map((l) => l.qty + ' × ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')).join(', ');
+  form.set('payment_intent_data[description]',
+    ('Order ' + ref + ' · ' + name + ' · ' + itemsText).slice(0, 1000));
+  form.set('payment_intent_data[metadata][order]', ref);
+  form.set('payment_intent_data[metadata][customer]', name.slice(0, 500));
+  form.set('payment_intent_data[metadata][items]', itemsText.slice(0, 500));
+  form.set('payment_intent_data[metadata][pickup]', pickupLabel(pickup).slice(0, 500));
+  form.set('payment_intent_data[metadata][sale_id]', saleId);
 
   if (method === 'ach') {
     // ACH cannot authorize-then-capture: it debits at checkout, with no review
@@ -1383,12 +1402,50 @@ async function notifyNewOrder(env, saleId) {
     : s.status === 'captured' ? 'paid by ' + (s.payment_method === 'ach' ? 'bank transfer' : 'card')
     : s.payment_method === 'ach' ? 'bank transfer, processing'
     : 'card held, not yet charged — review and capture';
+  await sendFarmOrderEmail(env, saleId, how);
   return notify(env, {
     title: 'New order: ' + dollars(s.total_cents),
     message: (items ? items + (items === 1 ? ' item, ' : ' items, ') : '') + how + '.',
     tags: 'shopping_cart',
     click: adminUrl(),
   });
+}
+
+/** The farm's own copy of a new order, in plain words: who, what, how they
+ *  paid, where they'll pick up, and what to do next. Sent to config
+ *  email.orders_to. Unlike the phone alert, this one names the customer -
+ *  it goes to our own inbox. */
+async function sendFarmOrderEmail(env, saleId, how) {
+  const to = config.email && config.email.orders_to;
+  if (!to) return;
+  const s = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(saleId).first();
+  if (!s) return;
+  const lines = JSON.parse(s.items_json || '[]');
+  const ref = orderRef(s.id);
+  const next = s.status === 'authorized'
+    ? 'Review it in the admin, then Capture when you place the supplier order (or Cancel - free). The hold lasts 7 days.'
+    : s.payment_method === 'cash' ? 'Collect cash at pickup, then press Collected in the admin.'
+    : s.payment_method === 'ach' && s.status !== 'captured' ? 'Nothing to do yet - the bank transfer settles in a few business days.'
+    : 'Paid. Add it to the next supplier order.';
+  const rows = lines.map((l) => '<tr><td style="padding:5px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
+    (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') + '</td><td style="padding:5px 0;text-align:right">' +
+    dollars(l.line_total_cents) + '</td></tr>').join('');
+  const html = emailShell(
+    '<p style="margin:0 0 6px;font-size:20px;color:#1E1B16">Order ' + escHtml(ref) + ' · ' + dollars(s.total_cents) + '</p>' +
+    '<p style="margin:0 0 14px">' + escHtml(s.customer_name || '') + ' · ' + escHtml(s.customer_email || '') +
+      (s.customer_phone ? ' · ' + escHtml(s.customer_phone) : '') + '</p>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
+    '<p style="margin:0 0 6px"><strong>Payment:</strong> ' + escHtml(how) + (s.tax_exempt ? ' (tax-exempt)' : '') + '</p>' +
+    '<p style="margin:0 0 6px"><strong>Pickup:</strong> ' + escHtml(pickupLabel(s.fulfillment)) + '</p>' +
+    '<p style="margin:0 0 16px"><strong>Next:</strong> ' + escHtml(next) + '</p>' +
+    '<p style="margin:0"><a href="' + adminUrl() + '" style="background:#59803D;color:#fff;text-decoration:none;padding:10px 18px;border-radius:2px;display:inline-block">Open the admin</a></p>');
+  const text = ['Order ' + ref + ' - ' + dollars(s.total_cents),
+    (s.customer_name || '') + ' <' + (s.customer_email || '') + '>' + (s.customer_phone ? ' ' + s.customer_phone : ''),
+    '',
+    ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')),
+    '',
+    'Payment: ' + how, 'Pickup: ' + pickupLabel(s.fulfillment), 'Next: ' + next, '', adminUrl()].join('\n');
+  await sendEmail(env, { to, subject: 'New order ' + ref + ' · ' + (s.customer_name || 'customer') + ' · ' + dollars(s.total_cents), text, html });
 }
 
 /** Everything that needs a person, newest problems first. Shared by the

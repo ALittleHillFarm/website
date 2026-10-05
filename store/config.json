@@ -7,7 +7,8 @@
   "email": {
     "from": "A Little Hill Farm <orders@mail.alittlehillfarm.com>",
     "reply_to": "christine@alittlehillfarm.com",
-    "_note": "Sender for sign-in codes and order confirmations (Resend). The from-domain must be verified in Resend; replies go to reply_to."
+    "_note": "Sender for sign-in codes and order confirmations (Resend). The from-domain must be verified in Resend; replies go to reply_to. orders_to gets the farm's own new-order email (customer, items, pickup, next step).",
+    "orders_to": "christine@alittlehillfarm.com"
   },
   "tax": {
     "idaho_rate_bps": 600,

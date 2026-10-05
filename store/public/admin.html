@@ -378,7 +378,7 @@
         '<div class="top">' +
           '<div>' +
             '<h3>' + esc(sale.customer_name || 'Unnamed customer') + '</h3>' +
-            '<div class="email">' + esc(sale.customer_email || '') + '</div>' +
+            '<div class="email">Order ' + esc(String(sale.id).slice(0, 8)) + ' · ' + esc(sale.customer_email || '') + '</div>' +
           '</div>' +
           '<span class="' + badgeClass + '">' + esc(sale.status === 'captured' ? 'paid' : sale.status) + '</span>' +
         '</div>' +
