@@ -13,7 +13,7 @@
   var tab = document.getElementById('tab-invoice');
   if (!host || !tab) return;
 
-  var state = { products: [], customers: [], pickups: [], lines: [], loaded: false, busy: false };
+  var state = { products: [], customers: [], pickups: [], lines: [], recent: [], recentFor: '', loaded: false, busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -81,15 +81,17 @@
     host.innerHTML =
       '<datalist id="inv-products">' + state.products.map(function (p) { return '<option value="' + esc(productLabel(p)) + '">'; }).join('') + '</datalist>' +
       '<datalist id="inv-customers">' + state.customers.map(function (c) { return '<option value="' + esc(c.email) + '">' + esc(c.name || '') + '</option>'; }).join('') + '</datalist>' +
+      '<datalist id="inv-names">' + state.customers.filter(function (c) { return c.name; }).map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.email) + '</option>'; }).join('') + '</datalist>' +
       '<div id="inv-msg"></div>' +
       '<fieldset class="goat-set"><legend>Customer</legend><div class="form-grid">' +
-        '<div class="field"><label for="inv-email">Email</label><input type="email" id="inv-email" list="inv-customers" autocomplete="off" placeholder="Start typing a name or email"></div>' +
-        '<div class="field"><label for="inv-name">Name</label><input type="text" id="inv-name"></div>' +
+        '<div class="field"><label for="inv-name">Name</label><input type="text" id="inv-name" list="inv-names" autocomplete="off" placeholder="Start typing a name"></div>' +
+        '<div class="field"><label for="inv-email">Email</label><input type="email" id="inv-email" list="inv-customers" autocomplete="off" placeholder="or an email"></div>' +
         '<div class="field"><label for="inv-phone">Phone</label><input type="tel" id="inv-phone"></div>' +
         '<div class="field"><label for="inv-pickup">Pickup</label><select id="inv-pickup">' +
           state.pickups.map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.label) + '</option>'; }).join('') + '</select></div>' +
       '</div><div class="hint" id="inv-cust-note"></div></fieldset>' +
       '<fieldset class="goat-set"><legend>Items</legend>' +
+        '<div id="inv-recent"></div>' +
         '<div class="inv-head"><span>Product or description</span><span>Qty</span><span>Price each</span><span></span><span></span></div>' +
         state.lines.map(lineRow).join('') +
         '<p style="margin:10px 0 14px"><button type="button" class="btn ghost small" data-act="add">Add a product</button> ' +
@@ -147,9 +149,17 @@
     });
   }
 
-  function fillCustomer() {
-    var email = document.getElementById('inv-email').value.trim().toLowerCase();
+  function fillCustomer(from) {
+    var emailBox = document.getElementById('inv-email');
+    var nameBox = document.getElementById('inv-name');
+    if (from === 'name') {
+      var typed = nameBox.value.trim().toLowerCase();
+      var byName = state.customers.filter(function (x) { return (x.name || '').toLowerCase() === typed; });
+      if (byName.length === 1) { emailBox.value = byName[0].email; document.getElementById('inv-phone').value = byName[0].phone || ''; }
+    }
+    var email = emailBox.value.trim().toLowerCase();
     var c = state.customers.filter(function (x) { return x.email === email; })[0];
+    loadRecent(c ? c.email : '');
     var note = document.getElementById('inv-cust-note');
     if (c) {
       if (!document.getElementById('inv-name').value) document.getElementById('inv-name').value = c.name || '';
@@ -158,6 +168,34 @@
     } else {
       note.textContent = email ? 'New customer — they will be saved when you create the invoice.' : '';
     }
+  }
+
+  // ---- recent purchases: tick to add, untick to remove ----------------------
+  function renderRecent() {
+    var box = document.getElementById('inv-recent');
+    if (!box) return;
+    if (!state.recent.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="inv-recent"><div class="label">Recent purchases — tick to add</div>' +
+      state.recent.map(function (r, i) {
+        var on = state.lines.some(function (l) { return l.recent === r.product_id; });
+        return '<label class="check-row"><input type="checkbox" data-recent="' + i + '"' + (on ? ' checked' : '') + '> ' +
+          '<span><strong>' + esc(r.name) + '</strong>' + (r.unit ? ' (' + esc(r.unit) + ')' : '') +
+          ' <span class="muted">— last ' + esc(r.last_date) + ': ' + esc(r.last_qty) + ' at ' + money(r.last_price_cents) +
+          (r.price_cents !== r.last_price_cents ? ' · now ' + money(r.price_cents) : '') + (r.active ? '' : ' · hidden from store') +
+          '</span></span></label>';
+      }).join('') + '</div>';
+  }
+  function loadRecent(email) {
+    if (email === state.recentFor) return;
+    state.recentFor = email;
+    state.recent = [];
+    renderRecent();
+    if (!email) return;
+    getJSON('/api/admin/customer-history?email=' + encodeURIComponent(email)).then(function (r) {
+      if (state.recentFor !== email) return;
+      state.recent = r.items || [];
+      renderRecent();
+    }).catch(function () {});
   }
 
   function submit(send, btn) {
@@ -206,12 +244,26 @@
         l[k] = t.value;
       }
     }
-    if (t.id === 'inv-email') fillCustomer();
+    if (t.id === 'inv-email') fillCustomer('email');
+    if (t.id === 'inv-name') fillCustomer('name');
     schedulePreview();
   });
   host.addEventListener('change', function (e) {
+    var ri = e.target.getAttribute('data-recent');
+    if (ri != null) {
+      var r = state.recent[+ri];
+      var keep = collect();
+      // Drop the empty starter line before adding the first real one.
+      state.lines = state.lines.filter(function (l) { return l.product_id || l.name || l.custom; });
+      if (e.target.checked) state.lines.push({ product_id: r.product_id, qty: r.last_qty || 1, price: '', recent: r.product_id });
+      else state.lines = state.lines.filter(function (l) { return l.recent !== r.product_id; });
+      if (!state.lines.length) state.lines.push({ product_id: '', qty: 1, price: '' });
+      rerenderKeeping(keep);
+      return;
+    }
     if (e.target.getAttribute('data-k') === 'taxable') { state.lines[+e.target.getAttribute('data-i')].taxable = e.target.checked; }
-    if (e.target.id === 'inv-email') fillCustomer();
+    if (e.target.id === 'inv-email') fillCustomer('email');
+    if (e.target.id === 'inv-name') fillCustomer('name');
     schedulePreview();
   });
 
@@ -227,13 +279,18 @@
     else if (act === 'create') return submit(false, b);
     else return;
     if (!state.lines.length) state.lines.push({ product_id: '', qty: 1, price: '' });
+    rerenderKeeping(keep);
+  });
+
+  function rerenderKeeping(keep) {
     render();
     document.getElementById('inv-email').value = keep.customer.email;
     document.getElementById('inv-name').value = keep.customer.name;
     document.getElementById('inv-phone').value = keep.customer.phone;
     document.getElementById('inv-pickup').value = keep.pickup;
     document.getElementById('inv-note').value = keep.note;
-    fillCustomer();
+    fillCustomer('email');
+    renderRecent();
     schedulePreview();
-  });
+  }
 })();

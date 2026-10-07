@@ -187,3 +187,21 @@ CREATE INDEX login_codes_email ON login_codes (email, created_at);
 
 -- Invoices are found by the token in their pay link.
 CREATE UNIQUE INDEX sales_invoice_token ON sales (invoice_token);
+
+-- ---------------------------------------------------------------------------
+-- purchase_history — past purchases from before this store (Shopify), loaded
+-- by seed/import-shopify-history.py. The New invoice form combines it with
+-- this store's own sales to offer a customer's recent items. product_id is
+-- NULL for old lines that match no current product.
+-- ---------------------------------------------------------------------------
+CREATE TABLE purchase_history (
+  email        TEXT NOT NULL,
+  sold_at      TEXT NOT NULL,
+  product_id   TEXT,
+  name         TEXT NOT NULL,
+  unit         TEXT,
+  qty          INTEGER NOT NULL,
+  price_cents  INTEGER NOT NULL,
+  source       TEXT NOT NULL      -- 'shopify'
+);
+CREATE INDEX purchase_history_email ON purchase_history (email, sold_at);

@@ -418,3 +418,8 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .pay-choice .t { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
 .pay-choice .amt { font-family:var(--serif); font-size:34px; color:var(--ink); margin:6px 0 2px; }
 .pay-choice .d { font-size:13px; color:var(--muted); margin-bottom:14px; }
+
+.inv-recent { background:var(--paper); border:1px solid var(--line); padding:12px 14px 4px; margin-bottom:16px; }
+.inv-recent .label { margin-bottom:8px; }
+.inv-recent .check-row { align-items:flex-start; margin-bottom:8px; }
+.inv-recent .muted { color:var(--muted); font-size:13px; }

@@ -1979,6 +1979,39 @@ async function adminRoutes(path, request, env) {
     return json({ customers: rows });
   }
 
+  // A customer's most recent distinct products, newest first — this store's
+  // own orders plus history carried over from Shopify (purchase_history).
+  if (path === '/api/admin/customer-history') {
+    const email = cleanEmail(new URL(request.url).searchParams.get('email'));
+    if (!email) return json({ items: [] });
+    const seen = new Map();
+    const take = (id, at, qty, price) => {
+      if (!id) return;
+      const prev = seen.get(id);
+      if (!prev || at > prev.at) seen.set(id, { id, at, qty, price });
+    };
+    const sales = (await env.DB.prepare(
+      "SELECT sold_at, items_json FROM sales WHERE customer_email = ? AND status NOT IN ('canceled','abandoned','pending','invoiced','failed')"
+    ).bind(email).all()).results || [];
+    for (const s of sales) {
+      for (const l of JSON.parse(s.items_json || '[]')) take(l.id, s.sold_at, l.qty, l.list_price_cents);
+    }
+    const old = (await env.DB.prepare(
+      'SELECT sold_at, product_id, qty, price_cents FROM purchase_history WHERE email = ? AND product_id IS NOT NULL'
+    ).bind(email).all()).results || [];
+    for (const h of old) take(h.product_id, h.sold_at.replace(' ', 'T'), h.qty, h.price_cents);
+
+    const products = new Map((await loadCatalog(env)).map((p) => [p.id, p]));
+    const items = [...seen.values()].filter((h) => products.has(h.id))
+      .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 3)
+      .map((h) => {
+        const p = products.get(h.id);
+        return { product_id: h.id, name: p.name, unit: p.unit || '', last_qty: h.qty, last_price_cents: h.price,
+          price_cents: p.price_cents, last_date: h.at.slice(0, 10), active: !!p.active };
+      });
+    return json({ items });
+  }
+
   if (path === '/api/admin/attention') {
     return json({ items: await attentionItems(env), alerts_configured: !!env.NOTIFY_URL });
   }
