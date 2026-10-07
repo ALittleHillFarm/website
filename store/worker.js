@@ -172,9 +172,16 @@ async function productPage(request, env) {
   const res = await env.ASSETS.fetch(request);
   const url = new URL(request.url);
   const id = url.searchParams.get('id');
-  if (!res.ok || !id) return res;
-  const p = activeFrom(await loadCatalog(env)).find((x) => x.id === id);
-  if (!p) return res;
+  if (!res.ok) return res;
+  const p = id && activeFrom(await loadCatalog(env)).find((x) => x.id === id);
+  // No such product, or no longer for sale: the page still says so in plain
+  // words, but with a real 404 so search engines drop the address instead of
+  // flagging a "soft 404".
+  if (!p) {
+    const out = new Response(res.body, { status: 404, headers: res.headers });
+    out.headers.set('x-robots-tag', 'noindex');
+    return out;
+  }
 
   const pageUrl = url.origin + '/product?id=' + encodeURIComponent(p.id);
   const image = p.image ? new URL(p.image, url.origin).toString() : url.origin + '/assets/og-store.jpg';

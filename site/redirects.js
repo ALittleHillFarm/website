@@ -28,6 +28,11 @@ const SHOPIFY = {
   '/policies/shipping-policy': STORE + '/policies#pickup',
   '/policies/terms-of-service': STORE + '/policies#ordering',
   '/policies/contact-information': '/about.html#contact',
+  // Goats no longer in the herd, and Shopify pages with no new equivalent.
+  '/pages/dreamy': '/does.html',
+  '/pages/flash': '/bucks.html',
+  '/blogs/news': '/',
+  '/account': STORE + '/account',
   '/cart': STORE + '/',
   '/search': STORE + '/',
 };
@@ -40,5 +45,8 @@ export function oldShopifyAddress(pathname) {
   const product = path.match(/^(?:\/collections\/[^/]+)?\/products\/([a-z0-9-]+)$/);
   if (product) return STORE + '/product?id=' + product[1];
   if (path === '/collections' || path.startsWith('/collections/')) return STORE + '/';
+  // Shopify's customer login, orders and addresses -> the store's account page.
+  if (path.startsWith('/account/')) return STORE + '/account';
+  if (path.startsWith('/blogs/')) return '/';
   return null;
 }
