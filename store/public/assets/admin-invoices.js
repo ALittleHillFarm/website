@@ -69,11 +69,7 @@
       : '<input type="text" list="inv-products" data-i="' + i + '" data-k="pick" value="' + esc(p ? productLabel(p) : '') + '" placeholder="Type to find a product…" aria-label="Product">';
     return '<div class="inv-line">' +
       '<div class="field what">' + what + '</div>' +
-      '<div class="field inv-qty">' +
-        '<button type="button" data-act="qty-down" data-i="' + i + '" aria-label="One fewer">▼</button>' +
-        '<input type="number" min="1" step="1" data-i="' + i + '" data-k="qty" value="' + esc(l.qty) + '" aria-label="Quantity">' +
-        '<button type="button" data-act="qty-up" data-i="' + i + '" aria-label="One more">▲</button>' +
-      '</div>' +
+      '<div class="field inv-qty"><input type="number" min="1" step="1" data-i="' + i + '" data-k="qty" value="' + esc(l.qty) + '" aria-label="Quantity"></div>' +
       '<div class="field price"><input type="text" inputmode="decimal" data-i="' + i + '" data-k="price" value="' + esc(l.price) + '" placeholder="' +
         (custom ? 'Price each' : (p ? (p.price_cents / 100).toFixed(2) : 'Price')) + '" aria-label="Price each"></div>' +
       (custom ? '<label class="tax"><input type="checkbox" data-i="' + i + '" data-k="taxable"' + (l.taxable ? ' checked' : '') + '> Taxable</label>' : '<span class="tax"></span>') +
@@ -275,15 +271,6 @@
     var b = e.target.closest && e.target.closest('[data-act]');
     if (!b) return;
     var act = b.getAttribute('data-act');
-    if (act === 'qty-up' || act === 'qty-down') {
-      var li = +b.getAttribute('data-i');
-      var box = host.querySelector('input[data-i="' + li + '"][data-k="qty"]');
-      var n = Math.max(1, (parseInt(box.value, 10) || 1) + (act === 'qty-up' ? 1 : -1));
-      box.value = n;
-      state.lines[li].qty = n;
-      schedulePreview();
-      return;
-    }
     var keep = collect();
     if (act === 'add') state.lines.push({ product_id: '', qty: 1, price: '' });
     else if (act === 'add-custom') state.lines.push({ custom: true, name: 'Freight', qty: 1, price: '', taxable: false });
