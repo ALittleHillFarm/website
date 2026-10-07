@@ -397,7 +397,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .acct-order .st { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--moss-ink); margin-top:8px; }
 
 /* ---------- admin: new invoice ---------- */
-.inv-head, .inv-line { display:grid; grid-template-columns:minmax(0,1fr) 80px 120px 90px 40px; gap:10px; align-items:center; }
+.inv-head, .inv-line { display:grid; grid-template-columns:minmax(0,1fr) 128px 120px 90px 40px; gap:10px; align-items:center; }
 .inv-head { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
 .inv-line { margin-bottom:8px; }
 .inv-line .field { margin:0; }
@@ -407,7 +407,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .inv-totals .row.total { font-weight:600; color:var(--ink); }
 @media (max-width:640px) {
   .inv-head { display:none; }
-  .inv-line { grid-template-columns:1fr 70px 100px; }
+  .inv-line { grid-template-columns:1fr 128px 100px; }
   .inv-line .what { grid-column:1 / -1; }
 }
 
@@ -423,3 +423,11 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .inv-recent .label { margin-bottom:8px; }
 .inv-recent .check-row { align-items:flex-start; margin-bottom:8px; }
 .inv-recent .muted { color:var(--muted); font-size:13px; }
+
+/* Invoice quantity: a number box with step buttons either side. */
+.inv-qty { display:flex; align-items:stretch; }
+.inv-qty input[type="number"] { text-align:center; min-width:0; border-radius:0; }
+.inv-qty button { flex:none; width:34px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; font-size:11px; padding:0; }
+.inv-qty button:hover { background:var(--line-soft); }
+.inv-qty button:first-child { border-right:none; border-radius:2px 0 0 2px; }
+.inv-qty button:last-child { border-left:none; border-radius:0 2px 2px 0; }
