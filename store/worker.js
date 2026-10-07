@@ -54,6 +54,8 @@ export default {
         if (res) return res;
       }
       if (path === '/api/config') return apiConfig(env);
+      if (path === '/api/invoice') return apiInvoice(request, env);
+      if (path === '/api/invoice/pay' && request.method === 'POST') return apiInvoicePay(request, env);
       if (path === '/api/catalog') return apiCatalog(env);
       if (path === '/api/quote' && request.method === 'POST') return apiQuote(request, env);
       if (path === '/api/checkout' && request.method === 'POST') return apiCheckout(request, env, ctx);
@@ -259,7 +261,7 @@ async function sitemap(request, env) {
 function robots(request) {
   const origin = new URL(request.url).origin;
   return new Response(
-    'User-agent: *\nDisallow: /admin\nDisallow: /api/\nDisallow: /checkout\nDisallow: /thanks\n\n' +
+    'User-agent: *\nDisallow: /admin\nDisallow: /api/\nDisallow: /checkout\nDisallow: /thanks\nDisallow: /pay\n\n' +
       'Sitemap: ' + origin + '/sitemap.xml\n',
     { headers: { 'content-type': 'text/plain; charset=utf-8' } }
   );
@@ -496,12 +498,27 @@ async function apiCheckout(request, env, ctx) {
   }
 
   const origin = new URL(request.url).origin;
+  const session = await stripeCheckout(env, origin, {
+    saleId, email, name, pickup, method, lines: quote.lines, taxCents: quote.tax_cents, autoCapture,
+    // The cart lives on the storefront index, not a separate page.
+    cancelUrl: origin + '/?cart=1',
+    // The sale id, so a retry can never double-authorize.
+    idempotencyKey: saleId,
+  });
+
+  return json({ sale_id: saleId, redirect_url: session.url, total_cents: quote.total_cents });
+}
+
+/**
+ * Create the Stripe Checkout session for a sale. Shared by the storefront
+ * checkout and by invoices, so both describe payments the same way.
+ */
+async function stripeCheckout(env, origin, { saleId, email, name, pickup, method, lines, taxCents, autoCapture, cancelUrl, idempotencyKey }) {
   const form = new URLSearchParams();
   form.set('mode', 'payment');
   form.set('customer_email', email);
   form.set('success_url', origin + '/thanks?sale=' + saleId);
-  // The cart lives on the storefront index, not a separate page.
-  form.set('cancel_url', origin + '/?cart=1');
+  form.set('cancel_url', cancelUrl);
   form.set('client_reference_id', saleId);
   form.set('metadata[sale_id]', saleId);
   form.set('metadata[pickup]', pickup);
@@ -511,7 +528,7 @@ async function apiCheckout(request, env, ctx) {
   // bare pi_... id: the same short order number the customer and admin use,
   // who bought it, and what. Stripe caps descriptions at 1000 characters.
   const ref = orderRef(saleId);
-  const itemsText = quote.lines.map((l) => l.qty + ' × ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')).join(', ');
+  const itemsText = lines.map((l) => l.qty + ' × ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')).join(', ');
   form.set('payment_intent_data[description]',
     ('Order ' + ref + ' · ' + name + ' · ' + itemsText).slice(0, 1000));
   form.set('payment_intent_data[metadata][order]', ref);
@@ -532,7 +549,7 @@ async function apiCheckout(request, env, ctx) {
     if (!autoCapture) form.set('payment_intent_data[capture_method]', 'manual');
   }
 
-  quote.lines.forEach((line, i) => {
+  lines.forEach((line, i) => {
     form.set('line_items[' + i + '][quantity]', String(line.qty));
     form.set('line_items[' + i + '][price_data][currency]', 'usd');
     form.set('line_items[' + i + '][price_data][unit_amount]', String(line.unit_price_cents));
@@ -542,16 +559,15 @@ async function apiCheckout(request, env, ctx) {
     );
   });
 
-  if (quote.tax_cents > 0) {
-    const i = quote.lines.length;
+  if (taxCents > 0) {
+    const i = lines.length;
     form.set('line_items[' + i + '][quantity]', '1');
     form.set('line_items[' + i + '][price_data][currency]', 'usd');
-    form.set('line_items[' + i + '][price_data][unit_amount]', String(quote.tax_cents));
+    form.set('line_items[' + i + '][price_data][unit_amount]', String(taxCents));
     form.set('line_items[' + i + '][price_data][product_data][name]', 'Idaho sales tax');
   }
 
-  // The idempotency key is the sale id, so a retry can never double-authorize.
-  const session = await stripe(env, 'POST', '/checkout/sessions', form, saleId);
+  const session = await stripe(env, 'POST', '/checkout/sessions', form, idempotencyKey);
 
   // Stripe does not create the PaymentIntent until the customer completes the
   // session, so payment_intent is usually null here. Store the session id as
@@ -560,8 +576,7 @@ async function apiCheckout(request, env, ctx) {
   await env.DB.prepare('UPDATE sales SET stripe_session_id = ?, stripe_payment_intent = ? WHERE id = ?')
     .bind(session.id || null, session.payment_intent || null, saleId)
     .run();
-
-  return json({ sale_id: saleId, redirect_url: session.url, total_cents: quote.total_cents });
+  return session;
 }
 
 // ---------------------------------------------------------------------------
@@ -628,12 +643,13 @@ async function apiWebhook(request, env, ctx) {
         const done = await env.DB.prepare(
           "UPDATE sales SET status = ?," +
             ' stripe_payment_intent = COALESCE(?, stripe_payment_intent)' +
-            " WHERE id = ? AND status = 'pending'"
+            " WHERE id = ? AND status IN ('pending','invoiced')"
         )
           .bind(status, obj.payment_intent || null, saleId)
           .run();
         // Only the first completion of a pending sale is a new order.
         if (done.meta && done.meta.changes) {
+          await settleInvoiceMethod(env, saleId, obj.payment_method_types);
           ctx.waitUntil(notifyNewOrder(env, saleId));
           ctx.waitUntil(sendOrderConfirmation(env, saleId));
         }
@@ -1153,6 +1169,275 @@ async function sendOrderConfirmation(env, saleId) {
 }
 
 // ---------------------------------------------------------------------------
+// Invoices — phone and bulk orders the farm writes up for a customer
+//
+// The admin builds the order (any product, including ones hidden from the
+// storefront like totes, a changed price, or a free-text line such as
+// freight), and the customer gets an email with a link to /pay?inv=<token>.
+// There they choose bank transfer (2% off) or card and pay through Stripe
+// like any other order; cash or check is recorded from the admin instead.
+//
+// An invoice is a row in `sales` with channel 'invoice' and status
+// 'invoiced' until it is paid. It stays out of the books until then.
+// The token is long and random: the link is the customer's key to it.
+// ---------------------------------------------------------------------------
+
+const newToken = () => b64url(crypto.getRandomValues(new Uint8Array(24)));
+const payLink = (token) => String(config.store_url || '').replace(/\/+$/, '') + '/pay?inv=' + encodeURIComponent(token);
+
+/** Price invoice lines for a payment method. Lines carry their own list
+ *  price (catalog or as written by the farm), so this does not consult the
+ *  catalog. Same discount and tax rules as the storefront. */
+function priceInvoice(lines, method, customer) {
+  const discountBps = discountBpsFor(method);
+  let subtotal = 0, taxableBase = 0, listSubtotal = 0, cogs = 0;
+  const out = lines.map((l) => {
+    const unit = Math.round((l.list_price_cents * (10000 - discountBps)) / 10000);
+    const lineTotal = unit * l.qty;
+    const lineCogs = ((l.cost_cents || 0) + (l.freight_cents || 0)) * l.qty;
+    listSubtotal += l.list_price_cents * l.qty;
+    subtotal += lineTotal;
+    cogs += lineCogs;
+    if (l.taxable) taxableBase += lineTotal;
+    return { ...l, unit_price_cents: unit, line_total_cents: lineTotal, line_cogs_cents: lineCogs };
+  });
+  const taxExempt = !!(customer && customer.tax_exempt);
+  const tax = taxExempt ? 0 : Math.round((taxableBase * config.tax.idaho_rate_bps) / 10000);
+  return {
+    lines: out, subtotal_cents: subtotal, discount_cents: listSubtotal - subtotal, tax_cents: tax,
+    total_cents: subtotal + tax, cogs_cents: cogs, tax_exempt: taxExempt,
+    exemption_ref: taxExempt ? customer.exemption_ref : null, payment_method: method,
+  };
+}
+
+/** Turn what the admin form sent into clean invoice lines. Catalog lines
+ *  start from the product (active or not); a price typed in the form wins. */
+async function invoiceLines(env, raw) {
+  if (!Array.isArray(raw) || !raw.length) throw new BadRequest('add at least one item');
+  if (raw.length > 60) throw new BadRequest('too many lines');
+  const catalogNow = await loadCatalog(env);
+  return raw.map((r) => {
+    const qty = Math.floor(Number(r.qty));
+    if (!Number.isFinite(qty) || qty < 1 || qty > 9999) throw new BadRequest('each line needs a quantity of at least 1');
+    const priceIn = r.price_cents === '' || r.price_cents == null ? null : Math.round(Number(r.price_cents));
+    if (priceIn != null && (!Number.isFinite(priceIn) || priceIn < 0 || priceIn > 10000000)) {
+      throw new BadRequest('prices must be zero or more');
+    }
+    if (r.product_id) {
+      const p = catalogNow.find((x) => x.id === r.product_id);
+      if (!p) throw new BadRequest('unknown product: ' + r.product_id);
+      return {
+        id: p.id, sku: p.sku, name: p.name, unit: p.unit || '', qty,
+        list_price_cents: priceIn != null ? priceIn : p.price_cents,
+        cost_cents: p.cost_cents || 0, freight_cents: p.freight_cents || 0, taxable: !!p.taxable,
+      };
+    }
+    const name = cleanText(r.name, 120);
+    if (!name) throw new BadRequest('a custom line needs a description');
+    if (priceIn == null) throw new BadRequest('a custom line needs a price');
+    return {
+      id: null, sku: null, name, unit: cleanText(r.unit, 40), qty, list_price_cents: priceIn,
+      cost_cents: Math.max(0, Math.round(Number(r.cost_cents) || 0)), freight_cents: 0, taxable: !!r.taxable,
+    };
+  });
+}
+
+async function sendInvoiceEmail(env, sale) {
+  const lines = JSON.parse(sale.items_json || '[]');
+  const customer = await getCustomer(env, sale.customer_email);
+  const card = priceInvoice(lines, 'card', customer);
+  const ach = priceInvoice(lines, 'ach', customer);
+  const link = payLink(sale.invoice_token);
+  const ref = orderRef(sale.id);
+  const rows = lines.map((l) => '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
+    (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') +
+    '</td><td style="padding:6px 0;text-align:right">' + dollars(l.list_price_cents * l.qty) + '</td></tr>').join('');
+  const html = emailShell(
+    '<p style="margin:0 0 14px">Hi ' + escHtml(String(sale.customer_name || '').split(' ')[0] || 'there') +
+      ' — here is your invoice from A Little Hill Farm.</p>' +
+    (sale.invoice_note ? '<p style="margin:0 0 14px;padding:10px 12px;background:#F3EEE4">' + escHtml(sale.invoice_note) + '</p>' : '') +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
+    '<table style="width:100%;font-size:14px;margin:0 0 16px">' +
+      '<tr><td>Total by bank transfer (2% off)</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(ach.total_cents) + '</td></tr>' +
+      '<tr><td>Total by card</td><td style="text-align:right">' + dollars(card.total_cents) + '</td></tr>' +
+      (card.tax_exempt ? '<tr><td colspan="2" style="color:#6B6353">Tax-exempt — no sales tax.</td></tr>' : '<tr><td colspan="2" style="color:#6B6353">Totals include Idaho sales tax.</td></tr>') +
+    '</table>' +
+    '<p style="margin:0 0 18px"><a href="' + escHtml(link) + '" style="background:#59803D;color:#fff;text-decoration:none;padding:12px 22px;border-radius:2px;display:inline-block;font-size:15px">Pay invoice</a></p>' +
+    '<p style="margin:0 0 6px"><strong>Pickup:</strong> ' + escHtml(pickupLabel(sale.fulfillment)) + '</p>' +
+    '<p style="margin:0 0 6px;color:#6B6353;font-size:13px">Rather pay by cash or check at pickup? Just reply and let us know.</p>' +
+    '<p style="margin:0;color:#6B6353;font-size:13px">Invoice ' + escHtml(ref) + '</p>');
+  const text = ['Invoice ' + ref + ' from A Little Hill Farm', '',
+    ...(sale.invoice_note ? [sale.invoice_note, ''] : []),
+    ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '') + '  ' + dollars(l.list_price_cents * l.qty)),
+    '', 'Total by bank transfer (2% off): ' + dollars(ach.total_cents), 'Total by card: ' + dollars(card.total_cents), '',
+    'Pay here: ' + link, '', 'Pickup: ' + pickupLabel(sale.fulfillment),
+    'Rather pay by cash or check at pickup? Just reply and let us know.'].join('\n');
+  const r = await sendEmail(env, {
+    to: sale.customer_email,
+    subject: 'Invoice ' + ref + ' from A Little Hill Farm — ' + dollars(ach.total_cents),
+    text, html,
+  });
+  if (r.sent) {
+    await env.DB.prepare('UPDATE sales SET invoice_sent_at = ? WHERE id = ?').bind(new Date().toISOString(), sale.id).run();
+  }
+  return r;
+}
+
+/** Admin: preview, create, resend, cancel, and the customer list. */
+async function adminInvoices(request, env) {
+  const b = await request.json();
+  try {
+    if (b.action === 'preview' || b.action === 'create') {
+      const email = cleanEmail(b.customer && b.customer.email);
+      if (!email) throw new BadRequest('enter the customer’s email address');
+      const name = cleanText(b.customer && b.customer.name, 80);
+      if (!name) throw new BadRequest('enter the customer’s name');
+      const phone = cleanText(b.customer && b.customer.phone, 40);
+      const pickup = String(b.pickup || '');
+      if (!config.pickup_locations.some((l) => l.id === pickup)) throw new BadRequest('choose a pickup location');
+      const lines = await invoiceLines(env, b.lines);
+      const customer = await getCustomer(env, email);
+      const card = priceInvoice(lines, 'card', customer);
+      const ach = priceInvoice(lines, 'ach', customer);
+      if (b.action === 'preview') {
+        return json({ card: publicQuote(card), ach: publicQuote(ach), tax_exempt: card.tax_exempt, known_customer: !!customer });
+      }
+
+      // Remember the customer, never downgrading flags set in the admin.
+      await env.DB.prepare(
+        'INSERT INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)' +
+          ' ON CONFLICT(email) DO UPDATE SET name = excluded.name, phone = COALESCE(excluded.phone, customers.phone)'
+      ).bind(email, name, phone || null, new Date().toISOString()).run();
+
+      const id = crypto.randomUUID();
+      const token = newToken();
+      const now = new Date().toISOString();
+      await env.DB.prepare(
+        'INSERT INTO sales (id, sold_at, channel, category, customer_email, customer_name, customer_phone,' +
+          ' items_json, subtotal_cents, tax_cents, total_cents, cogs_cents, tax_exempt, exemption_ref,' +
+          ' payment_method, status, fulfillment, notified_json, invoice_token, invoice_note)' +
+          ' VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(id, now, 'invoice', 'feed', email, name, phone || null, JSON.stringify(lines),
+        card.subtotal_cents, card.tax_cents, card.total_cents, card.cogs_cents, card.tax_exempt ? 1 : 0, card.exemption_ref,
+        'card', 'invoiced', 'pickup:' + pickup, JSON.stringify({ received: now }), token, cleanPara(b.note, 1000) || null).run();
+
+      const sale = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(id).first();
+      const sent = b.send === false ? { sent: false, reason: 'not requested' } : await sendInvoiceEmail(env, sale);
+      return json({ ok: true, sale_id: id, ref: orderRef(id), link: payLink(token), emailed: sent.sent, email_error: sent.sent ? null : sent.reason });
+    }
+
+    const sale = await env.DB.prepare("SELECT * FROM sales WHERE id = ? AND channel = 'invoice'").bind(String(b.sale_id || '')).first();
+    if (!sale) return json({ error: 'no invoice with that id' }, 404);
+
+    if (b.action === 'send') {
+      if (sale.status !== 'invoiced') throw new BadRequest('this invoice is already ' + sale.status);
+      const r = await sendInvoiceEmail(env, sale);
+      return r.sent ? json({ ok: true }) : json({ error: 'email not sent: ' + r.reason }, 502);
+    }
+    if (b.action === 'cancel') {
+      if (sale.status !== 'invoiced') throw new BadRequest('only an unpaid invoice can be cancelled (this one is ' + sale.status + ')');
+      await env.DB.prepare("UPDATE sales SET status = 'canceled' WHERE id = ?").bind(sale.id).run();
+      return json({ ok: true });
+    }
+    // Paid outside the website: cash or check at pickup.
+    if (b.action === 'record_payment') {
+      if (sale.status !== 'invoiced') throw new BadRequest('this invoice is already ' + sale.status);
+      const method = b.method === 'check' ? 'check' : 'cash';
+      const customer = await getCustomer(env, sale.customer_email);
+      const q = priceInvoice(JSON.parse(sale.items_json || '[]'), 'cash', customer);
+      await env.DB.prepare(
+        "UPDATE sales SET status = 'recorded', payment_method = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?," +
+          ' cogs_cents = ?, fulfilled_at = ? WHERE id = ?'
+      ).bind(method, q.subtotal_cents, q.tax_cents, q.total_cents, q.cogs_cents, new Date().toISOString(), sale.id).run();
+      return json({ ok: true, total_cents: q.total_cents });
+    }
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
+// ---- the customer's pay page ----------------------------------------------
+
+async function findInvoice(env, token) {
+  if (!token || String(token).length < 20) return null;
+  return env.DB.prepare("SELECT * FROM sales WHERE invoice_token = ? AND channel = 'invoice'").bind(String(token)).first();
+}
+
+async function apiInvoice(request, env) {
+  const sale = await findInvoice(env, new URL(request.url).searchParams.get('t'));
+  if (!sale || sale.status === 'canceled') return json({ error: 'This invoice link is not valid any more. Please contact us.' }, 404);
+  const lines = JSON.parse(sale.items_json || '[]');
+  const customer = await getCustomer(env, sale.customer_email);
+  const card = priceInvoice(lines, 'card', customer);
+  const ach = priceInvoice(lines, 'ach', customer);
+  const res = json({
+    ref: orderRef(sale.id),
+    status: sale.status,
+    paid: !['invoiced'].includes(sale.status),
+    customer_name: sale.customer_name,
+    note: sale.invoice_note || '',
+    pickup: pickupLabel(sale.fulfillment),
+    tax_exempt: card.tax_exempt,
+    lines: lines.map((l) => ({ name: l.name, unit: l.unit, qty: l.qty, list_price_cents: l.list_price_cents })),
+    card: { subtotal_cents: card.subtotal_cents, tax_cents: card.tax_cents, total_cents: card.total_cents },
+    ach: { subtotal_cents: ach.subtotal_cents, tax_cents: ach.tax_cents, total_cents: ach.total_cents },
+    total_paid_cents: sale.status === 'invoiced' ? null : sale.total_cents,
+  });
+  res.headers.set('cache-control', 'no-store');
+  return res;
+}
+
+async function apiInvoicePay(request, env) {
+  const b = await request.json().catch(() => ({}));
+  const sale = await findInvoice(env, b.t);
+  if (!sale || sale.status === 'canceled') return json({ error: 'This invoice link is not valid any more. Please contact us.' }, 404);
+  if (sale.status !== 'invoiced') return json({ error: 'This invoice has already been paid. Thank you!' }, 409);
+  const method = b.method === 'ach' ? 'ach' : 'card';
+  const customer = await getCustomer(env, sale.customer_email);
+  const q = priceInvoice(JSON.parse(sale.items_json || '[]'), method, customer);
+
+  // The totals follow the method chosen. The webhook re-checks against the
+  // method the customer actually completed, in case they switched.
+  await env.DB.prepare(
+    'UPDATE sales SET payment_method = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, cogs_cents = ? WHERE id = ?'
+  ).bind(method, q.subtotal_cents, q.tax_cents, q.total_cents, q.cogs_cents, sale.id).run();
+
+  const origin = new URL(request.url).origin;
+  let session;
+  try {
+    session = await stripeCheckout(env, origin, {
+    saleId: sale.id, email: sale.customer_email, name: sale.customer_name || '',
+    pickup: String(sale.fulfillment || '').replace(/^pickup:/, ''), method, lines: q.lines, taxCents: q.tax_cents,
+    // The farm wrote this order up itself, so there is nothing to review:
+    // charge the card straight away rather than holding it.
+    autoCapture: true,
+    cancelUrl: origin + '/pay?inv=' + encodeURIComponent(sale.invoice_token),
+    idempotencyKey: 'inv_' + sale.id + '_' + method + '_' + crypto.randomUUID(),
+    });
+  } catch (err) {
+    console.error('invoice pay: ' + err);
+    return json({ error: 'The payment page could not be opened just now. Please try again, or reply to the invoice email.' }, 502);
+  }
+  return json({ redirect_url: session.url });
+}
+
+/** After Stripe confirms an invoice payment: make the stored totals match
+ *  the method the customer actually used. */
+async function settleInvoiceMethod(env, saleId, sessionTypes) {
+  const sale = await env.DB.prepare("SELECT * FROM sales WHERE id = ? AND channel = 'invoice'").bind(saleId).first();
+  if (!sale) return;
+  const method = (sessionTypes || []).includes('us_bank_account') ? 'ach' : 'card';
+  if (method === sale.payment_method) return;
+  const customer = await getCustomer(env, sale.customer_email);
+  const q = priceInvoice(JSON.parse(sale.items_json || '[]'), method, customer);
+  await env.DB.prepare(
+    'UPDATE sales SET payment_method = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, cogs_cents = ? WHERE id = ?'
+  ).bind(method, q.subtotal_cents, q.tax_cents, q.total_cents, q.cogs_cents, saleId).run();
+}
+
+// ---------------------------------------------------------------------------
 // Goats — the herd, edited from the admin screen's Goats tab
 //
 // Rows live in the `goats` table (schema.sql). The farm site's worker reads
@@ -1513,6 +1798,16 @@ async function attentionItems(env) {
         ' still processing after a week — check them in the Stripe dashboard.',
     });
   }
+  const unpaid = (await env.DB.prepare(
+    "SELECT COUNT(*) AS n, COALESCE(SUM(total_cents),0) AS cents FROM sales WHERE status = 'invoiced' AND sold_at < ?"
+  ).bind(new Date(now - 7 * DAY).toISOString()).first()) || { n: 0 };
+  if (unpaid.n) {
+    items.push({
+      level: 'todo',
+      text: unpaid.n + (unpaid.n === 1 ? ' invoice has' : ' invoices have') + ' been unpaid for over a week (' +
+        dollars(unpaid.cents) + ') — resend or follow up.',
+    });
+  }
   const disputes = rows.filter((r) => /DISPUTE OPENED/.test(r.notes || ''));
   if (disputes.length) {
     items.push({
@@ -1674,6 +1969,15 @@ async function adminRoutes(path, request, env) {
   }
 
   if (path === '/api/admin/goats') return adminGoats(request, env);
+  if (path === '/api/admin/invoice' && request.method === 'POST') return adminInvoices(request, env);
+
+  // Everyone we know, for the invoice form's customer picker.
+  if (path === '/api/admin/customers') {
+    const rows = (await env.DB.prepare(
+      'SELECT email, name, phone, tax_exempt, trusted FROM customers ORDER BY name COLLATE NOCASE, email'
+    ).all()).results || [];
+    return json({ customers: rows });
+  }
 
   if (path === '/api/admin/attention') {
     return json({ items: await attentionItems(env), alerts_configured: !!env.NOTIFY_URL });

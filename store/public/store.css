@@ -395,3 +395,26 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .acct-order .items { font-size:14px; color:var(--body); margin-top:6px; line-height:1.6; }
 .acct-order .items .muted { color:var(--muted); }
 .acct-order .st { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--moss-ink); margin-top:8px; }
+
+/* ---------- admin: new invoice ---------- */
+.inv-head, .inv-line { display:grid; grid-template-columns:minmax(0,1fr) 80px 120px 90px 40px; gap:10px; align-items:center; }
+.inv-head { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+.inv-line { margin-bottom:8px; }
+.inv-line .field { margin:0; }
+.inv-line .tax { font-size:13px; color:var(--muted); display:flex; gap:6px; align-items:center; }
+.inv-totals { max-width:460px; margin:0 0 18px; }
+.inv-totals .row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line-soft); font-size:15px; }
+.inv-totals .row.total { font-weight:600; color:var(--ink); }
+@media (max-width:640px) {
+  .inv-head { display:none; }
+  .inv-line { grid-template-columns:1fr 70px 100px; }
+  .inv-line .what { grid-column:1 / -1; }
+}
+
+/* ---------- invoice pay page ---------- */
+.pay-lines .row .muted { color:var(--muted); }
+.pay-choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin-top:24px; }
+.pay-choice { background:var(--card); border:1px solid var(--line); padding:20px 22px; }
+.pay-choice .t { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.pay-choice .amt { font-family:var(--serif); font-size:34px; color:var(--ink); margin:6px 0 2px; }
+.pay-choice .d { font-size:13px; color:var(--muted); margin-bottom:14px; }

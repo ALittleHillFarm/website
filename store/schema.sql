@@ -83,7 +83,10 @@ CREATE TABLE sales (
 
   notes                 TEXT,
   refunded_cents        INTEGER NOT NULL DEFAULT 0,  -- running total refunded
-  refunded_at           TEXT                         -- when the latest refund was given
+  refunded_at           TEXT,                        -- when the latest refund was given
+  invoice_token         TEXT,       -- invoices only: the secret in the pay link
+  invoice_sent_at       TEXT,
+  invoice_note          TEXT        -- shown to the customer on the invoice
 );
 
 CREATE INDEX idx_sales_sold_at   ON sales (sold_at);
@@ -181,3 +184,6 @@ CREATE TABLE login_codes (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX login_codes_email ON login_codes (email, created_at);
+
+-- Invoices are found by the token in their pay link.
+CREATE UNIQUE INDEX sales_invoice_token ON sales (invoice_token);

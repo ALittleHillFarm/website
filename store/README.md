@@ -305,6 +305,17 @@ database, so the change is live on the next page load. New goats start
 hidden. Photos are shrunk in the browser before upload (and lose their GPS
 tag), so upload straight from the phone.
 
+**Phone and bulk orders (invoices).** Admin → New invoice. Pick the customer
+(or type a new one), add items — any product, including ones hidden from the
+storefront such as totes; type a price to override the store price; *Add
+freight or other charge* for a free-text line (untaxed unless ticked) — choose
+pickup, add a note, and press *Create & email invoice*. The customer gets an
+email with a **Pay invoice** button that opens `/pay?inv=…`, where they pay by
+bank transfer (2% off) or card through Stripe. Paid cash or check instead?
+Orders tab → filter *Invoices — not paid yet* → **Paid cash/check**. The same
+card has Copy pay link, Resend and Cancel. Unpaid invoices show in *Needs
+attention* after a week.
+
 **Needs attention.** The box at the top of the Orders tab lists card holds
 about to expire, orders waiting for review, cash to collect, checkouts Stripe
 never confirmed, disputes, and a website that is down. The morning alert

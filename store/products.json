@@ -1398,6 +1398,25 @@
       ]
     },
     {
+      "id": "layer-feed-with-power-pellet-1000-lb-tote",
+      "sku": "F1000-LAYER-PWR-TOTE",
+      "name": "Layer Feed with Power Pellets",
+      "supplier": "New Country Organics",
+      "unit": "1000 lb tote",
+      "cost_cents": 65500,
+      "freight_cents": 0,
+      "price_cents": 75500,
+      "taxable": true,
+      "category": "feed",
+      "active": false,
+      "description": "Layer Feed with Power Pellets by the 1000 lb tote, for bulk orders. Freight is quoted per order. Ordered by phone or invoice — not sold on the storefront.",
+      "image": "/assets/products/f40-layer-pwr_1.png",
+      "animals": [
+        "Chickens"
+      ],
+      "weight_lbs": 1000
+    },
+    {
       "id": "layer-feed-no-wheat-40lb",
       "sku": "F40-LAYER-NW",
       "name": "Layer Feed, No Wheat",

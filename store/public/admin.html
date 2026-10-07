@@ -46,6 +46,7 @@
 
   <div class="tabs" role="tablist" aria-label="Admin sections">
     <button type="button" role="tab" id="tab-orders" aria-controls="panel-orders" aria-selected="true">Orders</button>
+    <button type="button" role="tab" id="tab-invoice" aria-controls="panel-invoice" aria-selected="false">New invoice</button>
     <button type="button" role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Record a sale</button>
     <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
     <button type="button" role="tab" id="tab-inventory" aria-controls="panel-inventory" aria-selected="false">Inventory</button>
@@ -74,6 +75,7 @@
           <option value="processing">Processing (bank transfer on its way)</option>
           <option value="failed">Failed (bank transfer bounced)</option>
           <option value="refunded">Refunded</option>
+          <option value="invoiced">Invoices — not paid yet</option>
           <option value="captured">Captured</option>
           <option value="pending">Pending</option>
           <option value="canceled">Canceled</option>
@@ -200,6 +202,18 @@
 
     <div id="inventory-msg"></div>
     <div class="inv-list" id="inventory-list"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- New invoice — phone and bulk orders (assets/admin-invoices.js) -->
+  <!-- ============================================================ -->
+  <section id="panel-invoice" class="tab-panel" role="tabpanel" aria-labelledby="tab-invoice" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">New invoice</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      For orders that come in by phone — totes, big orders, regulars. The customer gets an email with a
+      <strong>Pay invoice</strong> button and pays by bank transfer or card on the store. If they pay cash or check
+      at pickup instead, find the invoice on the Orders tab and press <strong>Paid cash/check</strong>.</p>
+    <div id="invoice-app"><p class="lede">Loading…</p></div>
   </section>
 
   <!-- ============================================================ -->
@@ -340,10 +354,15 @@
     failed: 'badge rust',
     captured: 'badge moss',
     refunded: 'badge muted',
+    invoiced: 'badge',
     canceled: 'badge rust',
     recorded: 'badge muted',
     pending: 'badge muted'
   };
+
+  function payLinkFor(sale) {
+    return location.origin + '/pay?inv=' + encodeURIComponent(sale.invoice_token || '');
+  }
 
   function renderOrderCard(sale) {
     var notified = {};
@@ -361,6 +380,14 @@
       actions +=
         '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Capture</button>' +
         '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Capture partial…</button>';
+    }
+    if (sale.status === 'invoiced') {
+      actions +=
+        '<button type="button" class="btn small" data-action="inv-copy" data-sale="' + esc(sale.id) + '" data-link="' +
+          esc(payLinkFor(sale)) + '">Copy pay link</button>' +
+        '<button type="button" class="btn small ghost" data-action="inv-send" data-sale="' + esc(sale.id) + '">Resend invoice</button>' +
+        '<button type="button" class="btn small ghost" data-action="inv-cash" data-sale="' + esc(sale.id) + '">Paid cash/check</button>' +
+        '<button type="button" class="btn small rust" data-action="inv-cancel" data-sale="' + esc(sale.id) + '">Cancel invoice</button>';
     }
     if (sale.status === 'captured' || sale.status === 'recorded') {
       actions += '<button type="button" class="btn small ghost" data-action="refund" data-sale="' + esc(sale.id) +
@@ -469,6 +496,23 @@
       var cents = Math.round(parseFloat(dollars) * 100);
       if (!isFinite(cents) || cents <= 0) { window.alert('Enter a dollar amount greater than zero.'); return; }
       job = runAction('/api/admin/capture', { sale_id: saleId, amount_cents: cents });
+    } else if (action === 'inv-copy') {
+      var link = btn.getAttribute('data-link');
+      (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () {
+        btn.textContent = 'Copied ✓';
+      }).catch(function () { window.prompt('Copy this pay link:', link); });
+      return;
+    } else if (action === 'inv-send') {
+      job = runAction('/api/admin/invoice', { action: 'send', sale_id: saleId });
+    } else if (action === 'inv-cash') {
+      var how = window.prompt('Paid how? Type cash or check.', 'cash');
+      if (how === null) return;
+      how = String(how).trim().toLowerCase();
+      if (how !== 'cash' && how !== 'check') { window.alert('Type cash or check.'); return; }
+      job = runAction('/api/admin/invoice', { action: 'record_payment', sale_id: saleId, method: how });
+    } else if (action === 'inv-cancel') {
+      if (!window.confirm('Cancel this invoice? Its pay link will stop working.')) return;
+      job = runAction('/api/admin/invoice', { action: 'cancel', sale_id: saleId });
     } else if (action === 'refund') {
       var leftCents = Number(btn.getAttribute('data-left'));
       var viaStripe = ['card', 'ach'].indexOf(btn.getAttribute('data-method')) > -1;
@@ -1109,5 +1153,6 @@
 })();
 </script>
 <script src="assets/admin-goats.js"></script>
+<script src="assets/admin-invoices.js"></script>
 </body>
 </html>
