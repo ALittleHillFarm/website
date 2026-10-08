@@ -6,7 +6,7 @@ framework, no container. The only thing to keep patched is nothing.
 
 ```
 config.json    operational settings — pickup spots, tax rate, discounts, terms
-products.json  the catalog. edit, commit, deploy.
+products.json  the first-run seed and fallback for the catalog (live products are in D1, edited in /admin → Products)
 schema.sql     every table: the ledger, customers, product settings, goats, alert state
 worker.js      the entire application (~1,500 lines)
 wrangler.toml  deploy config
@@ -233,7 +233,7 @@ instant test result as how it will behave in production.
 Once the live keys are in, you do need one real transaction. Make it cheap
 instead of buying a $127 bag of kelp from yourself.
 
-1. **Inventory tab → set one product to $1.00.** The decimal-point guard will
+1. **Products tab → set one product to $1.00.** The decimal-point guard will
    stop you and ask for confirmation, which conveniently tests that too.
 2. **Order A — prove the free path.** Buy it with your own card. Confirm it
    lands as `authorized`, that your bank shows a *pending hold* and not a
@@ -386,8 +386,9 @@ codes) to the `wrangler dev` log instead of sending them. Never set it live.
 
 | To change | Edit | Then |
 |---|---|---|
-| **Price, cost, freight, on/off** | **`/admin` → Inventory** | **nothing — takes effect immediately** |
-| A genuinely new product, or its name/photo/description | `products.json` | commit + `wrangler deploy` |
+| **Anything about a product: price, cost, stock, on/off, name, photo, description, new products** | **`/admin` → Products** | **nothing — takes effect immediately** |
+| What you bought from a supplier (updates stock and cost) | `/admin` → Purchases | nothing |
+| A shop's sales statement (consignment) | `/admin` → Location sales (shops under Locations) | nothing |
 | Pickup locations, tax rate, discounts | `config.json` | commit + `wrangler deploy` |
 | The pre-order terms text | `config.json` — **bump `terms.version`** | commit + deploy |
 | **A goat's page, photos, order, or shown/hidden** | **`/admin` → Goats** | **nothing — live on save** |
@@ -413,3 +414,17 @@ populated and validated server-side.
 One rule to keep: **shipped orders should always use manual capture**, whatever
 the customer's trust level. Ship-to-a-drop-address is the fraud pattern that
 caused the original problem, and pickup is what currently makes it impossible.
+
+---
+
+## Products, stock, purchases and locations
+
+Design and reasoning: [../research/inventory-plan.md](../research/inventory-plan.md).
+Products live in the D1 `products` table (seeded once from `products.json`; the
+old `product_settings` table is kept as history). Stock is the `stock_moves`
+ledger: paid online, invoice and direct sales take items out, purchases and
+counts add. A product with no stock moves is untracked (no badge). The store
+shows *In stock* / *Out of stock: order now, arrives with the next delivery*
+from `in_stock` on `/api/catalog`. Costs are moving weighted averages of landed
+cost (supplier price plus a weight-based share of shipping), recomputed from
+the stock moves whenever a purchase changes.

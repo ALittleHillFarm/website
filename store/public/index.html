@@ -143,6 +143,13 @@
   // Escape any text that came from the server (or from localStorage)
   // before it goes into innerHTML, so a product name or description can
   // never inject HTML into the page.
+  function stockBadge(p) {
+    // in_stock: true / false / null (not tracked: no badge). Out of stock can
+    // still be ordered - it arrives with the next delivery.
+    if (p.in_stock === true) return '<p class="stock in">In stock</p>';
+    if (p.in_stock === false) return '<p class="stock out">Out of stock: order now, arrives with the next delivery</p>';
+    return '';
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -292,6 +299,7 @@
               '<p class="meta">' + esc(p.supplier || '') + (p.unit ? ' · ' + esc(p.unit) : '') + '</p>' +
               (p.description ? '<p class="desc">' + esc(p.description) + '</p>' : '') +
               '<p class="price">' + money(p.price_cents) + '<span class="unit">list price</span></p>' +
+              stockBadge(p) +
               '<div class="row">' + qtyStepper(p.id, p.name, qty, 'cat') + '</div>' +
             '</div>' +
           '</article>'

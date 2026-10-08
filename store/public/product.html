@@ -177,6 +177,8 @@
             '<h1 class="serif">' + esc(p.name) + '</h1>' +
             '<p class="meta">' + meta.join(' · ') + '</p>' +
             '<p class="pd-price">' + money(p.price_cents) + ' <span class="unit">list price</span></p>' +
+            (p.in_stock === true ? '<p class="stock in">In stock</p>'
+              : p.in_stock === false ? '<p class="stock out">Out of stock: order now, arrives with the next delivery</p>' : '') +
             '<div class="pd-desc">' + (desc || '<p class="meta">No description available.</p>') + '</div>' +
             '<div id="pd-actions" aria-live="polite"></div>' +
             '<p class="cart note">Bank transfer and cash both carry a discount, and Idaho sales tax is added. Checkout shows the real total before you pay.</p>' +
