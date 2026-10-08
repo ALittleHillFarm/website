@@ -17,6 +17,15 @@ Read [DESIGN.md](DESIGN.md) for why it is shaped this way.
 
 ---
 
+## Tests, CI and automatic deploys
+
+- `cd store && node --test` runs the unit tests in `store/test/` for the money arithmetic in `store/lib/costing.js` (landed cost split by weight, moving average cost, location report totals and the per-category sales rows). Run them before changing any of that.
+- `.github/workflows/ci.yml` runs the tests and a `wrangler deploy --dry-run` build check of the store and the farm site on every push and pull request (GitHub-hosted runners).
+- On a push to `main` it then deploys both Workers. This needs the repository secrets `CLOUDFLARE_API_TOKEN` (an API token that can edit Workers, D1 and R2) and `CLOUDFLARE_ACCOUNT_ID`; until they are set the deploy job skips itself with a notice. Database changes are never run from CI: apply `schema.sql` changes by hand with `wrangler d1 execute`.
+- Local admin: `cd store && npx wrangler dev`, with `ADMIN_PASSWORD` in `.dev.vars`. The local database is separate from production (`wrangler d1 execute alhf-store --local --file=schema.sql` creates it).
+
+---
+
 ## First-time setup
 
 ### 1. Cloudflare DNS migration

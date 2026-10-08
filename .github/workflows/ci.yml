@@ -1,0 +1,86 @@
+# Checks on every push and pull request; deploys on a push to main.
+#
+# Public repo on GitHub-hosted runners (free minutes) - do not switch this to a
+# self-hosted runner. Action versions are pinned to commit SHAs.
+#
+# Deploying needs two repository secrets (Settings > Secrets and variables >
+# Actions): CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Until the token is
+# set the deploy job skips itself with a notice instead of failing.
+# No database migrations run here: schema changes are applied by hand.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Tests and build check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Unit tests (cost math, location reports)
+        working-directory: store
+        run: node --test
+
+      - name: Build check - store worker
+        working-directory: store
+        run: npx --yes wrangler@4.148.0 deploy --dry-run
+
+      - name: Build check - farm site
+        run: |
+          bash build-site.sh
+          npx --yes wrangler@4.148.0 deploy -c wrangler.site.toml --dry-run
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Is deploying set up?
+        id: gate
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice title=Deploy skipped::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set as repository secrets, so nothing was deployed. Checks passed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Deploy store worker
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: store
+        run: npx --yes wrangler@4.148.0 deploy
+
+      - name: Deploy farm site
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          bash build-site.sh
+          npx --yes wrangler@4.148.0 deploy -c wrangler.site.toml
