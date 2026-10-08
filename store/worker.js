@@ -25,6 +25,7 @@
 
 import catalog from './products.json';
 import config from './config.json';
+import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
 
@@ -347,7 +348,6 @@ function robots(request) {
 // Pricing — the single source of truth for money
 // ---------------------------------------------------------------------------
 
-class BadRequest extends Error {}
 
 const VALID_METHODS = new Set(['card', 'ach', 'cash']);
 
@@ -1722,16 +1722,6 @@ async function adminGoats(request, env) {
 /** "Low" in the Products filter: this many or fewer left. */
 const LOW_STOCK = 3;
 
-/** A whole number of cents, zero or more. Blank counts as zero. */
-function centsIn(v, what) {
-  if (v === '' || v == null) return 0;
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 0 || n > 100000000) {
-    throw new BadRequest(what + ' must be an amount of zero or more (whole cents)');
-  }
-  return n;
-}
-
 /** A whole number of units, at least 1. */
 function qtyIn(v, what) {
   const n = Number(v);
@@ -1802,30 +1792,6 @@ async function recordSaleMovesForIntent(env, intentId) {
 // ---- landed cost and the moving average -------------------------------------
 
 /**
- * Landed cost per unit for each line of a supplier order: the supplier's price
- * plus the line's share of shipping and fees. The share is split by weight
- * (shipping / total lbs x the line's lbs) when every line has a weight, and by
- * dollars otherwise. Example, New Country Organics SO343263: $368.59 over
- * 2,100 lb is about 17.6 cents a lb, so a 40 lb bag costs about $7.02 more.
- * lines: [{ qty, unit_cost_cents, weight_lbs }]
- * (public/assets/admin-purchases.js has the same arithmetic for the live
- * preview; this copy is the one that is saved.)
- */
-function landedCosts(lines, extraCents) {
-  const lbs = lines.map((l) => (Number(l.weight_lbs) > 0 ? Number(l.weight_lbs) * l.qty : 0));
-  const byWeight = lines.length > 0 && lbs.every((w) => w > 0);
-  const basis = lines.map((l, i) => (byWeight ? lbs[i] : l.unit_cost_cents * l.qty));
-  const total = basis.reduce((a, b) => a + b, 0);
-  const totalLbs = lbs.reduce((a, b) => a + b, 0);
-  return {
-    by: byWeight ? 'weight' : 'dollars',
-    total_lbs: totalLbs,
-    cents_per_lb: byWeight && totalLbs > 0 ? extraCents / totalLbs : null,
-    landed: lines.map((l, i) => Math.round(l.unit_cost_cents + (total > 0 ? (extraCents * basis[i]) / total : 0) / l.qty)),
-  };
-}
-
-/**
  * Replay each product's stock moves in date order and set its cost to the
  * moving weighted average of landed cost:
  *   new_avg = (on_hand_before x old_avg + qty x landed) / (on_hand_before + qty)
@@ -1850,21 +1816,11 @@ async function recomputeCosts(env, productIds) {
     const data = JSON.parse(r.data);
     const mine = moves.filter((m) => m.product_id === r.id);
     if (data.opening_cost_cents == null) data.opening_cost_cents = (data.cost_cents || 0) + (data.freight_cents || 0);
-    let onHand = 0;
-    let avg = data.opening_cost_cents;
-    for (const m of mine) {
-      if (m.kind === 'purchase' && m.unit_cost_cents != null) {
-        avg = onHand <= 0 ? m.unit_cost_cents : Math.round((onHand * avg + m.qty * m.unit_cost_cents) / (onHand + m.qty));
-      }
-      onHand += m.qty;
-    }
-    if (mine.some((m) => m.kind === 'purchase')) {
-      data.cost_cents = avg;
-      data.freight_cents = 0;
-    } else {
-      // Every purchase of it was deleted: back to what it cost before.
-      data.cost_cents = data.opening_cost_cents;
-    }
+    const replay = replayAverage(data.opening_cost_cents, mine);
+    data.cost_cents = replay.cost_cents;
+    // Freight is zero after a purchase: it is already in the landed cost. With
+    // every purchase deleted the product goes back to what it cost before.
+    if (replay.purchased) data.freight_cents = 0;
     stmts.push(env.DB.prepare('UPDATE products SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now, r.id));
   }
   for (let i = 0; i < stmts.length; i += 40) await env.DB.batch(stmts.slice(i, i + 40));
@@ -2275,40 +2231,6 @@ async function adminLocations(request, env) {
 
 // ---- location (consignment) sales reports -----------------------------------
 
-/** Totals for a shop's statement. Line net and total calculate (gross less
- *  discount; net plus tax) unless a figure was typed over them. The payout
- *  defaults to net less the shop's cut, and can be typed over too: Johnson's
- *  Sep 2026 sheet pays $156 gross - $6 actual discount + $12 milk = $162, which
- *  the report's own discount column would not give.
- *  (public/assets/admin-location-sales.js repeats this for the live preview.) */
-function reportTotals(rawLines, location, b) {
-  const lines = rawLines.map((l, i) => {
-    const where = 'line ' + (i + 1);
-    const gross = centsIn(l.gross_cents, where + ' gross');
-    const discount = centsIn(l.discount_cents, where + ' discount');
-    const tax = centsIn(l.tax_cents, where + ' tax');
-    const net = l.net_cents === '' || l.net_cents == null ? Math.max(0, gross - discount) : centsIn(l.net_cents, where + ' net');
-    const total = l.total_cents === '' || l.total_cents == null ? net + tax : centsIn(l.total_cents, where + ' total');
-    return { gross_cents: gross, discount_cents: discount, net_cents: net, tax_cents: tax, total_cents: total };
-  });
-  const sum = (k) => lines.reduce((n, l) => n + l[k], 0);
-  const extraTax = centsIn(b.extra_tax_cents, 'the extra tax');
-  const net = sum('net_cents');
-  const commission = b.commission_cents === '' || b.commission_cents == null
-    ? Math.round((net * (location.commission_bps || 0)) / 10000) : centsIn(b.commission_cents, 'the shop’s cut');
-  const payout = b.payout_cents === '' || b.payout_cents == null ? net - commission : centsIn(b.payout_cents, 'the payout');
-  return {
-    lines,
-    gross_cents: sum('gross_cents'),
-    discount_cents: sum('discount_cents'),
-    net_cents: net,
-    tax_cents: sum('tax_cents') + extraTax,
-    total_cents: sum('total_cents') + extraTax,
-    commission_cents: commission,
-    payout_cents: payout,
-  };
-}
-
 async function loadReport(env, id) {
   const report = await env.DB.prepare(
     'SELECT r.*, l.name AS location_name FROM location_reports r LEFT JOIN locations l ON l.id = r.location_id WHERE r.id = ?'
@@ -2342,7 +2264,7 @@ async function adminLocationReports(request, env) {
       if (!report) return json({ error: 'no report with that id' }, 404);
       await env.DB.batch([
         env.DB.prepare("DELETE FROM stock_moves WHERE kind = 'location_sale' AND ref = ?").bind(report.id),
-        env.DB.prepare('DELETE FROM sales WHERE id = ?').bind('loc_' + report.id),
+        env.DB.prepare("DELETE FROM sales WHERE channel = 'location' AND (id = ? OR notes = ?)").bind('loc_' + report.id, 'Location report ' + report.id),
         env.DB.prepare('DELETE FROM location_report_lines WHERE report_id = ?').bind(report.id),
         env.DB.prepare('DELETE FROM location_reports WHERE id = ?').bind(report.id),
       ]);
@@ -2428,28 +2350,29 @@ async function adminLocationReports(request, env) {
       ).bind(pid, location.id, -qty, id, location.name + ' ' + label, soldAt, who));
     }
 
-    // The books: one sales row for the whole report, so revenue and COGS stay
-    // whole. Revenue is what the shop pays us (the payout), with the shop's
-    // discounts and cut already taken off. The shop collects sales tax on its
+    // The books: one sales row per category (feed, milk...), so revenue and
+    // COGS by category are right. Revenue is what the shop pays us (the
+    // payout), with the shop's discounts and cut already taken off, shared by
+    // category in proportion to net sales. The shop collects sales tax on its
     // own sales, so by default it is marked exempt and stays out of our Idaho
     // filing; a shop that does not collect it leaves that tax with us.
-    const catOf = (name) => (/milk/i.test(name) ? 'milk' : /cheese/i.test(name) ? 'cheese' : 'feed');
-    const byCat = new Map();
     const items = raw.map((l, i) => {
-      const cat = catOf(l.name);
-      byCat.set(cat, (byCat.get(cat) || 0) + t.lines[i].net_cents);
       const unit = l.product ? (l.product.cost_cents || 0) + (l.product.freight_cents || 0) : 0;
-      return { id: l.product ? l.product.id : null, name: l.name, qty: l.qty, category: cat, ...t.lines[i], cost_cents: unit };
+      return { id: l.product ? l.product.id : null, name: l.name, qty: l.qty,
+        category: salesCategory(l.name, l.product && l.product.category), ...t.lines[i], cost_cents: unit };
     });
-    const category = [...byCat].sort((a, c) => c[1] - a[1])[0][0];
-    const cogs = items.reduce((n, l) => n + l.cost_cents * l.qty, 0);
     const exempt = location.tax_collected_by_location ? 1 : 0;
-    const tax = exempt ? 0 : t.tax_cents;
-    stmts.push(env.DB.prepare(
-      'INSERT OR REPLACE INTO sales (id, sold_at, channel, category, customer_name, items_json, subtotal_cents, tax_cents, total_cents,' +
-        ' cogs_cents, tax_exempt, payment_method, status, fulfillment, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-    ).bind('loc_' + id, soldAt, 'location', category, location.name, JSON.stringify(items), t.payout_cents, tax, t.payout_cents + tax,
-      cogs, exempt, 'consignment', 'recorded', 'location:' + location.id, 'Location report ' + id));
+    const extraTax = centsIn(b.extra_tax_cents, 'the extra tax');
+    stmts.push(env.DB.prepare("DELETE FROM sales WHERE channel = 'location' AND (id = ? OR notes = ?)")
+      .bind('loc_' + id, 'Location report ' + id));
+    for (const part of splitByCategory(items, t.payout_cents, !!exempt, extraTax)) {
+      stmts.push(env.DB.prepare(
+        'INSERT INTO sales (id, sold_at, channel, category, customer_name, items_json, subtotal_cents, tax_cents, total_cents,' +
+          ' cogs_cents, tax_exempt, payment_method, status, fulfillment, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind('loc_' + id + '_' + part.category, soldAt, 'location', part.category, location.name,
+        JSON.stringify(part.items.map((i) => items[i])), part.revenue_cents, part.tax_cents, part.revenue_cents + part.tax_cents,
+        part.cogs_cents, exempt, 'consignment', 'recorded', 'location:' + location.id, 'Location report ' + id));
+    }
     await env.DB.batch(stmts);
     return json({ ok: true, id, gross_cents: t.gross_cents, net_cents: t.net_cents, payout_cents: t.payout_cents });
   } catch (err) {
