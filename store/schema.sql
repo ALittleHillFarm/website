@@ -205,3 +205,152 @@ CREATE TABLE purchase_history (
   source       TEXT NOT NULL      -- 'shopify'
 );
 CREATE INDEX purchase_history_email ON purchase_history (email, sold_at);
+
+-- ===========================================================================
+-- Products, stock, supplier purchases, locations and consignment sales.
+-- See research/inventory-plan.md. Every statement is IF NOT EXISTS so the file
+-- can be re-run; production got these one statement at a time.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- products — the catalog. D1 is the source of truth; products.json is only the
+-- one-time seed and the fallback if this table cannot be read. data holds
+-- every products.json field (name, sku, supplier, unit, weight_lbs,
+-- price_cents, cost_cents, freight_cents, taxable, category, active,
+-- description, image, animals, popular, ...) as JSON. A product with sales or
+-- stock history is hidden (active:false, archived:true), never deleted.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS products (
+  id          TEXT PRIMARY KEY,
+  data        TEXT NOT NULL,
+  sort        INTEGER NOT NULL DEFAULT 100,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- stock_moves — the stock ledger. On hand = SUM(qty) per product. location_id
+-- NULL means the farm. A product with no moves at all is "untracked" (milk,
+-- say) and shows no stock badge. unit_cost_cents is the landed cost, set on
+-- purchases only. 'count' is a stock take: the move stores the difference.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stock_moves (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id      TEXT NOT NULL,
+  location_id     TEXT,
+  qty             INTEGER NOT NULL,                  -- + in, - out
+  unit_cost_cents INTEGER,
+  kind            TEXT NOT NULL CHECK (kind IN ('purchase','sale','location_sale','adjust','count')),
+  ref             TEXT,                              -- purchase id / sale id / report id
+  note            TEXT,
+  created_at      TEXT NOT NULL,
+  created_by      TEXT
+);
+CREATE INDEX IF NOT EXISTS stock_moves_product ON stock_moves (product_id, created_at);
+CREATE INDEX IF NOT EXISTS stock_moves_ref ON stock_moves (kind, ref);
+
+-- ---------------------------------------------------------------------------
+-- purchases — a supplier order (header) and what was on it (lines). Stock moves
+-- are added when it is marked received. landed_unit_cents is the supplier's
+-- price plus the line's share of shipping and fees, split by weight.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS purchases (
+  id            TEXT PRIMARY KEY,
+  supplier      TEXT NOT NULL,
+  ordered_at    TEXT NOT NULL,
+  received_at   TEXT,
+  ref           TEXT,                 -- the supplier's order number, e.g. SO343263
+  po            TEXT,                 -- our own PO, e.g. PO60
+  shipping_cents INTEGER NOT NULL DEFAULT 0,
+  other_cents   INTEGER NOT NULL DEFAULT 0,
+  tax_cents     INTEGER NOT NULL DEFAULT 0,
+  total_cents   INTEGER NOT NULL DEFAULT 0,
+  note          TEXT,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  created_by    TEXT
+);
+CREATE TABLE IF NOT EXISTS purchase_lines (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id       TEXT NOT NULL,
+  product_id        TEXT,
+  name              TEXT NOT NULL,
+  sku               TEXT,
+  qty               INTEGER NOT NULL,
+  unit_cost_cents   INTEGER NOT NULL,
+  weight_lbs        REAL,
+  landed_unit_cents INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS purchase_lines_purchase ON purchase_lines (purchase_id);
+CREATE INDEX IF NOT EXISTS purchase_lines_product ON purchase_lines (product_id);
+
+-- ---------------------------------------------------------------------------
+-- locations — where stock lives or is sold: the farm, and shops that sell our
+-- goods on consignment. commission_bps is the shop's cut, if any.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS locations (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'store' CHECK (kind IN ('farm','store','market','other')),
+  address     TEXT,
+  contact     TEXT,
+  phone       TEXT,
+  email       TEXT,
+  commission_bps INTEGER NOT NULL DEFAULT 0,
+  tax_collected_by_location INTEGER NOT NULL DEFAULT 1,
+  active      INTEGER NOT NULL DEFAULT 1,
+  note        TEXT,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- location_reports — one statement from a shop (e.g. "Sep 2026"). Saving one
+-- writes location_sale stock moves and a single sales row (channel 'location').
+-- payout_cents is what the shop owes us.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS location_reports (
+  id          TEXT PRIMARY KEY,
+  location_id TEXT NOT NULL,
+  period_label TEXT NOT NULL,
+  period_start TEXT,
+  period_end   TEXT,
+  gross_cents  INTEGER NOT NULL DEFAULT 0,
+  discount_cents INTEGER NOT NULL DEFAULT 0,
+  net_cents    INTEGER NOT NULL DEFAULT 0,
+  tax_cents    INTEGER NOT NULL DEFAULT 0,
+  total_cents  INTEGER NOT NULL DEFAULT 0,
+  commission_cents INTEGER NOT NULL DEFAULT 0,
+  payout_cents INTEGER NOT NULL DEFAULT 0,
+  paid_at      TEXT,
+  paid_method  TEXT,
+  note         TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL,
+  created_by   TEXT
+);
+CREATE TABLE IF NOT EXISTS location_report_lines (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  report_id   TEXT NOT NULL,
+  product_id  TEXT,
+  name        TEXT NOT NULL,
+  qty         INTEGER NOT NULL,
+  gross_cents INTEGER NOT NULL DEFAULT 0,
+  discount_cents INTEGER NOT NULL DEFAULT 0,
+  net_cents   INTEGER NOT NULL DEFAULT 0,
+  tax_cents   INTEGER NOT NULL DEFAULT 0,
+  total_cents INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS location_report_lines_report ON location_report_lines (report_id);
+CREATE INDEX IF NOT EXISTS location_reports_location ON location_reports (location_id, period_end);
+
+-- Seed rows: the farm itself, and the first consignment shop. The shop's
+-- address and contact details are left blank to fill in from the Locations tab.
+INSERT OR IGNORE INTO locations (id, name, kind, commission_bps, tax_collected_by_location, active, created_at, updated_at)
+  VALUES ('farm', 'A Little Hill Farm', 'farm', 0, 0, 1, '2026-10-08T00:00:00.000Z', '2026-10-08T00:00:00.000Z');
+INSERT OR IGNORE INTO locations (id, name, kind, commission_bps, tax_collected_by_location, active, created_at, updated_at)
+  VALUES ('johnsons-heritage-farmstead', 'Johnson''s Heritage Farmstead', 'store', 0, 1, 1, '2026-10-08T00:00:00.000Z', '2026-10-08T00:00:00.000Z');
+
+-- A sale takes each product out of stock once. Lets recordSaleMoves() be called
+-- more than once for the same sale (webhook retries, capture then webhook).
+CREATE UNIQUE INDEX IF NOT EXISTS stock_moves_sale_once ON stock_moves (ref, product_id) WHERE kind = 'sale';

@@ -90,25 +90,40 @@ export default {
 // ---------------------------------------------------------------------------
 
 /**
- * The effective catalog: products.json overlaid with whatever has been edited
- * from /admin. products.json owns what a product IS; product_settings owns
- * whether it is for sale and what it costs. A NULL column falls back.
+ * The catalog, from the `products` table (D1 is the source of truth, edited in
+ * the admin Products tab). The first time it is read empty, it is seeded once
+ * from products.json merged with the old product_settings overlay. If the table
+ * cannot be read at all, fall back to that same merge so the storefront never
+ * goes down. products.json is now only the seed snapshot and the fallback.
  */
 async function loadCatalog(env) {
+  try {
+    let rows = (await env.DB.prepare('SELECT id, data FROM products ORDER BY sort, rowid').all()).results || [];
+    if (!rows.length) {
+      await seedProducts(env);
+      rows = (await env.DB.prepare('SELECT id, data FROM products ORDER BY sort, rowid').all()).results || [];
+    }
+    if (rows.length) return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id }));
+  } catch (err) {
+    // A products-table problem must not take the storefront down. The committed
+    // catalog is always a safe, known-good state.
+    console.error('products table unavailable, using products.json: ' + err);
+  }
+  return legacyCatalog(env);
+}
+
+/** products.json with the old product_settings overlay applied: the seed, and the fallback. */
+async function legacyCatalog(env) {
   let overrides = new Map();
   try {
     const rows = (await env.DB.prepare('SELECT * FROM product_settings').all()).results || [];
     overrides = new Map(rows.map((r) => [r.product_id, r]));
   } catch (err) {
-    // A settings-table problem must not take the storefront down. Fall back to
-    // the committed catalog, which is always a safe, known-good state.
-    console.error('product_settings unavailable, using products.json: ' + err);
+    console.error('product_settings unavailable, using products.json alone: ' + err);
   }
-
   return catalog.products.map((p) => {
     const o = overrides.get(p.id);
-    if (!o) return p;
-    return {
+    const merged = !o ? { ...p } : {
       ...p,
       active: o.active == null ? p.active : !!o.active,
       image: o.image || p.image,
@@ -117,7 +132,37 @@ async function loadCatalog(env) {
       freight_cents: o.freight_cents == null ? p.freight_cents : o.freight_cents,
       note: o.note || null,
     };
+    if (merged.weight_lbs == null) merged.weight_lbs = weightFromUnit(merged.unit);
+    return merged;
   });
+}
+
+/** "40 lbs" -> 40, "1000 lb tote" -> 1000, "2,000 lbs" -> 2000, "12 oz" -> 0.75.
+ *  null when the size says nothing about weight ("1 quart", "9\""). */
+function weightFromUnit(unit) {
+  const m = String(unit || '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*(lbs?|pounds?|oz|ounces?)\b/i);
+  if (!m) return null;
+  const n = parseFloat(m[1]) * (/^o/i.test(m[2]) ? 1 / 16 : 1);
+  return Math.round(n * 100) / 100;
+}
+
+let seeding = null;
+/** Fill an empty products table from the legacy catalog. INSERT OR IGNORE, so
+ *  two requests racing to seed cannot collide or overwrite an edit. */
+function seedProducts(env) {
+  if (!seeding) {
+    seeding = (async () => {
+      const list = await legacyCatalog(env);
+      const now = new Date().toISOString();
+      const stmts = list.map((p, i) => {
+        const { id, ...data } = p;
+        return env.DB.prepare('INSERT OR IGNORE INTO products (id, data, sort, created_at, updated_at) VALUES (?,?,?,?,?)')
+          .bind(id, JSON.stringify(data), (i + 1) * 10, now, now);
+      });
+      for (let i = 0; i < stmts.length; i += 40) await env.DB.batch(stmts.slice(i, i + 40));
+    })().finally(() => { seeding = null; });
+  }
+  return seeding;
 }
 
 const activeFrom = (products) => products.filter((p) => p.active);
@@ -138,7 +183,25 @@ function apiConfig(env) {
   });
 }
 
+/** product id -> units on hand, for every product that has at least one stock
+ *  move. A product that is not in the map is untracked (milk, say). */
+async function stockLevels(env) {
+  try {
+    const rows = (await env.DB.prepare('SELECT product_id, SUM(qty) AS on_hand FROM stock_moves GROUP BY product_id').all()).results || [];
+    return new Map(rows.map((r) => [r.product_id, Number(r.on_hand) || 0]));
+  } catch (err) {
+    // No stock table yet, or a database hiccup: show no badges rather than fail.
+    console.error('stock levels unavailable: ' + err);
+    return new Map();
+  }
+}
+
+/** true / false for tracked products, null for untracked. The exact count is
+ *  never public. */
+const inStockOf = (levels, id) => (levels.has(id) ? levels.get(id) > 0 : null);
+
 async function apiCatalog(env) {
+  const levels = await stockLevels(env);
   return json({
     products: activeFrom(await loadCatalog(env)).map((p) => ({
       id: p.id,
@@ -154,6 +217,9 @@ async function apiCatalog(env) {
       note: p.note || '',
       // Rank on the store's default "Popular" view; 0 = not in it.
       popular: p.popular || 0,
+      // Stock badge: true = in stock, false = out (still orderable, arrives
+      // with the next delivery), null = not tracked.
+      in_stock: inStockOf(levels, p.id),
     })),
   });
 }
@@ -183,6 +249,7 @@ async function productPage(request, env) {
     return out;
   }
 
+  const inStock = inStockOf(await stockLevels(env), p.id);
   const pageUrl = url.origin + '/product?id=' + encodeURIComponent(p.id);
   const image = p.image ? new URL(p.image, url.origin).toString() : url.origin + '/assets/og-store.jpg';
   const title = p.name + (p.unit ? ' (' + p.unit + ')' : '') + ' — A Little Hill Farm';
@@ -205,7 +272,9 @@ async function productPage(request, env) {
       '@type': 'Offer',
       price,
       priceCurrency: 'USD',
-      availability: 'https://schema.org/PreOrder',
+      // Tracked stock decides it; a product we do not track stays a pre-order.
+      availability: inStock === true ? 'https://schema.org/InStock'
+        : inStock === false ? 'https://schema.org/BackOrder' : 'https://schema.org/PreOrder',
       url: pageUrl,
       seller: { '@type': 'Organization', name: 'A Little Hill Farm' },
       // Pickup only — we don't ship (policies.html#pickup).
@@ -657,6 +726,9 @@ async function apiWebhook(request, env, ctx) {
         // Only the first completion of a pending sale is a new order.
         if (done.meta && done.meta.changes) {
           await settleInvoiceMethod(env, saleId, obj.payment_method_types);
+          // Paid already (an automatic-capture card). A held card or a bank
+          // transfer in flight is stocked later, when it actually settles.
+          if (status === 'captured') await recordSaleMoves(env, saleId);
           ctx.waitUntil(notifyNewOrder(env, saleId));
           ctx.waitUntil(sendOrderConfirmation(env, saleId));
         }
@@ -671,6 +743,7 @@ async function apiWebhook(request, env, ctx) {
     // Card captured, or a bank transfer settled.
     case 'payment_intent.succeeded':
       await setStatusByIntent(env, obj.id, 'captured');
+      await recordSaleMovesForIntent(env, obj.id);
       break;
 
     // A bank transfer bounced (closed account, insufficient funds...). Only
@@ -1356,6 +1429,7 @@ async function adminInvoices(request, env) {
         "UPDATE sales SET status = 'recorded', payment_method = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?," +
           ' cogs_cents = ?, fulfilled_at = ? WHERE id = ?'
       ).bind(method, q.subtotal_cents, q.tax_cents, q.total_cents, q.cogs_cents, new Date().toISOString(), sale.id).run();
+      await recordSaleMoves(env, sale.id);
       return json({ ok: true, total_cents: q.total_cents });
     }
   } catch (err) {
@@ -1544,9 +1618,9 @@ function cleanGoatData(d, previous) {
   };
 }
 
-function slugify(name) {
+function slugify(name, fallback = 'goat') {
   return String(name).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'goat';
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '') || fallback;
 }
 
 async function adminGoats(request, env) {
@@ -1628,6 +1702,760 @@ async function adminGoats(request, env) {
     throw err;
   }
   return json({ error: 'unknown action' }, 400);
+}
+
+// ---------------------------------------------------------------------------
+// Products, stock, supplier purchases, locations and location sales
+//
+// Design notes live in research/inventory-plan.md. In short:
+//   products        D1 is the catalog (loadCatalog above); edited in admin.
+//   stock_moves     a ledger. On hand = SUM(qty). A product with no moves is
+//                   untracked (milk) and shows no stock badge.
+//   purchases       supplier orders. Receiving one adds stock and moves each
+//                   product's cost to a weighted average of LANDED cost
+//                   (supplier price + a weight-based share of shipping/fees).
+//   location sales  a shop's monthly statement for goods we left there. It
+//                   writes stock moves and one sales row (channel 'location').
+// All money is integer cents, as everywhere else in this file.
+// ---------------------------------------------------------------------------
+
+/** "Low" in the Products filter: this many or fewer left. */
+const LOW_STOCK = 3;
+
+/** A whole number of cents, zero or more. Blank counts as zero. */
+function centsIn(v, what) {
+  if (v === '' || v == null) return 0;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 100000000) {
+    throw new BadRequest(what + ' must be an amount of zero or more (whole cents)');
+  }
+  return n;
+}
+
+/** A whole number of units, at least 1. */
+function qtyIn(v, what) {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 99999) throw new BadRequest(what + ' must be a whole number of at least 1');
+  return n;
+}
+
+/** YYYY-MM-DD or null. Anything else is a mistake worth saying out loud. */
+function dateIn(v, what) {
+  if (v == null || v === '') return null;
+  const s = String(v).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(Date.parse(s))) throw new BadRequest(what + ' is not a valid date');
+  return s;
+}
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** Placeholders for an IN (...) list. */
+const marks = (n) => new Array(n).fill('?').join(',');
+
+// ---- stock moves from sales -------------------------------------------------
+
+/**
+ * Take a paid sale's items out of stock. Called wherever a sale becomes paid:
+ * a captured card, a settled bank transfer, cash or check recorded, a direct
+ * sale. Safe to call twice: the unique index stock_moves_sale_once makes the
+ * second insert a no-op. Only products that already have stock moves are
+ * touched, so milk and other untracked items stay untracked. A problem here is
+ * logged and never blocks the payment that triggered it.
+ */
+async function recordSaleMoves(env, saleId) {
+  try {
+    const sale = await env.DB.prepare('SELECT id, items_json, channel FROM sales WHERE id = ?').bind(saleId).first();
+    if (!sale || sale.channel === 'location') return;
+    let lines = [];
+    try { lines = JSON.parse(sale.items_json || '[]'); } catch { /* old free-text sale */ }
+    const want = new Map();
+    for (const l of Array.isArray(lines) ? lines : []) {
+      const qty = Math.floor(Number(l && l.qty));
+      if (l && l.id && qty > 0) want.set(l.id, (want.get(l.id) || 0) + qty);
+    }
+    if (!want.size) return;
+    const tracked = new Set(((await env.DB.prepare(
+      'SELECT DISTINCT product_id FROM stock_moves WHERE product_id IN (' + marks(want.size) + ')'
+    ).bind(...want.keys()).all()).results || []).map((r) => r.product_id));
+    const now = new Date().toISOString();
+    const stmts = [...want].filter(([id]) => tracked.has(id)).map(([id, qty]) =>
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO stock_moves (product_id, location_id, qty, kind, ref, note, created_at, created_by)" +
+          " VALUES (?, NULL, ?, 'sale', ?, ?, ?, 'system')"
+      ).bind(id, -qty, sale.id, 'Sale ' + orderRef(sale.id), now));
+    if (stmts.length) await env.DB.batch(stmts);
+  } catch (err) {
+    console.error('stock moves for sale ' + saleId + ' failed: ' + err);
+  }
+}
+
+async function recordSaleMovesForIntent(env, intentId) {
+  try {
+    const rows = (await env.DB.prepare("SELECT id FROM sales WHERE stripe_payment_intent = ? AND status = 'captured'")
+      .bind(intentId).all()).results || [];
+    for (const r of rows) await recordSaleMoves(env, r.id);
+  } catch (err) {
+    console.error('stock moves for payment ' + intentId + ' failed: ' + err);
+  }
+}
+
+// ---- landed cost and the moving average -------------------------------------
+
+/**
+ * Landed cost per unit for each line of a supplier order: the supplier's price
+ * plus the line's share of shipping and fees. The share is split by weight
+ * (shipping / total lbs x the line's lbs) when every line has a weight, and by
+ * dollars otherwise. Example, New Country Organics SO343263: $368.59 over
+ * 2,100 lb is about 17.6 cents a lb, so a 40 lb bag costs about $7.02 more.
+ * lines: [{ qty, unit_cost_cents, weight_lbs }]
+ * (public/assets/admin-purchases.js has the same arithmetic for the live
+ * preview; this copy is the one that is saved.)
+ */
+function landedCosts(lines, extraCents) {
+  const lbs = lines.map((l) => (Number(l.weight_lbs) > 0 ? Number(l.weight_lbs) * l.qty : 0));
+  const byWeight = lines.length > 0 && lbs.every((w) => w > 0);
+  const basis = lines.map((l, i) => (byWeight ? lbs[i] : l.unit_cost_cents * l.qty));
+  const total = basis.reduce((a, b) => a + b, 0);
+  const totalLbs = lbs.reduce((a, b) => a + b, 0);
+  return {
+    by: byWeight ? 'weight' : 'dollars',
+    total_lbs: totalLbs,
+    cents_per_lb: byWeight && totalLbs > 0 ? extraCents / totalLbs : null,
+    landed: lines.map((l, i) => Math.round(l.unit_cost_cents + (total > 0 ? (extraCents * basis[i]) / total : 0) / l.qty)),
+  };
+}
+
+/**
+ * Replay each product's stock moves in date order and set its cost to the
+ * moving weighted average of landed cost:
+ *   new_avg = (on_hand_before x old_avg + qty x landed) / (on_hand_before + qty)
+ * (landed cost alone when nothing was on hand). Replaying from the start,
+ * instead of nudging the old average, keeps edits and deletes exact. The cost
+ * the product had before its first purchase is kept as its opening cost so
+ * stock counted before then still carries it. Freight is zero afterwards:
+ * it is already in the landed cost.
+ */
+async function recomputeCosts(env, productIds) {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return;
+  const rows = (await env.DB.prepare('SELECT id, data FROM products WHERE id IN (' + marks(ids.length) + ')')
+    .bind(...ids).all()).results || [];
+  const moves = (await env.DB.prepare(
+    'SELECT product_id, qty, unit_cost_cents, kind FROM stock_moves WHERE product_id IN (' + marks(ids.length) +
+      ') ORDER BY created_at, id'
+  ).bind(...ids).all()).results || [];
+  const now = new Date().toISOString();
+  const stmts = [];
+  for (const r of rows) {
+    const data = JSON.parse(r.data);
+    const mine = moves.filter((m) => m.product_id === r.id);
+    if (data.opening_cost_cents == null) data.opening_cost_cents = (data.cost_cents || 0) + (data.freight_cents || 0);
+    let onHand = 0;
+    let avg = data.opening_cost_cents;
+    for (const m of mine) {
+      if (m.kind === 'purchase' && m.unit_cost_cents != null) {
+        avg = onHand <= 0 ? m.unit_cost_cents : Math.round((onHand * avg + m.qty * m.unit_cost_cents) / (onHand + m.qty));
+      }
+      onHand += m.qty;
+    }
+    if (mine.some((m) => m.kind === 'purchase')) {
+      data.cost_cents = avg;
+      data.freight_cents = 0;
+    } else {
+      // Every purchase of it was deleted: back to what it cost before.
+      data.cost_cents = data.opening_cost_cents;
+    }
+    stmts.push(env.DB.prepare('UPDATE products SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now, r.id));
+  }
+  for (let i = 0; i < stmts.length; i += 40) await env.DB.batch(stmts.slice(i, i + 40));
+}
+
+// ---- products ---------------------------------------------------------------
+
+const PRODUCT_IMAGE = /^\/media\/[a-f0-9-]{8,}\.(jpg|png|gif|webp)$/;
+
+/** Turn what the Products form sent into a clean patch for a product's data.
+ *  Only fields that were sent are touched. */
+function cleanProductFields(f, existing) {
+  if (!f || typeof f !== 'object') throw new BadRequest('nothing to save');
+  const out = {};
+  if ('name' in f) {
+    out.name = cleanText(f.name, 120);
+    if (!out.name) throw new BadRequest('every product needs a name');
+  }
+  if ('sku' in f) out.sku = cleanText(f.sku, 40);
+  if ('supplier' in f) out.supplier = cleanText(f.supplier, 80);
+  if ('unit' in f) out.unit = cleanText(f.unit, 40);
+  if ('category' in f) out.category = cleanText(f.category, 30).toLowerCase() || 'other';
+  if ('description' in f) out.description = cleanPara(f.description, 4000);
+  if ('note' in f) out.note = cleanText(f.note, 200) || null;
+  if ('taxable' in f) out.taxable = !!f.taxable;
+  if ('active' in f) out.active = !!f.active;
+  if ('archived' in f) out.archived = !!f.archived;
+  if ('weight_lbs' in f) {
+    if (f.weight_lbs === '' || f.weight_lbs == null) out.weight_lbs = null;
+    else {
+      const w = Number(f.weight_lbs);
+      if (!Number.isFinite(w) || w < 0 || w > 5000) throw new BadRequest('weight must be a number of pounds, zero or more');
+      out.weight_lbs = Math.round(w * 100) / 100;
+    }
+  }
+  for (const k of ['price_cents', 'cost_cents', 'freight_cents']) {
+    if (k in f) out[k] = centsIn(f[k], k === 'price_cents' ? 'the price' : k === 'cost_cents' ? 'the cost' : 'the freight');
+  }
+  if ('popular' in f) {
+    const n = Number(f.popular) || 0;
+    out.popular = Number.isInteger(n) && n > 0 && n < 1000 ? n : 0;
+  }
+  if ('animals' in f) {
+    const list = Array.isArray(f.animals) ? f.animals : String(f.animals || '').split(',');
+    out.animals = [...new Set(list.map((a) => cleanText(a, 30)).filter(Boolean))].slice(0, 12);
+  }
+  if ('image' in f) {
+    const img = String(f.image || '');
+    // Only a photo we issued, or the one it already has. Never an arbitrary URL.
+    if (img && img !== (existing && existing.image) && !PRODUCT_IMAGE.test(img)) {
+      throw new BadRequest('the photo must be one uploaded here');
+    }
+    out.image = img;
+  }
+  return out;
+}
+
+async function productHasHistory(env, id) {
+  const checks = [
+    ['SELECT 1 FROM stock_moves WHERE product_id = ? LIMIT 1', id],
+    ['SELECT 1 FROM purchase_lines WHERE product_id = ? LIMIT 1', id],
+    ['SELECT 1 FROM location_report_lines WHERE product_id = ? LIMIT 1', id],
+    ['SELECT 1 FROM purchase_history WHERE product_id = ? LIMIT 1', id],
+    ['SELECT 1 FROM sales WHERE items_json LIKE ? LIMIT 1', '%"id":"' + id + '"%'],
+  ];
+  for (const [sql, arg] of checks) {
+    if (await env.DB.prepare(sql).bind(arg).first()) return true;
+  }
+  return false;
+}
+
+async function adminProducts(request, env) {
+  const url = new URL(request.url);
+  if (request.method === 'GET') {
+    // One product's recent stock moves, for its edit form.
+    const movesFor = url.searchParams.get('moves');
+    if (movesFor) {
+      const rows = (await env.DB.prepare(
+        'SELECT m.id, m.qty, m.kind, m.ref, m.note, m.created_at, m.unit_cost_cents, m.location_id, l.name AS location_name' +
+          ' FROM stock_moves m LEFT JOIN locations l ON l.id = m.location_id' +
+          ' WHERE m.product_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT 40'
+      ).bind(movesFor).all()).results || [];
+      return json({ moves: rows });
+    }
+    const products = await loadCatalog(env);
+    const levels = await stockLevels(env);
+    return json({
+      low_stock: LOW_STOCK,
+      products: products.map((p) => ({
+        id: p.id,
+        sku: p.sku || '',
+        name: p.name,
+        supplier: p.supplier || '',
+        unit: p.unit || '',
+        weight_lbs: p.weight_lbs == null ? null : p.weight_lbs,
+        category: p.category || 'other',
+        image: p.image || '',
+        active: !!p.active,
+        archived: !!p.archived,
+        taxable: !!p.taxable,
+        price_cents: p.price_cents || 0,
+        cost_cents: p.cost_cents || 0,
+        freight_cents: p.freight_cents || 0,
+        description: p.description || '',
+        animals: p.animals || [],
+        popular: p.popular || 0,
+        note: p.note || '',
+        // null = not tracked; the first count or purchase starts tracking it.
+        on_hand: levels.has(p.id) ? levels.get(p.id) : null,
+        // What is left after cost and freight. Negative means we lose money.
+        margin_cents: (p.price_cents || 0) - (p.cost_cents || 0) - (p.freight_cents || 0),
+      })),
+    });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const who = await adminIdentity(request, env);
+  const now = new Date().toISOString();
+  try {
+    if (b.action === 'create') {
+      const patch = cleanProductFields(b.fields, null);
+      if (!patch.name) throw new BadRequest('every product needs a name');
+      const base = slugify(patch.name + (patch.unit ? ' ' + patch.unit : ''), 'product');
+      let id = base;
+      for (let n = 2; await env.DB.prepare('SELECT 1 FROM products WHERE id = ?').bind(id).first(); n++) id = base + '-' + n;
+      const last = await env.DB.prepare('SELECT MAX(sort) AS s FROM products').first();
+      // New products start switched off, so a half-filled one never reaches the store.
+      const data = {
+        sku: '', supplier: '', unit: '', category: 'feed', taxable: true, description: '', image: '', animals: [],
+        price_cents: 0, cost_cents: 0, freight_cents: 0, weight_lbs: null, ...patch, active: !!patch.active,
+      };
+      if (data.weight_lbs == null) data.weight_lbs = weightFromUnit(data.unit);
+      await env.DB.prepare('INSERT INTO products (id, data, sort, created_at, updated_at) VALUES (?,?,?,?,?)')
+        .bind(id, JSON.stringify(data), ((last && last.s) || 0) + 10, now, now).run();
+      return json({ ok: true, id });
+    }
+
+    const row = await env.DB.prepare('SELECT id, data FROM products WHERE id = ?').bind(String(b.id || '')).first();
+    if (!row) return json({ error: 'no product with that id' }, 404);
+    const data = JSON.parse(row.data);
+
+    if (b.action === 'save') {
+      const patch = cleanProductFields(b.fields, data);
+      // A misplaced decimal point is the most expensive mistake this form can
+      // make. 0.53 for 53.00 sells $53 feed for 53 cents, and those orders are
+      // binding. So a price that moves more than 5x either way must be confirmed.
+      if ('price_cents' in patch) {
+        const before = data.price_cents || 0;
+        const price = patch.price_cents;
+        const wild = before > 0 && price > 0 && (price > before * 5 || price * 5 < before);
+        if (wild && b.confirm !== true) {
+          return json({
+            error: 'price_change_needs_confirmation',
+            message: 'That changes the price from $' + (before / 100).toFixed(2) + ' to $' + (price / 100).toFixed(2) +
+              '. Check the decimal point, then confirm to save.',
+            before_cents: before,
+            after_cents: price,
+          }, 409);
+        }
+      }
+      // Typing a new cost by hand starts a new average from that figure.
+      const costTyped = 'cost_cents' in patch && patch.cost_cents !== data.cost_cents;
+      if (costTyped) data.opening_cost_cents = patch.cost_cents;
+      Object.assign(data, patch);
+      if (data.active) data.archived = false;
+      await env.DB.prepare('UPDATE products SET data = ?, updated_at = ? WHERE id = ?')
+        .bind(JSON.stringify(data), now, row.id).run();
+      // On a product with purchases, the average is rebuilt on top of the
+      // typed cost, so what she sees is what will stick.
+      if (costTyped) await recomputeCosts(env, [row.id]);
+      return json({ ok: true });
+    }
+
+    if (b.action === 'stock') {
+      const sum = await env.DB.prepare('SELECT COALESCE(SUM(qty),0) AS s, COUNT(*) AS n FROM stock_moves WHERE product_id = ?')
+        .bind(row.id).first();
+      const note = cleanText(b.note, 120) || null;
+      let qty, kind;
+      if (b.mode === 'count') {
+        const counted = Number(b.counted);
+        if (b.counted === '' || b.counted == null || !Number.isInteger(counted) || counted < 0 || counted > 1000000) {
+          throw new BadRequest('the count must be a whole number, zero or more');
+        }
+        qty = counted - sum.s;
+        kind = 'count';
+        // Already right, and already tracked: nothing to record.
+        if (sum.n > 0 && qty === 0) return json({ ok: true, on_hand: sum.s, unchanged: true });
+      } else {
+        qty = Number(b.delta);
+        kind = 'adjust';
+        if (!Number.isInteger(qty) || qty === 0 || Math.abs(qty) > 1000000) {
+          throw new BadRequest('enter how many to add or take off, such as 5 or -2');
+        }
+      }
+      await env.DB.prepare(
+        'INSERT INTO stock_moves (product_id, location_id, qty, kind, ref, note, created_at, created_by) VALUES (?,NULL,?,?,NULL,?,?,?)'
+      ).bind(row.id, qty, kind, note, now, who).run();
+      return json({ ok: true, on_hand: sum.s + qty });
+    }
+
+    if (b.action === 'delete') {
+      // A product that was ever sold, bought or counted is hidden, not erased,
+      // so old orders and the books still make sense.
+      if (await productHasHistory(env, row.id)) {
+        data.active = false;
+        data.archived = true;
+        await env.DB.prepare('UPDATE products SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now, row.id).run();
+        return json({ ok: true, archived: true });
+      }
+      await env.DB.prepare('DELETE FROM products WHERE id = ?').bind(row.id).run();
+      return json({ ok: true, deleted: true });
+    }
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
+// ---- supplier purchases -----------------------------------------------------
+
+async function loadPurchase(env, id) {
+  const purchase = await env.DB.prepare('SELECT * FROM purchases WHERE id = ?').bind(id).first();
+  if (!purchase) return null;
+  purchase.lines = (await env.DB.prepare('SELECT * FROM purchase_lines WHERE purchase_id = ? ORDER BY id').bind(id).all()).results || [];
+  return purchase;
+}
+
+async function adminPurchases(request, env) {
+  if (request.method === 'GET') {
+    const id = new URL(request.url).searchParams.get('id');
+    if (id) {
+      const purchase = await loadPurchase(env, id);
+      return purchase ? json({ purchase }) : json({ error: 'no purchase with that id' }, 404);
+    }
+    const rows = (await env.DB.prepare(
+      'SELECT p.*, (SELECT COUNT(*) FROM purchase_lines l WHERE l.purchase_id = p.id) AS line_count,' +
+        ' (SELECT COALESCE(SUM(qty),0) FROM purchase_lines l WHERE l.purchase_id = p.id) AS units' +
+        ' FROM purchases p ORDER BY p.ordered_at DESC, p.created_at DESC LIMIT 300'
+    ).all()).results || [];
+    return json({ purchases: rows });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const who = await adminIdentity(request, env);
+  const now = new Date().toISOString();
+  try {
+    if (b.action === 'delete') {
+      const old = await loadPurchase(env, String(b.id || ''));
+      if (!old) return json({ error: 'no purchase with that id' }, 404);
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM stock_moves WHERE kind = 'purchase' AND ref = ?").bind(old.id),
+        env.DB.prepare('DELETE FROM purchase_lines WHERE purchase_id = ?').bind(old.id),
+        env.DB.prepare('DELETE FROM purchases WHERE id = ?').bind(old.id),
+      ]);
+      await recomputeCosts(env, old.lines.map((l) => l.product_id));
+      return json({ ok: true });
+    }
+    if (b.action !== 'save') return json({ error: 'unknown action' }, 400);
+
+    const supplier = cleanText(b.supplier, 80);
+    if (!supplier) throw new BadRequest('enter the supplier’s name');
+    const orderedAt = dateIn(b.ordered_at, 'the order date') || todayStr();
+    const received = b.received !== false;
+    const receivedAt = received ? dateIn(b.received_at, 'the received date') || orderedAt : null;
+    if (!Array.isArray(b.lines) || !b.lines.length) throw new BadRequest('add at least one item');
+    if (b.lines.length > 60) throw new BadRequest('too many lines on one purchase');
+
+    const products = new Map((await loadCatalog(env)).map((p) => [p.id, p]));
+    const lines = b.lines.map((l, i) => {
+      const where = 'line ' + (i + 1);
+      const product = l.product_id ? products.get(String(l.product_id)) : null;
+      if (l.product_id && !product) throw new BadRequest(where + ': that product no longer exists');
+      const name = cleanText(l.name, 120) || (product && product.name) || '';
+      if (!name) throw new BadRequest(where + ' needs a product or a description');
+      const weight = l.weight_lbs === '' || l.weight_lbs == null ? (product && product.weight_lbs) || null : Number(l.weight_lbs);
+      if (weight != null && (!Number.isFinite(weight) || weight < 0 || weight > 5000)) {
+        throw new BadRequest(where + ': weight must be pounds, zero or more');
+      }
+      return {
+        product_id: product ? product.id : null,
+        name,
+        sku: cleanText(l.sku, 40) || (product && product.sku) || '',
+        qty: qtyIn(l.qty, where + ' quantity'),
+        unit_cost_cents: centsIn(l.unit_cost_cents, where + ' price'),
+        weight_lbs: weight || null,
+      };
+    });
+    const shipping = centsIn(b.shipping_cents, 'shipping');
+    const other = centsIn(b.other_cents, 'other fees');
+    const tax = centsIn(b.tax_cents, 'tax');
+    const landed = landedCosts(lines, shipping + other).landed;
+    const total = lines.reduce((n, l) => n + l.qty * l.unit_cost_cents, 0) + shipping + other + tax;
+
+    let id = String(b.id || '');
+    let oldIds = [];
+    const stmts = [];
+    if (id) {
+      const old = await loadPurchase(env, id);
+      if (!old) return json({ error: 'no purchase with that id' }, 404);
+      oldIds = old.lines.map((l) => l.product_id);
+      stmts.push(env.DB.prepare(
+        'UPDATE purchases SET supplier=?, ordered_at=?, received_at=?, ref=?, po=?, shipping_cents=?, other_cents=?, tax_cents=?,' +
+          ' total_cents=?, note=?, updated_at=? WHERE id=?'
+      ).bind(supplier, orderedAt, receivedAt, cleanText(b.ref, 60) || null, cleanText(b.po, 60) || null, shipping, other, tax,
+        total, cleanPara(b.note, 1000) || null, now, id));
+      stmts.push(env.DB.prepare('DELETE FROM purchase_lines WHERE purchase_id = ?').bind(id));
+    } else {
+      id = crypto.randomUUID();
+      stmts.push(env.DB.prepare(
+        'INSERT INTO purchases (id, supplier, ordered_at, received_at, ref, po, shipping_cents, other_cents, tax_cents, total_cents,' +
+          ' note, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(id, supplier, orderedAt, receivedAt, cleanText(b.ref, 60) || null, cleanText(b.po, 60) || null, shipping, other, tax,
+        total, cleanPara(b.note, 1000) || null, now, now, who));
+    }
+    lines.forEach((l, i) => {
+      stmts.push(env.DB.prepare(
+        'INSERT INTO purchase_lines (purchase_id, product_id, name, sku, qty, unit_cost_cents, weight_lbs, landed_unit_cents)' +
+          ' VALUES (?,?,?,?,?,?,?,?)'
+      ).bind(id, l.product_id, l.name, l.sku, l.qty, l.unit_cost_cents, l.weight_lbs, landed[i]));
+    });
+    // Rewrite this purchase's stock moves from scratch: delete by ref, re-insert.
+    stmts.push(env.DB.prepare("DELETE FROM stock_moves WHERE kind = 'purchase' AND ref = ?").bind(id));
+    if (received) {
+      const note = 'Purchase from ' + supplier + (b.ref ? ' ' + cleanText(b.ref, 60) : '');
+      lines.forEach((l, i) => {
+        if (!l.product_id) return;
+        stmts.push(env.DB.prepare(
+          "INSERT INTO stock_moves (product_id, location_id, qty, unit_cost_cents, kind, ref, note, created_at, created_by)" +
+            " VALUES (?, NULL, ?, ?, 'purchase', ?, ?, ?, ?)"
+        ).bind(l.product_id, l.qty, landed[i], id, note, receivedAt + 'T00:00:00.000Z', who));
+      });
+    }
+    await env.DB.batch(stmts);
+    await recomputeCosts(env, oldIds.concat(lines.map((l) => l.product_id)));
+    return json({ ok: true, id, total_cents: total });
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+}
+
+// ---- locations --------------------------------------------------------------
+
+async function adminLocations(request, env) {
+  if (request.method === 'GET') {
+    const rows = (await env.DB.prepare(
+      "SELECT l.*, (SELECT COUNT(*) FROM location_reports r WHERE r.location_id = l.id) AS reports FROM locations l" +
+        " ORDER BY (l.id = 'farm') DESC, l.active DESC, l.name COLLATE NOCASE"
+    ).all()).results || [];
+    return json({ locations: rows });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const now = new Date().toISOString();
+  try {
+    if (b.action === 'save') {
+      const name = cleanText(b.name, 80);
+      if (!name) throw new BadRequest('every location needs a name');
+      const kind = ['farm', 'store', 'market', 'other'].includes(b.kind) ? b.kind : 'store';
+      const bps = Math.round(Number(b.commission_bps) || 0);
+      if (!Number.isInteger(bps) || bps < 0 || bps > 10000) throw new BadRequest('the shop’s cut must be between 0% and 100%');
+      const fields = [
+        name, kind, cleanText(b.address, 200) || null, cleanText(b.contact, 80) || null, cleanText(b.phone, 40) || null,
+        cleanText(b.email, 120) || null, bps, b.tax_collected_by_location ? 1 : 0, b.active === false ? 0 : 1,
+        cleanPara(b.note, 1000) || null,
+      ];
+      if (b.id) {
+        const r = await env.DB.prepare('SELECT id FROM locations WHERE id = ?').bind(String(b.id)).first();
+        if (!r) return json({ error: 'no location with that id' }, 404);
+        await env.DB.prepare(
+          'UPDATE locations SET name=?, kind=?, address=?, contact=?, phone=?, email=?, commission_bps=?,' +
+            ' tax_collected_by_location=?, active=?, note=?, updated_at=? WHERE id=?'
+        ).bind(...fields, now, r.id).run();
+        return json({ ok: true, id: r.id });
+      }
+      const base = slugify(name, 'location');
+      let id = base;
+      for (let n = 2; await env.DB.prepare('SELECT 1 FROM locations WHERE id = ?').bind(id).first(); n++) id = base + '-' + n;
+      await env.DB.prepare(
+        'INSERT INTO locations (name, kind, address, contact, phone, email, commission_bps, tax_collected_by_location, active, note,' +
+          ' id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(...fields, id, now, now).run();
+      return json({ ok: true, id });
+    }
+    if (b.action === 'delete') {
+      const id = String(b.id || '');
+      if (id === 'farm') throw new BadRequest('the farm itself cannot be deleted');
+      const used = (await env.DB.prepare('SELECT 1 FROM location_reports WHERE location_id = ? LIMIT 1').bind(id).first()) ||
+        (await env.DB.prepare('SELECT 1 FROM stock_moves WHERE location_id = ? LIMIT 1').bind(id).first());
+      // A location with reports behind it is switched off, not erased.
+      if (used) {
+        await env.DB.prepare('UPDATE locations SET active = 0, updated_at = ? WHERE id = ?').bind(now, id).run();
+        return json({ ok: true, archived: true });
+      }
+      await env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
+      return json({ ok: true, deleted: true });
+    }
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
+// ---- location (consignment) sales reports -----------------------------------
+
+/** Totals for a shop's statement. Line net and total calculate (gross less
+ *  discount; net plus tax) unless a figure was typed over them. The payout
+ *  defaults to net less the shop's cut, and can be typed over too: Johnson's
+ *  Sep 2026 sheet pays $156 gross - $6 actual discount + $12 milk = $162, which
+ *  the report's own discount column would not give.
+ *  (public/assets/admin-location-sales.js repeats this for the live preview.) */
+function reportTotals(rawLines, location, b) {
+  const lines = rawLines.map((l, i) => {
+    const where = 'line ' + (i + 1);
+    const gross = centsIn(l.gross_cents, where + ' gross');
+    const discount = centsIn(l.discount_cents, where + ' discount');
+    const tax = centsIn(l.tax_cents, where + ' tax');
+    const net = l.net_cents === '' || l.net_cents == null ? Math.max(0, gross - discount) : centsIn(l.net_cents, where + ' net');
+    const total = l.total_cents === '' || l.total_cents == null ? net + tax : centsIn(l.total_cents, where + ' total');
+    return { gross_cents: gross, discount_cents: discount, net_cents: net, tax_cents: tax, total_cents: total };
+  });
+  const sum = (k) => lines.reduce((n, l) => n + l[k], 0);
+  const extraTax = centsIn(b.extra_tax_cents, 'the extra tax');
+  const net = sum('net_cents');
+  const commission = b.commission_cents === '' || b.commission_cents == null
+    ? Math.round((net * (location.commission_bps || 0)) / 10000) : centsIn(b.commission_cents, 'the shop’s cut');
+  const payout = b.payout_cents === '' || b.payout_cents == null ? net - commission : centsIn(b.payout_cents, 'the payout');
+  return {
+    lines,
+    gross_cents: sum('gross_cents'),
+    discount_cents: sum('discount_cents'),
+    net_cents: net,
+    tax_cents: sum('tax_cents') + extraTax,
+    total_cents: sum('total_cents') + extraTax,
+    commission_cents: commission,
+    payout_cents: payout,
+  };
+}
+
+async function loadReport(env, id) {
+  const report = await env.DB.prepare(
+    'SELECT r.*, l.name AS location_name FROM location_reports r LEFT JOIN locations l ON l.id = r.location_id WHERE r.id = ?'
+  ).bind(id).first();
+  if (!report) return null;
+  report.lines = (await env.DB.prepare('SELECT * FROM location_report_lines WHERE report_id = ? ORDER BY id').bind(id).all()).results || [];
+  return report;
+}
+
+async function adminLocationReports(request, env) {
+  if (request.method === 'GET') {
+    const id = new URL(request.url).searchParams.get('id');
+    if (id) {
+      const report = await loadReport(env, id);
+      return report ? json({ report }) : json({ error: 'no report with that id' }, 404);
+    }
+    const rows = (await env.DB.prepare(
+      'SELECT r.*, l.name AS location_name FROM location_reports r LEFT JOIN locations l ON l.id = r.location_id' +
+        ' ORDER BY COALESCE(r.period_end, substr(r.created_at,1,10)) DESC, r.created_at DESC LIMIT 300'
+    ).all()).results || [];
+    return json({ reports: rows });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const who = await adminIdentity(request, env);
+  const now = new Date().toISOString();
+  try {
+    if (b.action === 'delete') {
+      const report = await loadReport(env, String(b.id || ''));
+      if (!report) return json({ error: 'no report with that id' }, 404);
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM stock_moves WHERE kind = 'location_sale' AND ref = ?").bind(report.id),
+        env.DB.prepare('DELETE FROM sales WHERE id = ?').bind('loc_' + report.id),
+        env.DB.prepare('DELETE FROM location_report_lines WHERE report_id = ?').bind(report.id),
+        env.DB.prepare('DELETE FROM location_reports WHERE id = ?').bind(report.id),
+      ]);
+      return json({ ok: true });
+    }
+    if (b.action === 'mark_paid') {
+      const report = await loadReport(env, String(b.id || ''));
+      if (!report) return json({ error: 'no report with that id' }, 404);
+      if (b.paid === false) {
+        await env.DB.prepare('UPDATE location_reports SET paid_at = NULL, paid_method = NULL, updated_at = ? WHERE id = ?')
+          .bind(now, report.id).run();
+      } else {
+        await env.DB.prepare('UPDATE location_reports SET paid_at = ?, paid_method = ?, updated_at = ? WHERE id = ?')
+          .bind(dateIn(b.paid_at, 'the paid date') || todayStr(), cleanText(b.method, 30) || 'check', now, report.id).run();
+      }
+      return json({ ok: true });
+    }
+    if (b.action !== 'save') return json({ error: 'unknown action' }, 400);
+
+    const location = await env.DB.prepare('SELECT * FROM locations WHERE id = ?').bind(String(b.location_id || '')).first();
+    if (!location) throw new BadRequest('choose which location this report is from');
+    const label = cleanText(b.period_label, 60);
+    if (!label) throw new BadRequest('give the report a name, such as “Sep 2026”');
+    const start = dateIn(b.period_start, 'the start date');
+    const end = dateIn(b.period_end, 'the end date');
+    if (start && end && start > end) throw new BadRequest('the start date is after the end date');
+    if (!Array.isArray(b.lines) || !b.lines.length) throw new BadRequest('add at least one line');
+    if (b.lines.length > 80) throw new BadRequest('too many lines on one report');
+
+    const products = new Map((await loadCatalog(env)).map((p) => [p.id, p]));
+    const raw = b.lines.map((l, i) => {
+      const where = 'line ' + (i + 1);
+      const product = l.product_id ? products.get(String(l.product_id)) : null;
+      if (l.product_id && !product) throw new BadRequest(where + ': that product no longer exists');
+      const name = cleanText(l.name, 120) || (product && product.name) || '';
+      if (!name) throw new BadRequest(where + ' needs a product or a description');
+      return { ...l, product, name, qty: qtyIn(l.qty, where + ' quantity') };
+    });
+    const t = reportTotals(raw, location, b);
+
+    let id = String(b.id || '');
+    const stmts = [];
+    if (id) {
+      const old = await env.DB.prepare('SELECT id FROM location_reports WHERE id = ?').bind(id).first();
+      if (!old) return json({ error: 'no report with that id' }, 404);
+      stmts.push(env.DB.prepare(
+        'UPDATE location_reports SET location_id=?, period_label=?, period_start=?, period_end=?, gross_cents=?, discount_cents=?,' +
+          ' net_cents=?, tax_cents=?, total_cents=?, commission_cents=?, payout_cents=?, note=?, updated_at=? WHERE id=?'
+      ).bind(location.id, label, start, end, t.gross_cents, t.discount_cents, t.net_cents, t.tax_cents, t.total_cents,
+        t.commission_cents, t.payout_cents, cleanPara(b.note, 1000) || null, now, id));
+      stmts.push(env.DB.prepare('DELETE FROM location_report_lines WHERE report_id = ?').bind(id));
+    } else {
+      id = crypto.randomUUID();
+      stmts.push(env.DB.prepare(
+        'INSERT INTO location_reports (id, location_id, period_label, period_start, period_end, gross_cents, discount_cents,' +
+          ' net_cents, tax_cents, total_cents, commission_cents, payout_cents, note, created_at, updated_at, created_by)' +
+          ' VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(id, location.id, label, start, end, t.gross_cents, t.discount_cents, t.net_cents, t.tax_cents, t.total_cents,
+        t.commission_cents, t.payout_cents, cleanPara(b.note, 1000) || null, now, now, who));
+    }
+    raw.forEach((l, i) => {
+      const c = t.lines[i];
+      stmts.push(env.DB.prepare(
+        'INSERT INTO location_report_lines (report_id, product_id, name, qty, gross_cents, discount_cents, net_cents, tax_cents, total_cents)' +
+          ' VALUES (?,?,?,?,?,?,?,?,?)'
+      ).bind(id, l.product ? l.product.id : null, l.name, l.qty, c.gross_cents, c.discount_cents, c.net_cents, c.tax_cents, c.total_cents));
+    });
+
+    // Stock: what the shop sold leaves the shelf. Tracked products only, as
+    // with every other sale.
+    const soldAt = (end || todayStr()) + 'T12:00:00.000Z';
+    stmts.push(env.DB.prepare("DELETE FROM stock_moves WHERE kind = 'location_sale' AND ref = ?").bind(id));
+    const want = new Map();
+    raw.forEach((l) => { if (l.product) want.set(l.product.id, (want.get(l.product.id) || 0) + l.qty); });
+    const tracked = want.size ? new Set(((await env.DB.prepare(
+      'SELECT DISTINCT product_id FROM stock_moves WHERE product_id IN (' + marks(want.size) + ')'
+    ).bind(...want.keys()).all()).results || []).map((r) => r.product_id)) : new Set();
+    for (const [pid, qty] of want) {
+      if (!tracked.has(pid)) continue;
+      stmts.push(env.DB.prepare(
+        "INSERT INTO stock_moves (product_id, location_id, qty, kind, ref, note, created_at, created_by)" +
+          " VALUES (?, ?, ?, 'location_sale', ?, ?, ?, ?)"
+      ).bind(pid, location.id, -qty, id, location.name + ' ' + label, soldAt, who));
+    }
+
+    // The books: one sales row for the whole report, so revenue and COGS stay
+    // whole. Revenue is what the shop pays us (the payout), with the shop's
+    // discounts and cut already taken off. The shop collects sales tax on its
+    // own sales, so by default it is marked exempt and stays out of our Idaho
+    // filing; a shop that does not collect it leaves that tax with us.
+    const catOf = (name) => (/milk/i.test(name) ? 'milk' : /cheese/i.test(name) ? 'cheese' : 'feed');
+    const byCat = new Map();
+    const items = raw.map((l, i) => {
+      const cat = catOf(l.name);
+      byCat.set(cat, (byCat.get(cat) || 0) + t.lines[i].net_cents);
+      const unit = l.product ? (l.product.cost_cents || 0) + (l.product.freight_cents || 0) : 0;
+      return { id: l.product ? l.product.id : null, name: l.name, qty: l.qty, category: cat, ...t.lines[i], cost_cents: unit };
+    });
+    const category = [...byCat].sort((a, c) => c[1] - a[1])[0][0];
+    const cogs = items.reduce((n, l) => n + l.cost_cents * l.qty, 0);
+    const exempt = location.tax_collected_by_location ? 1 : 0;
+    const tax = exempt ? 0 : t.tax_cents;
+    stmts.push(env.DB.prepare(
+      'INSERT OR REPLACE INTO sales (id, sold_at, channel, category, customer_name, items_json, subtotal_cents, tax_cents, total_cents,' +
+        ' cogs_cents, tax_exempt, payment_method, status, fulfillment, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind('loc_' + id, soldAt, 'location', category, location.name, JSON.stringify(items), t.payout_cents, tax, t.payout_cents + tax,
+      cogs, exempt, 'consignment', 'recorded', 'location:' + location.id, 'Location report ' + id));
+    await env.DB.batch(stmts);
+    return json({ ok: true, id, gross_cents: t.gross_cents, net_cents: t.net_cents, payout_cents: t.payout_cents });
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1976,6 +2804,10 @@ async function adminRoutes(path, request, env) {
   }
 
   if (path === '/api/admin/goats') return adminGoats(request, env);
+  if (path === '/api/admin/products') return adminProducts(request, env);
+  if (path === '/api/admin/purchases') return adminPurchases(request, env);
+  if (path === '/api/admin/locations') return adminLocations(request, env);
+  if (path === '/api/admin/location-reports') return adminLocationReports(request, env);
   if (path === '/api/admin/invoice' && request.method === 'POST') return adminInvoices(request, env);
 
   // Everyone we know, for the invoice form's customer picker.
@@ -2035,124 +2867,11 @@ async function adminRoutes(path, request, env) {
 
   if (path === '/api/admin/sales') {
     const status = new URL(request.url).searchParams.get('status');
+    // Location (consignment) sales have their own tab; they are not orders.
     const q = status
-      ? env.DB.prepare('SELECT * FROM sales WHERE status = ? ORDER BY sold_at DESC LIMIT 500').bind(status)
-      : env.DB.prepare('SELECT * FROM sales ORDER BY sold_at DESC LIMIT 500');
+      ? env.DB.prepare("SELECT * FROM sales WHERE status = ? AND channel != 'location' ORDER BY sold_at DESC LIMIT 500").bind(status)
+      : env.DB.prepare("SELECT * FROM sales WHERE channel != 'location' ORDER BY sold_at DESC LIMIT 500");
     return json({ sales: (await q.all()).results });
-  }
-
-  // Everything we sell, with the values actually in effect right now.
-  if (path === '/api/admin/products') {
-    if (request.method === 'GET') {
-      const products = await loadCatalog(env);
-      const defaults = new Map(catalog.products.map((p) => [p.id, p]));
-      return json({
-        products: products.map((p) => ({
-          id: p.id,
-          sku: p.sku,
-          name: p.name,
-          supplier: p.supplier,
-          unit: p.unit,
-          category: p.category,
-          image: p.image || '',
-          active: !!p.active,
-          price_cents: p.price_cents,
-          cost_cents: p.cost_cents,
-          freight_cents: p.freight_cents,
-          // The committed products.json values, so the form can show what
-          // clearing a field would actually fall back to.
-          default_active: !!(defaults.get(p.id) || {}).active,
-          default_price_cents: (defaults.get(p.id) || {}).price_cents,
-          default_cost_cents: (defaults.get(p.id) || {}).cost_cents,
-          default_freight_cents: (defaults.get(p.id) || {}).freight_cents,
-          // What is left after cost and freight. Negative means we lose money.
-          margin_cents: p.price_cents - (p.cost_cents || 0) - (p.freight_cents || 0),
-          note: p.note || '',
-        })),
-      });
-    }
-
-    const b = await request.json();
-    const known = catalog.products.some((p) => p.id === b.product_id);
-    if (!known) return json({ error: 'unknown product: ' + b.product_id }, 400);
-
-    // Money must be a whole number of cents and never negative. A stray
-    // decimal or minus sign here would follow straight through to a charge.
-    const money = (v) => {
-      if (v === null || v === undefined || v === '') return null;
-      const n = Number(v);
-      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 100000000) {
-        throw new BadRequest('amounts must be a whole number of cents, zero or more');
-      }
-      return n;
-    };
-
-    let price, cost, freight;
-    try {
-      price = money(b.price_cents);
-      cost = money(b.cost_cents);
-      freight = money(b.freight_cents);
-    } catch (err) {
-      return json({ error: err.message }, 400);
-    }
-
-    // A misplaced decimal point is the most expensive mistake this form can
-    // make. Typing 5300 for 53.00 is merely embarrassing — nobody buys it. But
-    // 0.53 for 53.00 sells $53 feed for 53 cents, and those orders are binding.
-    // The negative-margin warning does not catch it while costs are still zero,
-    // so guard on the size of the change instead.
-    if (price != null) {
-      const current = (await loadCatalog(env)).find((p) => p.id === b.product_id);
-      const before = current ? current.price_cents : null;
-      const wild = before > 0 && price > 0 && (price > before * 5 || price * 5 < before);
-      if (wild && b.confirm !== true) {
-        return json(
-          {
-            error:
-              'price_change_needs_confirmation',
-            message:
-              'That changes the price from $' + (before / 100).toFixed(2) +
-              ' to $' + (price / 100).toFixed(2) +
-              '. Check the decimal point, then confirm to save.',
-            before_cents: before,
-            after_cents: price,
-          },
-          409
-        );
-      }
-    }
-
-    // Only a path we issued from /api/admin/upload is accepted. Anything else
-    // would let the admin form point a product at an arbitrary URL.
-    let image = null;
-    if (b.image) {
-      if (!/^\/media\/[a-f0-9-]{8,}\.(jpg|png|gif|webp)$/.test(String(b.image))) {
-        return json({ error: 'image must be an uploaded file path' }, 400);
-      }
-      image = String(b.image);
-    }
-
-    await env.DB.prepare(
-      'INSERT INTO product_settings (product_id, active, price_cents, cost_cents, freight_cents, image, note, updated_at)' +
-        ' VALUES (?,?,?,?,?,?,?,?)' +
-        ' ON CONFLICT(product_id) DO UPDATE SET' +
-        ' active=excluded.active, price_cents=excluded.price_cents,' +
-        ' cost_cents=excluded.cost_cents, freight_cents=excluded.freight_cents,' +
-        ' image=excluded.image, note=excluded.note, updated_at=excluded.updated_at'
-    )
-      .bind(
-        b.product_id,
-        b.active === null || b.active === undefined ? null : b.active ? 1 : 0,
-        price,
-        cost,
-        freight,
-        image,
-        b.note ? String(b.note).slice(0, 200) : null,
-        new Date().toISOString()
-      )
-      .run();
-
-    return json({ ok: true });
   }
 
   // Quarterly Idaho sales tax, in one query.
@@ -2304,10 +3023,12 @@ async function adminRoutes(path, request, env) {
         .bind(newSubtotal, newTax, captured, newCogs, String(captured), sale_id)
         .run();
 
+      await recordSaleMoves(env, sale_id);
       return json({ ok: true, captured_cents: captured, adjusted: true });
     }
 
     await env.DB.prepare("UPDATE sales SET status = 'captured' WHERE id = ?").bind(sale_id).run();
+    await recordSaleMoves(env, sale_id);
     return json({ ok: true, captured_cents: captured });
   }
 
@@ -2401,6 +3122,7 @@ async function adminRoutes(path, request, env) {
     await env.DB.prepare("UPDATE sales SET status = 'recorded', fulfilled_at = ? WHERE id = ?")
       .bind(new Date().toISOString(), sale_id)
       .run();
+    await recordSaleMoves(env, sale_id);
     return json({ ok: true });
   }
 
@@ -2440,6 +3162,7 @@ async function adminRoutes(path, request, env) {
       )
       .run();
 
+    await recordSaleMoves(env, id);
     return json({ ok: true, sale_id: id });
   }
 
