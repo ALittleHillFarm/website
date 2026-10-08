@@ -204,6 +204,7 @@
     b.action = 'create';
     b.send = send;
     var status = document.getElementById('inv-status');
+    if (send && !window.confirm('Email this invoice to ' + (b.customer && b.customer.email ? b.customer.email : 'the customer') + ' now?')) return;
     state.busy = true;
     btn.disabled = true;
     status.textContent = send ? 'Creating and emailing…' : 'Creating…';
@@ -249,6 +250,18 @@
     schedulePreview();
   });
   host.addEventListener('change', function (e) {
+    // A SKU or part of a name, not the exact list entry: match it and show the full name.
+    if (e.target.getAttribute('data-k') === 'pick' && e.target.value.trim() && window.AdminUI) {
+      var hit = AdminUI.findProduct(state.products, e.target.value, productLabel);
+      if (hit.product) {
+        e.target.value = productLabel(hit.product);
+        var line = state.lines[+e.target.getAttribute('data-i')];
+        line.product_id = hit.product.id;
+        var pb = host.querySelector('input[data-i="' + e.target.getAttribute('data-i') + '"][data-k="price"]');
+        if (pb) pb.placeholder = (hit.product.price_cents / 100).toFixed(2);
+        schedulePreview();
+      }
+    }
     var ri = e.target.getAttribute('data-recent');
     if (ri != null) {
       var r = state.recent[+ri];

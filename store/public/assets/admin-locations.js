@@ -81,7 +81,7 @@
       '<div id="lo-msg"></div>' +
       '<fieldset class="goat-set"><legend>' + (e.id ? 'Edit location' : 'New location') + '</legend><div class="form-grid">' +
         field('Name', 'lo-name', e.name, ' maxlength="80"') +
-        '<div class="field"><label for="lo-kind">Kind</label><select id="lo-kind"' + (isFarm ? ' disabled' : '') + '>' +
+        '<div class="field"><label for="lo-kind">Type</label><select id="lo-kind"' + (isFarm ? ' disabled' : '') + '>' +
           KINDS.filter(function (k) { return isFarm || k[0] !== 'farm'; }).map(function (k) {
             return '<option value="' + k[0] + '"' + (e.kind === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
           }).join('') + '</select></div>' +
@@ -104,7 +104,7 @@
   }
 
   function openEditor(l) {
-    state.editing = l;
+    state.editing = l; state.dirty = false;
     renderEditor();
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -113,8 +113,8 @@
     if (state.busy) return;
     var e = state.editing, status = document.getElementById('lo-status');
     var cut = parseFloat(document.getElementById('lo-cut').value.replace('%', '') || '0');
-    if (isNaN(cut) || cut < 0 || cut > 100) { status.textContent = 'The shop’s cut should be a percentage from 0 to 100.'; return; }
-    state.busy = true; btn.disabled = true; status.textContent = 'Saving…';
+    if (isNaN(cut) || cut < 0 || cut > 100) { status.className = ''; status.textContent = 'The shop’s cut should be a percentage from 0 to 100.'; return; }
+    state.busy = true; btn.disabled = true; status.className = ''; status.textContent = 'Saving…';
     api('POST', {
       action: 'save', id: e.id,
       name: document.getElementById('lo-name').value,
@@ -126,12 +126,12 @@
       active: document.getElementById('lo-active').checked,
       note: document.getElementById('lo-note').value,
     }).then(function () {
-      state.busy = false; state.editing = null;
+      state.busy = false; state.editing = null; state.dirty = false;
       document.dispatchEvent(new CustomEvent('locations-changed'));
       return load().then(function () { renderList(); note('Saved.'); });
     }).catch(function (err) {
       state.busy = false; btn.disabled = false;
-      status.textContent = 'Not saved: ' + err.message;
+      status.className = ''; status.textContent = 'Not saved: ' + err.message;
     });
   }
 
@@ -139,6 +139,24 @@
     if (state.editing) return;
     host.innerHTML = '<p class="lede">Loading…</p>';
     load().then(renderList);
+  });
+
+  // Typing in the form: remember there is unsaved work, and let Enter save.
+  host.addEventListener('input', function () {
+    if (!state.editing || state.dirty) return;
+    state.dirty = true;
+    var st = document.getElementById('lo-status');
+    if (st && !st.textContent) { st.textContent = 'Not saved yet'; st.className = 'muted'; }
+  });
+  host.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && state.editing && ev.target.tagName === 'INPUT' && ev.target.type === 'text') {
+      ev.preventDefault();
+      var b = host.querySelector('[data-act="save"]');
+      if (b && !b.disabled) save(b);
+    }
+  });
+  window.addEventListener('beforeunload', function (ev) {
+    if (state.editing && state.dirty) { ev.preventDefault(); ev.returnValue = ''; }
   });
 
   host.addEventListener('click', function (ev) {
@@ -150,7 +168,10 @@
       var l = state.list.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
       return l && openEditor(JSON.parse(JSON.stringify(l)));
     }
-    if (act === 'back') { state.editing = null; return renderList(); }
+    if (act === 'back') {
+      if (state.editing && state.dirty && !window.confirm('Leave without saving this location?')) return;
+      state.editing = null; state.dirty = false; return renderList();
+    }
     if (act === 'save') return save(b);
     if (act === 'delete') {
       if (!window.confirm('Delete “' + state.editing.name + '”?\n\nIf it has reports behind it, it is switched off instead of erased.')) return;

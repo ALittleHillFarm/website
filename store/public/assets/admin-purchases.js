@@ -183,7 +183,7 @@
       '<p><button type="button" class="link-btn" data-act="back">← All purchases</button></p>' +
       '<div id="pu-msg"></div>' +
       '<fieldset class="goat-set"><legend>' + (e.id ? 'Purchase' : 'New purchase') + '</legend><div class="form-grid">' +
-        '<div class="field"><label for="pu-supplier">Supplier</label><input type="text" id="pu-supplier" list="pu-suppliers" maxlength="80" value="' + esc(e.supplier) + '" placeholder="e.g. New Country Organics" autocomplete="off"></div>' +
+        '<div class="field span2"><label for="pu-supplier">Supplier</label><input type="text" id="pu-supplier" list="pu-suppliers" maxlength="80" value="' + esc(e.supplier) + '" placeholder="e.g. New Country Organics" autocomplete="off"></div>' +
         '<div class="field"><label for="pu-ordered">Order date</label><input type="date" id="pu-ordered" value="' + esc(e.ordered_at) + '"></div>' +
         '<div class="field"><label for="pu-ref">Supplier’s order number</label><input type="text" id="pu-ref" maxlength="60" value="' + esc(e.ref) + '" placeholder="e.g. SO343263"></div>' +
         '<div class="field"><label for="pu-po">Our PO number</label><input type="text" id="pu-po" maxlength="60" value="' + esc(e.po) + '" placeholder="e.g. PO60"></div>' +
@@ -277,21 +277,21 @@
     readForm();
     var e = state.ed, status = document.getElementById('pu-status');
     var ship = cents(e.shipping), other = cents(e.other), tax = cents(e.tax);
-    if (isNaN(ship) || isNaN(other) || isNaN(tax)) { status.textContent = 'Shipping, fees and tax should be plain amounts like 368.59.'; return; }
+    if (isNaN(ship) || isNaN(other) || isNaN(tax)) { status.className = ''; status.textContent = 'Shipping, fees and tax should be plain amounts like 368.59.'; return; }
     var lines = [];
     for (var i = 0; i < e.lines.length; i++) {
       var l = e.lines[i];
       if (!l.text.trim() && !l.price && !l.product_id) continue;   // an empty row
       var price = cents(l.price);
-      if (price === null || isNaN(price)) { status.textContent = 'Line ' + (i + 1) + ': enter the price each, such as 24.95.'; return; }
+      if (price === null || isNaN(price)) { status.className = ''; status.textContent = 'Line ' + (i + 1) + ': enter the price each, such as 24.95.'; return; }
       lines.push({
         product_id: l.product_id || null, name: l.product_id ? '' : l.text, sku: l.sku,
         qty: parseInt(l.qty, 10), unit_cost_cents: price, weight_lbs: l.weight.trim(),
       });
     }
-    if (!lines.length) { status.textContent = 'Add at least one item first.'; return; }
+    if (!lines.length) { status.className = ''; status.textContent = 'Add at least one item first.'; return; }
     if (state.mismatch && !window.confirm('The total doesn’t match the supplier’s invoice. Save it anyway?')) return;
-    state.busy = true; btn.disabled = true; status.textContent = 'Saving…';
+    state.busy = true; btn.disabled = true; status.className = ''; status.textContent = 'Saving…';
     api('POST', '/api/admin/purchases', {
       action: 'save', id: e.id, supplier: e.supplier, ordered_at: e.ordered_at, received: e.received, received_at: e.received_at,
       ref: e.ref, po: e.po, shipping_cents: ship || 0, other_cents: other || 0, tax_cents: tax || 0, note: e.note, lines: lines,
@@ -304,7 +304,7 @@
       });
     }).catch(function (err) {
       state.busy = false; btn.disabled = false;
-      status.textContent = 'Not saved: ' + err.message;
+      status.className = ''; status.textContent = 'Not saved: ' + err.message;
     });
   }
 
@@ -365,7 +365,7 @@
     if (state.dirty) return;
     state.dirty = true;
     var st = document.getElementById('pu-status');
-    if (st && !st.textContent) st.textContent = 'Not saved yet';
+    if (st && !st.textContent) { st.textContent = 'Not saved yet'; st.className = 'muted'; }
   }
   AdminUI.guardLeaving(function () { return !!(state.ed && state.dirty); });
   AdminUI.lineKeys(host, '.pu-line', 'weight', function () {

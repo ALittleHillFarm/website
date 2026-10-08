@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Order review — A Little Hill Farm</title>
+<title>Farm admin — A Little Hill Farm</title>
 <meta name="description" content="Staff console for the farm store: review orders, record cash sales, and run the tax report.">
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,7 +40,7 @@
 
   <section class="page-head" style="padding-bottom:24px">
     <p class="eyebrow">Staff only</p>
-    <h1 class="serif" style="font-size:clamp(32px,4vw,46px)">Order review console</h1>
+    <h1 class="serif" style="font-size:clamp(32px,4vw,46px)">Farm admin</h1>
     <p class="lede" id="admin-who">Signed in with your own account. <a href="/account">Account &amp; log out</a></p>
   </section>
 
@@ -48,11 +48,11 @@
     <button type="button" role="tab" id="tab-orders" aria-controls="panel-orders" aria-selected="true">Orders</button>
     <button type="button" role="tab" id="tab-invoice" aria-controls="panel-invoice" aria-selected="false">New invoice</button>
     <button type="button" role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Record a sale</button>
-    <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
     <button type="button" role="tab" id="tab-products" aria-controls="panel-products" aria-selected="false">Products</button>
     <button type="button" role="tab" id="tab-purchases" aria-controls="panel-purchases" aria-selected="false">Purchases</button>
-    <button type="button" role="tab" id="tab-locations" aria-controls="panel-locations" aria-selected="false">Locations</button>
     <button type="button" role="tab" id="tab-location-sales" aria-controls="panel-location-sales" aria-selected="false">Location sales</button>
+    <button type="button" role="tab" id="tab-locations" aria-controls="panel-locations" aria-selected="false">Locations</button>
+    <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
     <button type="button" role="tab" id="tab-goats" aria-controls="panel-goats" aria-selected="false">Goats</button>
   </div>
 
@@ -66,7 +66,7 @@
     <h2 class="serif" style="font-size:22px;margin-bottom:6px">Orders</h2>
     <p class="lede" style="font-size:14px;margin-bottom:20px">
       <strong>Authorized</strong> means the customer's card is on hold but has not been charged yet — that's the normal state
-      to review before you capture. <strong>Captured</strong> is paid. <strong>Recorded</strong> is a cash or check sale that
+      to review before you press <strong>Charge card</strong>. <strong>Captured</strong> is paid. <strong>Recorded</strong> is a cash or check sale that
       never touched a card.
     </p>
 
@@ -74,7 +74,7 @@
       <div class="field">
         <label for="status-filter">Status</label>
         <select id="status-filter">
-          <option value="authorized" selected>Authorized (card held — awaiting capture)</option>
+          <option value="authorized" selected>Card on hold — ready to charge</option>
           <option value="processing">Processing (bank transfer on its way)</option>
           <option value="failed">Failed (bank transfer bounced)</option>
           <option value="refunded">Refunded</option>
@@ -173,7 +173,19 @@
         </div>
         <button type="submit" class="btn">Run report</button>
       </div>
-      <p class="field hint" style="margin-top:-8px">"To" is exclusive of that day itself — to cover a full month, set "To" to the 1st of the next month.</p>
+      <div class="report-filters" style="margin-top:-8px">
+        <div class="field">
+          <label for="rep-quick">Quick pick</label>
+          <select id="rep-quick">
+            <option value="">Choose a period…</option>
+            <option value="month">This month</option>
+            <option value="lastmonth">Last month</option>
+            <option value="quarter">This quarter</option>
+            <option value="lastquarter">Last quarter</option>
+            <option value="year">This year</option>
+          </select>
+        </div>
+      </div>
     </form>
 
     <div id="report-results"></div>
@@ -184,12 +196,14 @@
   <!-- ============================================================ -->
   <section id="panel-products" class="tab-panel" role="tabpanel" aria-labelledby="tab-products" tabindex="0" hidden>
     <h2 class="serif" style="font-size:22px;margin-bottom:6px">Products</h2>
-    <p class="lede" style="font-size:14px;margin-bottom:20px">
-      Everything you sell. Change a <strong>price</strong>, <strong>cost</strong>, <strong>on-hand</strong> count or the
-      <strong>Active</strong> tick right in the row, then press <strong>Save</strong> on that row. Open a product (the arrow)
-      for its name, photo, description, weight and stock history. <strong>Cost</strong> is the average of what your purchases
-      actually landed at, shipping included. <strong>On hand</strong> is a count: type what is on the shelf and save. Leave it
-      blank for things you don't count, like milk. A red margin means it sells for less than it costs.</p>
+    <p class="lede" style="font-size:14px;margin-bottom:8px">
+      Everything you sell. Change a price, cost, on-hand count or the Active tick right in the row, then press
+      <strong>Save</strong> (or <strong>Save all</strong> at the bottom). Open a product with its arrow for the photo,
+      description and stock history. To count the shelves, press <strong>Count stock</strong>.</p>
+    <details class="how" style="margin-bottom:18px"><summary>What do the columns mean?</summary>
+      <p class="lede" style="font-size:14px;margin:8px 0 0"><strong>Cost</strong> is the average of what your purchases actually cost you, shipping included.
+      <strong>Margin</strong> is price less cost, and it turns red when something sells for less than it costs.
+      <strong>On hand</strong> is a count: type what is on the shelf and save. Leave it empty for things you don't count, like milk.</p></details>
     <div id="products-app"><p class="lede">Loading…</p></div>
   </section>
 
@@ -199,8 +213,8 @@
   <section id="panel-purchases" class="tab-panel" role="tabpanel" aria-labelledby="tab-purchases" tabindex="0" hidden>
     <h2 class="serif" style="font-size:22px;margin-bottom:6px">Purchases</h2>
     <p class="lede" style="font-size:14px;margin-bottom:20px">
-      What you buy from suppliers. Enter the order and its items; shipping is shared across the items by weight so each one
-      shows what it really cost you. When a purchase is marked received, your stock goes up and each product's cost is updated.</p>
+      What you buy from suppliers. Type each item's SKU and press Enter to move across. Shipping is shared across the items by
+      weight so each one shows what it really cost you. Once a purchase is received, your stock goes up and each product's cost is updated.</p>
     <div id="purchases-app"><p class="lede">Loading…</p></div>
   </section>
 
@@ -348,6 +362,7 @@
         document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
       });
       if (tab.id === 'tab-orders') loadOrders();
+      try { history.replaceState(null, '', '#' + tab.id.slice(4)); } catch (err) { /* not important */ }
     });
   });
 
@@ -399,8 +414,8 @@
     var actions = '';
     if (sale.status === 'authorized') {
       actions +=
-        '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Capture</button>' +
-        '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Capture partial…</button>';
+        '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Charge card</button>' +
+        '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Charge part…</button>';
     }
     if (sale.status === 'invoiced') {
       actions +=
@@ -512,7 +527,7 @@
     if (action === 'capture') {
       job = runAction('/api/admin/capture', { sale_id: saleId });
     } else if (action === 'capture-partial') {
-      var dollars = window.prompt('Capture how much, in dollars?');
+      var dollars = window.prompt('Charge how much, in dollars? (The rest of the hold is released.)');
       if (dollars === null) return;
       var cents = Math.round(parseFloat(dollars) * 100);
       if (!isFinite(cents) || cents <= 0) { window.alert('Enter a dollar amount greater than zero.'); return; }
@@ -620,6 +635,21 @@
     document.getElementById('rep-to').value = dateStr(now);
   })();
 
+  document.getElementById('rep-quick').addEventListener('change', function (e) {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth(), q = Math.floor(m / 3) * 3, a, b;
+    switch (e.target.value) {
+      case 'month': a = new Date(y, m, 1); b = new Date(y, m + 1, 0); break;
+      case 'lastmonth': a = new Date(y, m - 1, 1); b = new Date(y, m, 0); break;
+      case 'quarter': a = new Date(y, q, 1); b = new Date(y, q + 3, 0); break;
+      case 'lastquarter': a = new Date(y, q - 3, 1); b = new Date(y, q, 0); break;
+      case 'year': a = new Date(y, 0, 1); b = new Date(y, 11, 31); break;
+      default: return;
+    }
+    document.getElementById('rep-from').value = dateStr(a);
+    document.getElementById('rep-to').value = dateStr(b);
+    document.getElementById('report-form').requestSubmit();
+  });
+
   function renderReport(r) {
     var host = document.getElementById('report-results');
     var rows = (r.by_category || []).map(function (c) {
@@ -653,7 +683,10 @@
     var host = document.getElementById('report-results');
     host.innerHTML = '<p class="lede">Running report…</p>';
     var from = document.getElementById('rep-from').value;
-    var to = document.getElementById('rep-to').value;
+    // The "To" box is the last day to include; the server's end is the day after.
+    var toDay = new Date(document.getElementById('rep-to').value + 'T12:00:00');
+    toDay.setDate(toDay.getDate() + 1);
+    var to = dateStr(toDay);
     getJSON('/api/admin/report?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to))
       .then(renderReport)
       .catch(function (err) { host.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>'; });
@@ -684,5 +717,17 @@
 <script src="assets/admin-purchases.js"></script>
 <script src="assets/admin-locations.js"></script>
 <script src="assets/admin-location-sales.js"></script>
+<script>
+/* A reload (or a link such as /admin#purchases) goes back to that tab. Runs last,
+   so every tab's own script is listening for the click. */
+(function () {
+  function openFromHash() {
+    var want = document.getElementById('tab-' + location.hash.replace('#', ''));
+    if (want && want.getAttribute('aria-selected') !== 'true') want.click();
+  }
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
+})();
+</script>
 </body>
 </html>

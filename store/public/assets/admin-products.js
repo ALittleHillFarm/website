@@ -20,7 +20,7 @@
   if (!host || !tab) return;
 
   var state = {
-    products: [], byId: {}, low: 3, loaded: false, open: null, creating: false, busy: false,
+    products: [], byId: {}, low: 3, loaded: false, open: null, creating: false, busy: false, counting: false, newImage: '',
     f: { q: '', category: '', supplier: '', status: 'active', stock: '', sort: 'name' },
   };
 
@@ -119,7 +119,7 @@
 
   // ---- rendering --------------------------------------------------------
   function select(id, label, value, options) {
-    return '<div class="field"><label for="' + id + '">' + label + '</label><select id="' + id + '">' +
+    return '<div class="field flt"><label for="' + id + '">' + label + '</label><select id="' + id + '">' +
       options.map(function (o) {
         return '<option value="' + esc(o[0]) + '"' + (String(value) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
       }).join('') + '</select></div>';
@@ -133,7 +133,7 @@
       '<datalist id="pr-suppliers">' + sups.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
       '<datalist id="pr-cats">' + cats.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
       '<div id="pr-msg"></div>' +
-      '<div class="pr-bar">' +
+      '<div class="pr-bar' + (state.counting ? ' counting' : '') + '">' +
         '<div class="field grow"><label for="pr-q">Search</label><input type="text" id="pr-q" value="' + esc(f.q) + '" placeholder="Name, SKU or supplier" autocomplete="off"></div>' +
         select('pr-status', 'Show', f.status, [['active', 'Active (in the store)'], ['inactive', 'Switched off'], ['archived', 'Archived'], ['all', 'Everything']]) +
         select('pr-category', 'Category', f.category, [['', 'All']].concat(cats.map(function (c) { return [c, c]; }))) +
@@ -142,9 +142,12 @@
           ['in', 'In stock'], ['untracked', 'Not tracked']]) +
         select('pr-sort', 'Sort by', f.sort, [['name', 'Name'], ['stock', 'Least stock first'], ['margin', 'Lowest margin first']]) +
         '<div class="field"><button type="button" class="btn" data-act="new">New product</button></div>' +
+        '<div class="field"><button type="button" class="btn ghost" data-act="count-mode" aria-pressed="' + state.counting + '">' + (state.counting ? 'Done counting' : 'Count stock') + '</button></div>' +
       '</div>' +
+      (state.counting ? '<p class="alert success" style="margin:0 0 12px">Counting. Type what is on the shelf for each product and press <strong>Enter</strong> to save it and move to the next. Leave a box empty to skip that product.</p>' : '') +
       '<div id="pr-new"></div>' +
-      '<div id="pr-list"></div>';
+      '<div id="pr-list"></div>' +
+      '<div class="goat-save" id="pr-bulk" hidden></div>';
     renderNew();
     renderList();
   }
@@ -162,9 +165,16 @@
         '<div class="field"><label for="np-price">Price ($)</label><input type="text" id="np-price" inputmode="decimal" placeholder="0.00"></div>' +
         '<div class="field"><label for="np-cost">Cost ($)</label><input type="text" id="np-cost" inputmode="decimal" placeholder="0.00"></div>' +
         '<div class="field"><label for="np-weight">Weight each (lbs)</label><input type="text" id="np-weight" inputmode="decimal" placeholder="from the size if blank"></div>' +
-      '</div><p class="hint" style="margin:0 0 14px">It starts switched off, so nothing half-finished reaches the store. Open it afterwards to add a photo and description, then switch it on.</p>' +
+        '<div class="field span2"><label for="np-description">Description <span class="lbl-note">shown on the product page</span></label><textarea id="np-description" rows="3"></textarea></div>' +
+        '<div class="field span2"><label>Photo</label><div class="pr-photo"><div class="shot empty" id="np-shot">no photo</div>' +
+          '<label class="photo-btn" for="np-file">Choose a photo…</label>' +
+          '<input type="file" class="visually-hidden" id="np-file" accept="image/jpeg,image/png,image/gif,image/webp">' +
+          '<div class="upload-status" id="np-upload" hidden></div></div></div>' +
+      '</div><div class="check-row" style="margin-bottom:14px"><input type="checkbox" id="np-active"><label for="np-active">Put it in the store right away <span class="lbl-note">needs a price</span></label></div>' +
+      '<p class="hint" style="margin:0 0 14px">Left unticked it stays switched off, so nothing half-finished reaches the store. You can switch it on later with the Active tick.</p>' +
       '<p><button type="button" class="btn" data-act="create">Create product</button> <button type="button" class="btn ghost" data-act="new-cancel">Cancel</button>' +
       ' <span id="np-status" aria-live="polite"></span></p></fieldset>';
+    state.newImage = '';
     document.getElementById('np-name').focus();
   }
 
@@ -201,6 +211,7 @@
     var box = document.getElementById('pr-list');
     if (!box) return;
     var list = visible();
+    box.className = state.counting ? 'counting' : '';
     box.innerHTML =
       '<p class="pr-sum" id="pr-sum"></p>' +
       (list.length
@@ -208,6 +219,30 @@
           list.map(rowHtml).join('') + '</div>'
         : '<p class="empty-note">No products match. Try a different search or filter.</p>');
     renderSummary();
+    updateBulk();
+  }
+
+  // The bar at the bottom of the screen while there is unsaved work.
+  function updateBulk() {
+    var bar = document.getElementById('pr-bulk');
+    if (!bar) return;
+    var n = dirtyCount();
+    if (!n) { bar.hidden = true; bar.innerHTML = ''; return; }
+    if (state.busy) return;
+    bar.hidden = false;
+    bar.innerHTML = '<button type="button" class="btn" data-act="save-all">Save all ' + n + (n === 1 ? ' change' : ' changes') + '</button>' +
+      '<button type="button" class="btn ghost" data-act="undo-all">Undo all</button>' +
+      '<span class="pr-status" id="pr-bulk-status">' + n + (n === 1 ? ' row has' : ' rows have') + ' unsaved changes</span>';
+  }
+
+  // A short result in the bottom bar, since the message box is far above on a long list.
+  function flash(text, bad) {
+    var bar = document.getElementById('pr-bulk');
+    if (!bar || dirtyCount()) return;
+    bar.hidden = false;
+    bar.innerHTML = '<span class="pr-status pr-flash ' + (bad ? 'err' : 'ok') + '" role="status">' + esc(text) + '</span>';
+    clearTimeout(flash.t);
+    flash.t = setTimeout(function () { if (!dirtyCount()) updateBulk(); }, 4000);
   }
 
   // The line above the table: counts, stock value, and a shortcut to what needs ordering.
@@ -224,23 +259,69 @@
 
   // Re-read the products and redraw one row (and the summary), leaving
   // unsaved edits in every other row alone.
+  function replaceRow(id, note) {
+    var el = itemEl(id), fresh = state.byId[id];
+    if (!el) return;
+    if (fresh && visible().indexOf(fresh) !== -1) {
+      var holder = document.createElement('div');
+      holder.innerHTML = rowHtml(fresh);
+      el.replaceWith(holder.firstChild);
+      if (note) status(itemEl(id), note);
+    } else {
+      el.remove();
+      msg('Saved. “' + (fresh ? fresh.name : 'That product') + '” is hidden by the current filters.', 'success');
+    }
+  }
   function refreshRow(id, note) {
     return api('GET', '/api/admin/products').then(function (d) {
       apply(d);
-      var el = itemEl(id), fresh = state.byId[id];
-      if (el) {
-        if (fresh && visible().indexOf(fresh) !== -1) {
-          var holder = document.createElement('div');
-          holder.innerHTML = rowHtml(fresh);
-          el.replaceWith(holder.firstChild);
-          if (note) status(itemEl(id), note);
-        } else {
-          el.remove();
-          msg('Saved. “' + (fresh ? fresh.name : 'That product') + '” is hidden by the current filters.', 'success');
-        }
-      }
+      replaceRow(id, note);
       renderSummary();
+      updateBulk();
     });
+  }
+
+  // A row that did not save: say why, and keep Save and Undo within reach.
+  function failBar(el, text) {
+    var bar = el.querySelector('.pr-save');
+    bar.hidden = false; bar.removeAttribute('data-confirm');
+    bar.innerHTML = '<span class="pr-status err">' + esc(text) + '</span>' +
+      '<button type="button" class="btn small" data-act="save">Save</button> <button type="button" class="btn ghost small" data-act="undo">Undo</button>';
+  }
+
+  // Save every changed row in one go. A price that moved a lot still has to be
+  // confirmed on its own row.
+  function saveAll() {
+    if (state.busy) return;
+    var jobs = [].slice.call(host.querySelectorAll('.pr-item.dirty')).map(function (el) {
+      var id = el.getAttribute('data-id');
+      return { el: el, id: id, c: changes(el, state.byId[id]) };
+    });
+    if (!jobs.length) return;
+    state.busy = true;
+    var bar = document.getElementById('pr-bulk');
+    bar.innerHTML = '<span class="pr-status" id="pr-bulk-status">Saving ' + jobs.length + '…</span>';
+    var saved = [], failed = 0, chain = Promise.resolve();
+    jobs.forEach(function (j) {
+      chain = chain.then(function () {
+        if (j.c.errors.length) { failed++; failBar(j.el, j.c.errors[0]); return; }
+        var step = Object.keys(j.c.fields).length ? post({ action: 'save', id: j.id, fields: j.c.fields, confirm: false }) : Promise.resolve();
+        return step.then(function () {
+          if (j.c.count !== null) return post({ action: 'stock', id: j.id, mode: 'count', counted: j.c.count, note: 'Counted' });
+        }).then(function () { saved.push(j.id); }).catch(function (err) {
+          failed++;
+          failBar(j.el, err.status === 409 ? 'That price changed a lot. Press Save here to confirm it.' : 'Not saved: ' + err.message);
+        });
+      });
+    });
+    chain.then(function () { return api('GET', '/api/admin/products'); }).then(function (d) {
+      apply(d);
+      saved.forEach(function (id) { replaceRow(id, 'Saved ✓'); });
+      state.busy = false;
+      renderSummary(); updateBulk();
+      flash('Saved ' + saved.length + (saved.length === 1 ? ' product ✓' : ' products ✓') + (failed ? ' · ' + failed + ' need attention' : ''), !!failed);
+      msg('Saved ' + saved.length + (saved.length === 1 ? ' product' : ' products') + '.' + (failed ? ' ' + failed + ' could not be saved. They are marked below.' : ''), failed ? 'error' : 'success');
+    }).catch(function (err) { state.busy = false; msg(err.message, 'error'); updateBulk(); });
   }
 
   function detailHtml(p) {
@@ -337,7 +418,7 @@
     var dirty = c.count !== null || Object.keys(c.fields).length > 0 || c.errors.length > 0;
     el.classList.toggle('dirty', dirty);
     var bar = el.querySelector('.pr-save');
-    if (!dirty) { bar.hidden = true; bar.innerHTML = ''; return; }
+    if (!dirty) { bar.hidden = true; bar.innerHTML = ''; updateBulk(); return; }
     if (bar.getAttribute('data-confirm')) return;      // a price confirmation is showing
     bar.hidden = false;
     bar.innerHTML = '<span class="pr-status">' + (c.errors.length ? esc(c.errors[0]) : 'Unsaved changes') + '</span>' +
@@ -351,6 +432,7 @@
       m.parentNode.classList.toggle('neg', mc < 0);
       m.innerHTML = (mc < 0 ? '−' : '') + money(Math.abs(mc)) + (price > 0 ? ' <small>' + Math.round((mc / price) * 100) + '%</small>' : '');
     }
+    updateBulk();
   }
 
   function status(el, text, bad) {
@@ -373,7 +455,7 @@
     if (Object.keys(c.fields).length) {
       job = post({ action: 'save', id: id, fields: c.fields, confirm: !!confirmed });
     }
-    job.then(function () {
+    return job.then(function () {
       if (c.count !== null) return post({ action: 'stock', id: id, mode: 'count', counted: c.count, note: 'Counted' });
     }).then(function () {
       state.busy = false;
@@ -389,7 +471,7 @@
           '<button type="button" class="btn rust small" data-act="confirm-price">Yes, save this price</button></div>';
         return;
       }
-      status(el, 'Not saved: ' + err.message, true);
+      failBar(el, 'Not saved: ' + err.message);
     });
   }
 
@@ -401,6 +483,7 @@
     fresh.innerHTML = rowHtml(p);
     el.replaceWith(fresh.firstChild);
     if (open) state.open = id;
+    updateBulk();
   }
 
   // ---- photo upload -------------------------------------------------------
@@ -420,6 +503,22 @@
       shot.innerHTML = '<img src="' + esc(d.url) + '" alt="">';
       say('Uploaded. Press Save product to use it.', 'ok');
       markDirty(el);
+    }).catch(function (err) { say(err.message || 'Upload failed. Check your connection.', 'bad'); });
+  }
+
+  function uploadNewPhoto(file) {
+    var note = document.getElementById('np-upload'), shot = document.getElementById('np-shot');
+    function say(text, cls) { note.hidden = false; note.textContent = text; note.className = 'upload-status' + (cls ? ' ' + cls : ''); }
+    if (file.size > 10 * 1024 * 1024) { say('That photo is larger than 10 MB.', 'bad'); return; }
+    say('Uploading…');
+    (window.shrinkPhoto ? window.shrinkPhoto(file, 1200, 0.85) : Promise.resolve(file)).then(function (blob) {
+      return fetch('/api/admin/upload', { method: 'POST', body: blob, headers: { 'content-type': blob.type || 'application/octet-stream' } });
+    }).then(function (r) {
+      return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Upload failed.'); return d; });
+    }).then(function (d) {
+      state.newImage = d.url;
+      shot.classList.remove('empty'); shot.innerHTML = '<img src="' + esc(d.url) + '" alt="">';
+      say('Photo ready.', 'ok');
     }).catch(function (err) { say(err.message || 'Upload failed. Check your connection.', 'bad'); });
   }
 
@@ -457,14 +556,26 @@
   host.addEventListener('change', function (e) {
     var t = e.target, map = { 'pr-status': 'status', 'pr-category': 'category', 'pr-supplier': 'supplier', 'pr-stock': 'stock', 'pr-sort': 'sort' };
     if (map[t.id]) { state.f[map[t.id]] = t.value; renderList(); return; }
+    if (t.id === 'np-file' && t.files && t.files[0]) { uploadNewPhoto(t.files[0]); t.value = ''; return; }
     if (t.id === 'pd-file' && t.files && t.files[0]) { uploadPhoto(t.closest('.pr-item'), t.files[0]); t.value = ''; return; }
     var el = t.closest && t.closest('.pr-item');
     if (el) markDirty(el);
   });
+  // Enter saves the row (if it changed) and moves down to the same box in the
+  // next row, which is the quick way to count a shelf.
   host.addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter' || !e.target.classList.contains('pr-in')) return;
-    var el = e.target.closest('.pr-item');
-    if (el && el.classList.contains('dirty')) { e.preventDefault(); saveRow(el.getAttribute('data-id')); }
+    if (e.key !== 'Enter' || !e.target.classList.contains('pr-in') || e.target.id === 'pd-delta' || e.target.id === 'pd-delta-note') return;
+    e.preventDefault();
+    var el = e.target.closest('.pr-item'), key = e.target.getAttribute('data-k');
+    var nextEl = el.nextElementSibling, nextId = nextEl && nextEl.getAttribute('data-id');
+    var go = function () {
+      var n = nextId ? itemEl(nextId) : null, box = n && n.querySelector('[data-k="' + key + '"]');
+      if (box) { box.focus(); box.select(); box.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    };
+    if (el.classList.contains('dirty')) {
+      var p = saveRow(el.getAttribute('data-id'));
+      Promise.resolve(p).then(function () { var cur = itemEl(el.getAttribute('data-id')); if (!cur || !cur.classList.contains('dirty')) go(); });
+    } else go();
   });
 
   host.addEventListener('click', function (e) {
@@ -475,6 +586,14 @@
     var id = el && el.getAttribute('data-id');
     var p = id && state.byId[id];
 
+    if (act === 'save-all') return saveAll();
+    if (act === 'undo-all') { host.querySelectorAll('.pr-item.dirty').forEach(function (d) { undoRow(d.getAttribute('data-id')); }); updateBulk(); return; }
+    if (act === 'count-mode') {
+      if (dirtyCount() && !window.confirm('You have unsaved changes. Switch anyway? They will be lost.')) return;
+      state.counting = !state.counting; state.open = null; state.creating = false;
+      if (state.counting) { state.f.status = 'active'; }
+      render(); return;
+    }
     if (act === 'new') { state.creating = !state.creating; renderNew(); return; }
     if (act === 'new-cancel') { state.creating = false; renderNew(); return; }
     if (act === 'show-attention') { state.f.stock = 'attention'; state.f.status = 'active'; render(); return; }
@@ -487,13 +606,17 @@
         supplier: document.getElementById('np-supplier').value, sku: document.getElementById('np-sku').value,
         price_cents: price || 0, cost_cents: cost || 0,
         weight_lbs: document.getElementById('np-weight').value.trim(),
+        description: document.getElementById('np-description').value, image: state.newImage,
+        active: document.getElementById('np-active').checked,
       };
+      if (!fields.name.trim()) { st.textContent = 'Give it a name first.'; document.getElementById('np-name').focus(); return; }
+      if (fields.active && !price) { st.textContent = 'Enter a price before putting it in the store, or untick “Put it in the store right away”.'; return; }
       b.disabled = true; st.textContent = 'Creating…';
       post({ action: 'create', fields: fields }).then(function (r) {
         state.creating = false; state.open = r.id;
         state.f.status = 'all'; state.f.q = fields.name;
         return load().then(function () {
-          msg('Created. It is switched off until you tick Active. Add a photo and description below.', 'success');
+          msg(fields.active ? 'Created and in the store.' : 'Created. It is switched off until you tick Active.', 'success');
           var made = itemEl(r.id); if (made) made.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
       }).catch(function (err) { st.textContent = 'Not created: ' + err.message; b.disabled = false; });

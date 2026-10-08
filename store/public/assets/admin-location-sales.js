@@ -198,7 +198,7 @@
       '<p><button type="button" class="link-btn" data-act="back">← All reports</button></p>' +
       '<div id="ls-msg"></div>' +
       '<fieldset class="goat-set"><legend>' + (e.id ? 'Report' : 'New report') + '</legend><div class="form-grid">' +
-        '<div class="field"><label for="ls-loc">Location</label><select id="ls-loc">' +
+        '<div class="field span2"><label for="ls-loc">Location</label><select id="ls-loc">' +
           (shops.length ? '' : '<option value="">Add a location first (Locations tab)</option>') +
           shops.map(function (l) { return '<option value="' + esc(l.id) + '"' + (e.location_id === l.id ? ' selected' : '') + '>' + esc(l.name) + '</option>'; }).join('') + '</select></div>' +
         '<div class="field"><label for="ls-label">Report name</label><input type="text" id="ls-label" maxlength="60" value="' + esc(e.period_label) + '" placeholder="e.g. Sep 2026"></div>' +
@@ -313,17 +313,17 @@
       var l = e.lines[i];
       if (!l.text.trim() && !l.qty && !l.gross) continue;            // an empty row
       var bad = ['gross', 'discount', 'net', 'tax', 'total'].filter(function (k) { return isNaN(cents(l[k])); })[0];
-      if (bad) { status.textContent = 'Line ' + (i + 1) + ': the ' + bad + ' box should be an amount like 21.00.'; return; }
-      if (!(parseInt(l.qty, 10) > 0)) { status.textContent = 'Line ' + (i + 1) + ': enter how many were sold (Qty).'; return; }
-      if (!l.product_id && !l.text.trim()) { status.textContent = 'Line ' + (i + 1) + ': choose or describe the product.'; return; }
+      if (bad) { status.className = ''; status.textContent = 'Line ' + (i + 1) + ': the ' + bad + ' box should be an amount like 21.00.'; return; }
+      if (!(parseInt(l.qty, 10) > 0)) { status.className = ''; status.textContent = 'Line ' + (i + 1) + ': enter how many were sold (Qty).'; return; }
+      if (!l.product_id && !l.text.trim()) { status.className = ''; status.textContent = 'Line ' + (i + 1) + ': choose or describe the product.'; return; }
       lines.push({
         product_id: l.product_id || null, name: l.product_id ? '' : l.text, qty: parseInt(l.qty, 10),
         gross_cents: cents(l.gross) || 0, discount_cents: cents(l.discount) || 0, net_cents: over(l.net), tax_cents: cents(l.tax) || 0, total_cents: over(l.total),
       });
     }
     var xt = cents(e.extra_tax), cut = cents(e.commission), pay = cents(e.payout);
-    if (isNaN(xt) || isNaN(cut) || isNaN(pay)) { status.textContent = 'Tax, the shop’s cut and the payout should be plain amounts like 162.00.'; return; }
-    state.busy = true; btn.disabled = true; status.textContent = 'Saving…';
+    if (isNaN(xt) || isNaN(cut) || isNaN(pay)) { status.className = ''; status.textContent = 'Tax, the shop’s cut and the payout should be plain amounts like 162.00.'; return; }
+    state.busy = true; btn.disabled = true; status.className = ''; status.textContent = 'Saving…';
     api('POST', '/api/admin/location-reports', {
       action: 'save', id: e.id, location_id: e.location_id, period_label: e.period_label, period_start: e.period_start, period_end: e.period_end,
       extra_tax_cents: xt || 0, commission_cents: cut, payout_cents: pay, note: e.note, lines: lines,
@@ -335,7 +335,7 @@
       });
     }).catch(function (err) {
       state.busy = false; btn.disabled = false;
-      status.textContent = 'Not saved: ' + err.message;
+      status.className = ''; status.textContent = 'Not saved: ' + err.message;
     });
   }
 
@@ -352,7 +352,7 @@
     if (state.dirty) return;
     state.dirty = true;
     var st = document.getElementById('ls-status');
-    if (st && !st.textContent) st.textContent = 'Not saved yet';
+    if (st && !st.textContent) { st.textContent = 'Not saved yet'; st.className = 'muted'; }
   }
   AdminUI.guardLeaving(function () { return !!(state.ed && state.dirty); });
   AdminUI.lineKeys(host, '.ls-line', 'total', function () {
