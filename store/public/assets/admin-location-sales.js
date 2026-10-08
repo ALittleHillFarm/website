@@ -19,7 +19,7 @@
   var tab = document.getElementById('tab-location-sales');
   if (!host || !tab) return;
 
-  var state = { list: [], locations: [], products: [], loaded: false, ed: null, busy: false };
+  var state = { list: [], locations: [], products: [], loaded: false, ed: null, busy: false, dirty: false };
 
   // ---- helpers ----------------------------------------------------------
   function esc(s) {
@@ -71,7 +71,8 @@
   }
   function note(text, kind) {
     var el = document.getElementById('ls-msg');
-    if (el) el.innerHTML = text ? '<p class="alert ' + (kind || 'success') + '">' + esc(text) + '</p>' : '';
+    if (el) el.innerHTML = text ? '<p class="alert ' + (kind || 'success') + '" role="status">' + esc(text) + '</p>' : '';
+    if (el && text && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // ---- loading ----------------------------------------------------------
@@ -162,7 +163,7 @@
   }
 
   function openEditor(ed) {
-    state.ed = ed;
+    state.ed = ed; state.dirty = false;
     renderEditor();
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -172,10 +173,11 @@
       return '<label class="ed-c"><span class="m-lbl">' + lbl + '</span><input type="text" inputmode="' + (k === 'qty' ? 'numeric' : 'decimal') + '" data-k="' + k + '" value="' + esc(l[k]) + '"' + (extra || '') + '></label>';
     }
     return '<div class="ed-line ls-line" data-i="' + i + '">' +
-      '<label class="ed-c what"><span class="m-lbl">Product</span><input type="text" list="ls-products" data-k="text" value="' + esc(l.text) + '" placeholder="Type a name, or describe it…" autocomplete="off"></label>' +
+      '<label class="ed-c what"><span class="m-lbl">Product</span><input type="text" list="ls-products" data-k="text" value="' + esc(l.text) + '" placeholder="Type a name or SKU…" autocomplete="off" autocapitalize="off"></label>' +
       box('qty', 'Qty') + box('gross', 'Gross $', ' placeholder="0.00"') + box('discount', 'Discounts $', ' placeholder="0.00"') +
       box('net', 'Net $', ' placeholder="auto"') + box('tax', 'Taxes $', ' placeholder="0.00"') + box('total', 'Total $', ' placeholder="auto"') +
-      '<button type="button" class="btn ghost small" data-act="remove" data-i="' + i + '" aria-label="Remove this line">✕</button>' +
+      '<button type="button" class="btn ghost small" data-act="remove" data-i="' + i + '" aria-label="Remove this line" tabindex="-1">✕</button>' +
+      '<div class="ed-note" data-note' + (l.msg ? ' data-kind="match">' + esc(l.msg) : ' hidden>') + '</div>' +
     '</div>';
   }
 
@@ -207,17 +209,19 @@
         '<div class="ed-head ls-line"><span>Product</span><span>Qty</span><span>Gross</span><span>Discounts</span><span>Net</span><span>Taxes</span><span>Total</span><span></span></div>' +
         '<div id="ls-lines">' + e.lines.map(lineHtml).join('') + '</div>' +
         '<p style="margin:10px 0 14px"><button type="button" class="btn ghost small" data-act="add">Add a line</button></p>' +
-        '<div class="hint">Copy the report’s columns. Net and Total work themselves out; type in them only if the report says something different. ' +
-          'Something sold outside the report, such as 2 quarts of milk you wrote down, is just another line.</div>' +
+        '<div class="hint">Copy the report’s columns. If the report got a discount wrong, just fix the <strong>Discounts</strong> box; Net follows it. ' +
+          'Leave Net and Total empty unless you really need to override them. ' +
+          'Something sold outside the report, such as 2 quarts of milk you wrote down, is just another line. Press Enter to move across a line.</div>' +
         '<div class="inv-totals" id="ls-totals" style="margin-top:16px"></div>' +
       '</fieldset>' +
-      '<fieldset class="goat-set"><legend>What the shop owes you</legend><div class="form-grid">' +
+      '<fieldset class="goat-set"><legend>What the shop owes you</legend><p class="hint" style="margin:0 0 12px">This is worked out for you from the lines above, so you can usually leave all three boxes empty.</p><div class="form-grid">' +
         '<div class="field"><label for="ls-xtax">Tax shown once for the whole report $ <span class="lbl-note">only if the lines have no tax</span></label><input type="text" id="ls-xtax" inputmode="decimal" value="' + esc(e.extra_tax) + '" placeholder="0.00"></div>' +
         '<div class="field"><label for="ls-cut">Shop’s cut $ <span class="lbl-note">blank = the location’s usual percentage</span></label><input type="text" id="ls-cut" inputmode="decimal" value="' + esc(e.commission) + '" placeholder="auto"></div>' +
         '<div class="field span2"><label for="ls-payout">Payout $ <span class="lbl-note">blank = net sales less the shop’s cut. Type your own figure if you worked out something different.</span></label><input type="text" id="ls-payout" inputmode="decimal" value="' + esc(e.payout) + '" placeholder="auto"></div>' +
       '</div>' + paidBox + '</fieldset>' +
       '<fieldset class="goat-set"><legend>Notes (optional)</legend><div class="field"><textarea id="ls-note" rows="2" maxlength="1000">' + esc(e.note) + '</textarea></div></fieldset>' +
       '<div class="goat-save"><button type="button" class="btn" data-act="save">Save report</button>' +
+        '<strong class="ls-owed" id="ls-owed" aria-live="polite"></strong>' +
         (e.id ? '<button type="button" class="btn ghost rust-text" data-act="delete">Delete…</button>' : '') +
         '<span id="ls-status" aria-live="polite"></span></div>';
     recalc();
@@ -262,6 +266,20 @@
     for (var i = 0; i < els.length; i++) {
       els[i].querySelector('[data-k="net"]').placeholder = dollars(t.lines[i].net);
       els[i].querySelector('[data-k="total"]').placeholder = dollars(t.lines[i].total);
+      var l = state.ed.lines[i], bits = [], note = els[i].querySelector('[data-note]');
+      var gross = n(l.gross) - n(l.discount), typedNet = over(l.net);
+      if (typedNet !== null && typedNet !== Math.max(0, gross)) {
+        bits.push('Net is typed in as ' + money(typedNet) + ' but gross less discounts is ' + money(Math.max(0, gross)) +
+          '. <button type="button" class="link-btn" data-act="clear-net" data-i="' + i + '">Use ' + money(Math.max(0, gross)) + '</button>');
+      }
+      var typedTot = over(l.total);
+      if (typedTot !== null && typedTot !== t.lines[i].net + n(l.tax)) {
+        bits.push('Total is typed in as ' + money(typedTot) + ' but net plus taxes is ' + money(t.lines[i].net + n(l.tax)) +
+          '. <button type="button" class="link-btn" data-act="clear-total" data-i="' + i + '">Use ' + money(t.lines[i].net + n(l.tax)) + '</button>');
+      }
+      if (l.msg) bits.unshift(esc(l.msg));
+      note.hidden = !bits.length;
+      note.innerHTML = bits.join('<br>');
     }
     document.getElementById('ls-cut').placeholder = dollars(t.cutAuto);
     document.getElementById('ls-payout').placeholder = dollars(t.payoutAuto);
@@ -272,7 +290,18 @@
       '<div class="row"><span>Taxes on the report</span><span>' + money(t.tax) + '</span></div>' +
       '<div class="row"><span>Total on the report</span><span>' + money(t.total) + '</span></div>' +
       (t.cut ? '<div class="row"><span>Shop’s cut</span><span>−' + money(t.cut) + '</span></div>' : '') +
-      '<div class="row total"><span>The shop pays you</span><span>' + money(t.payout) + '</span></div>';
+      '<div class="row total"><span>' + esc(shopName()) + ' owes you</span><span>' + money(t.payout) + '</span></div>' +
+      (t.payout !== t.payoutAuto
+        ? '<p class="alert error" role="status" style="margin:10px 0 0">You typed your own payout of ' + money(t.payout) + '. The lines above work out to ' + money(t.payoutAuto) +
+          ' (a ' + money(Math.abs(t.payout - t.payoutAuto)) + (t.payout > t.payoutAuto ? ' difference in your favor' : ' difference against you') +
+          '). Empty the Payout box to follow the lines.</p>' : '');
+    var owed = document.getElementById('ls-owed');
+    if (owed) owed.textContent = 'Owed to us: ' + money(t.payout);
+  }
+
+  function shopName() {
+    var el = document.getElementById('ls-loc'), loc = el && locById(el.value);
+    return loc ? loc.name : 'The shop';
   }
 
   function save(btn) {
@@ -284,7 +313,9 @@
       var l = e.lines[i];
       if (!l.text.trim() && !l.qty && !l.gross) continue;            // an empty row
       var bad = ['gross', 'discount', 'net', 'tax', 'total'].filter(function (k) { return isNaN(cents(l[k])); })[0];
-      if (bad) { status.textContent = 'Line ' + (i + 1) + ': “' + bad + '” should be an amount like 21.00.'; return; }
+      if (bad) { status.textContent = 'Line ' + (i + 1) + ': the ' + bad + ' box should be an amount like 21.00.'; return; }
+      if (!(parseInt(l.qty, 10) > 0)) { status.textContent = 'Line ' + (i + 1) + ': enter how many were sold (Qty).'; return; }
+      if (!l.product_id && !l.text.trim()) { status.textContent = 'Line ' + (i + 1) + ': choose or describe the product.'; return; }
       lines.push({
         product_id: l.product_id || null, name: l.product_id ? '' : l.text, qty: parseInt(l.qty, 10),
         gross_cents: cents(l.gross) || 0, discount_cents: cents(l.discount) || 0, net_cents: over(l.net), tax_cents: cents(l.tax) || 0, total_cents: over(l.total),
@@ -297,7 +328,7 @@
       action: 'save', id: e.id, location_id: e.location_id, period_label: e.period_label, period_start: e.period_start, period_end: e.period_end,
       extra_tax_cents: xt || 0, commission_cents: cut, payout_cents: pay, note: e.note, lines: lines,
     }).then(function (r) {
-      state.busy = false; state.ed = null;
+      state.busy = false; state.ed = null; state.dirty = false;
       return load().then(function () {
         renderList();
         note('Saved. The shop pays you ' + money(r.payout_cents) + '. Stock and your sales books are updated.');
@@ -317,25 +348,77 @@
   });
   document.addEventListener('locations-changed', function () { state.loaded = false; });
 
+  function markDirty() {
+    if (state.dirty) return;
+    state.dirty = true;
+    var st = document.getElementById('ls-status');
+    if (st && !st.textContent) st.textContent = 'Not saved yet';
+  }
+  AdminUI.guardLeaving(function () { return !!(state.ed && state.dirty); });
+  AdminUI.lineKeys(host, '.ls-line', 'total', function () {
+    readForm(); state.ed.lines.push(blankLine()); renderEditor();
+    var all = document.querySelectorAll('#ls-lines [data-k="text"]'); all[all.length - 1].focus();
+  });
+
+  // The store price for the quantity, as a starting point for Gross. It keeps
+  // following Qty until the gross is typed over.
+  function suggestGross(row, l) {
+    var p = l.product_id && byId(l.product_id), q = parseInt(l.qty, 10);
+    if (!p || !(q > 0) || (l.gross && !l.grossAuto)) return;
+    l.gross = dollars(p.price_cents * q); l.grossAuto = true;
+    row.querySelector('[data-k="gross"]').value = l.gross;
+  }
+
   host.addEventListener('input', function (ev) {
     var t = ev.target, ed = state.ed;
     if (!ed) return;
+    markDirty();
     var row = t.closest('.ls-line');
     if (row && row.parentNode.id === 'ls-lines') {
       var l = ed.lines[+row.getAttribute('data-i')], k = t.getAttribute('data-k');
       l[k] = t.value;
+      if (k === 'gross') l.grossAuto = false;
       if (k === 'text') {
         var p = byLabel(t.value);
         l.product_id = p ? p.id : '';
         l.name = p ? p.name : t.value;
-        // Offer the store price as the gross for one, as a starting point.
-        if (p && !l.gross && l.qty) { l.gross = dollars(p.price_cents * (parseInt(l.qty, 10) || 1)); row.querySelector('[data-k="gross"]').value = l.gross; }
+        suggestGross(row, l);
       }
+      if (k === 'qty') suggestGross(row, l);
     }
     recalc();
   });
+
+  // Typed text that isn't a list entry word for word: match it on SKU, name or
+  // words, and say so when it can't be matched.
+  function resolveLine(row, input) {
+    var l = state.ed.lines[+row.getAttribute('data-i')];
+    var note = row.querySelector('[data-note]');
+    l.msg = '';
+    if (!input.value.trim()) { l.product_id = ''; l.name = ''; }
+    else {
+      var hit = AdminUI.findProduct(state.products, input.value, label);
+      if (hit.product) {
+        var p = hit.product;
+        l.product_id = p.id; l.name = p.name; l.text = label(p);
+        input.value = l.text;
+        suggestGross(row, l);
+      } else {
+        l.product_id = ''; l.name = input.value;
+        if (hit.many > 1) l.msg = hit.many + ' products match. Pick one from the list, or type more of the name.';
+        else if (input.value.trim().length > 2) l.msg = 'Not in your product list. That is fine for something one-off, but it won’t take anything out of stock.';
+      }
+    }
+    note.removeAttribute('data-kind'); note.hidden = !l.msg; note.textContent = l.msg;
+    if (l.msg) note.setAttribute('data-kind', 'match');
+    recalc();
+  }
+
   host.addEventListener('change', function (ev) {
-    if (state.ed && ev.target.id === 'ls-loc') recalc();
+    if (!state.ed) return;
+    if (ev.target.id === 'ls-loc') { recalc(); return; }
+    var row = ev.target.closest && ev.target.closest('.ls-line');
+    if (row && row.parentNode.id === 'ls-lines' && ev.target.getAttribute('data-k') === 'text') resolveLine(row, ev.target);
   });
 
   host.addEventListener('click', function (ev) {
@@ -361,6 +444,13 @@
       state.ed.lines.splice(+b.getAttribute('data-i'), 1);
       if (!state.ed.lines.length) state.ed.lines.push(blankLine());
       return renderEditor();
+    }
+    if (act === 'clear-net' || act === 'clear-total') {
+      var li = +b.getAttribute('data-i');
+      state.ed.lines[li][act === 'clear-net' ? 'net' : 'total'] = '';
+      var box = document.querySelector('#ls-lines .ls-line[data-i="' + li + '"] [data-k="' + (act === 'clear-net' ? 'net' : 'total') + '"]');
+      if (box) box.value = '';
+      return recalc();
     }
     if (act === 'save') return save(b);
     if (act === 'paid' || act === 'unpaid') {

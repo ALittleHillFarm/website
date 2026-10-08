@@ -508,6 +508,9 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .ed-c input::placeholder { color:#A29A87; }
 .ed-c.calc { font-size:14px; color:var(--body); padding:0 4px; }
 .m-lbl { display:none; }
+.ed-note { grid-column:1 / -1; font-size:13px; color:var(--rust); margin:-2px 0 4px; }
+.ed-note[hidden] { display:none; }
+.ls-owed { font-family:var(--serif); font-weight:400; font-size:18px; color:var(--moss-ink); }
 .ls-paid { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 14px; }
 .ls-paid select, .ls-paid input { font:inherit; font-size:15px; padding:8px 10px; border:1px solid var(--line); border-radius:2px; background:var(--card); }
 .goat-save #pu-status, .goat-save #lo-status, .goat-save #ls-status { font-size:14px; color:var(--rust); }
