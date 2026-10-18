@@ -31,9 +31,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Unit tests (cost math, location reports)
+      - name: Tests (cost math, location reports, cash checkout)
         working-directory: store
         run: node --test
+
+      - name: Shopify import regression tests
+        run: python3 -m unittest discover -s seed -p 'test_*.py'
 
       - name: Build check - store worker
         working-directory: store

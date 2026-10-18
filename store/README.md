@@ -20,6 +20,8 @@ Read [DESIGN.md](DESIGN.md) for why it is shaped this way.
 ## Tests, CI and automatic deploys
 
 - `cd store && node --test` runs the unit tests in `store/test/` for the money arithmetic in `store/lib/costing.js` (landed cost split by weight, moving average cost, location report totals and the per-category sales rows). Run them before changing any of that.
+- Node 22.15+ also runs the cash-eligibility and checkout regression tests against an in-memory SQLite database: Shopify history, paid store sales, refunds, and session/email checks. No real orders, payments or emails are sent.
+- `python -m unittest discover -s seed -p 'test_*.py'` (from the repository root) checks the Shopify importer, including continuation rows, refunds and phone/name reconciliation.
 - `.github/workflows/ci.yml` runs the tests and a `wrangler deploy --dry-run` build check of the store and the farm site on every push and pull request (GitHub-hosted runners).
 - On a push to `main` it then deploys both Workers. This needs the repository secrets `CLOUDFLARE_API_TOKEN` (an API token that can edit Workers, D1 and R2) and `CLOUDFLARE_ACCOUNT_ID`; until they are set the deploy job skips itself with a notice. Database changes are never run from CI: apply `schema.sql` changes by hand with `wrangler d1 execute`.
 - Local admin: `cd store && npx wrangler dev`, with `ADMIN_PASSWORD` in `.dev.vars`. The local database is separate from production (`wrangler d1 execute alhf-store --local --file=schema.sql` creates it).
@@ -275,7 +277,9 @@ the failure paths are where money goes missing.
 - [ ] Trusted customer → captures immediately, no review step
 - [ ] Tax-exempt customer → tax is zero, `exemption_ref` stored on the sale
 - [ ] ACH order end to end
-- [ ] Cash order from an untrusted customer → refused with a clear message
+- [ ] Signed-in repeat customer (Shopify history or a paid store sale), without a trusted flag → cash at pickup allowed
+- [ ] Guest choosing cash → prompted to log in with their previous purchase email; cart survives the round trip
+- [ ] New customer with no purchase history → cash unavailable with contact/payment guidance
 - [ ] Record a cash milk sale → appears in the quarterly report
 - [ ] Quarterly report totals match Stripe's own payout report
 - [ ] Cost basis is NOT visible in `/api/catalog` or `/api/quote` responses
@@ -366,6 +370,28 @@ out. Logging in pre-fills checkout, lists their orders, and is the only way a
 customer's **tax exemption** or **trusted** status applies: those are keyed to
 the signed-in email, so typing someone else's email at checkout gets nothing.
 New orders also get an automatic confirmation email.
+
+**Cash at pickup:** a signed-in customer is established if their email has an
+imported Shopify purchase or a paid store sale (`captured` / `recorded`, with
+some payment remaining after refunds), or staff have marked them `trusted`.
+Unpaid cash orders, pending payments and new accounts do not qualify. This is
+checked when ordering and is shown on the account page; no customer backfill
+is needed. Repeat-purchase recognition does not set `trusted` or skip card
+review. Customers must use the email from their earlier purchases. If their
+history is missing or under another email, the farm must reconcile it first.
+
+To refresh Shopify history, run `seed/import-shopify-history.py <orders.csv>
+--json` and save the result **outside this public repository**. An admin can
+POST that JSON to `/api/admin/customer-history/import` using the existing admin
+authentication. The import validates the full payload, stages batches, then
+atomically replaces only `source='shopify'` history. Retry with the same payload
+is safe. It never changes sales, customer contacts, tax exemptions or card trust.
+Only paid, non-canceled orders with money remaining after refunds are included.
+`--known-customers <private-admin-customers.json>` reconciles missing/changed
+emails using a unique exact phone match plus full-name agreement; a matching
+name alone is never enough. `--email-map <private-map.json>` supports email
+changes separately reviewed by the farm owner and preserves the original email's
+history too. Do not put the exports, mappings, or generated payloads in git.
 
 Each part switches on when its keys are in `.env` and `python push-secrets.py`
 has run; until then the Log in link simply doesn't appear.

@@ -100,11 +100,16 @@ choose method  →  server prices the cart  →  Stripe Checkout (that method on
 ```
 
 Cash at pickup creates no Stripe object at all - it lands in the ledger as
-`payment_method='cash'`, `status='recorded'`, with no PaymentIntent.
+`payment_method='cash'`, `status='awaiting_cash'`, with no PaymentIntent. It
+becomes `recorded` only when staff collect the cash.
 
 That also means **no payment guarantee**, which matters on a 2-4 week pre-order
 where we buy stock before seeing money. `cash_on_pickup.trusted_only` defaults
-to true for that reason.
+to true for that reason. This legacy setting requires an established customer:
+a signed-in email with an imported Shopify purchase, a paid current-store sale
+(`captured` or `recorded`, not fully refunded), or a manual `trusted` flag.
+Account creation and unpaid orders alone do not qualify. Cash recognition is
+separate from card trust: purchase history never turns on automatic capture.
 
 ### ACH notes
 
