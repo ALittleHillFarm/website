@@ -118,7 +118,7 @@
     title.textContent = 'Your account';
     var perks = [];
     if (me.tax_exempt) perks.push('<span class="badge moss">Tax-exempt</span>');
-    if (me.trusted) perks.push('<span class="badge">Established customer</span>');
+    if (me.established) perks.push('<span class="badge">Established customer</span>');
     var orders = (me.orders || []).map(function (o) {
       var items = (o.items || []).map(function (l) {
         return esc(l.qty) + ' × ' + esc(l.name) + (l.unit ? ' <span class="muted">(' + esc(l.unit) + ')</span>' : '');

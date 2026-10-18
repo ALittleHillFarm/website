@@ -26,6 +26,7 @@
 import catalog from './products.json';
 import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
+import { isEstablishedCustomer, importPurchaseHistory } from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
 
@@ -180,6 +181,7 @@ function apiConfig(env) {
       cash_discount_bps: config.pricing.cash_discount_bps,
     },
     cash_enabled: config.pricing.cash_on_pickup.enabled,
+    cash_established_only: config.pricing.cash_on_pickup.trusted_only,
     shipping_enabled: config.shipping.enabled,
   });
 }
@@ -517,9 +519,12 @@ async function apiCheckout(request, env, ctx) {
     if (!config.pricing.cash_on_pickup.enabled) {
       return json({ error: 'cash not available' }, 400);
     }
-    if (config.pricing.cash_on_pickup.trusted_only && !(customer && customer.trusted)) {
+    if (config.pricing.cash_on_pickup.trusted_only && !customer) {
+      return json({ error: 'To pay cash at pickup, log in with the email you used for previous purchases, then return to checkout.' }, 401);
+    }
+    if (config.pricing.cash_on_pickup.trusted_only && !(await isEstablishedCustomer(env.DB, email, customer))) {
       return json(
-        { error: 'cash at pickup is available to established customers — please choose card or bank transfer' },
+        { error: 'We could not find a paid purchase for this account. If you have bought from us before, please contact the farm so we can link your history. You can also choose card or bank transfer.' },
         400
       );
     }
@@ -919,8 +924,8 @@ async function serveMedia(path, env) {
 // SESSION_SECRET the Log in link simply doesn't appear.
 //
 // Signing in is optional — guests can always check out. What it changes:
-// a customer's tax exemption and "trusted" status (cash at pickup, no hold
-// on the card) apply ONLY when they are signed in as that email. Before
+// a customer's tax exemption, repeat-purchase cash eligibility and "trusted"
+// status (no hold on the card) apply ONLY when signed in as that email. Before
 // sign-in existed, typing someone else's email at checkout was enough.
 //
 // The session is a signed cookie (email + expiry, HMAC-SHA256), so there is
@@ -1020,6 +1025,7 @@ async function authRoutes(path, request, env) {
     const email = await sessionEmail(request, env);
     if (!email) return json({ signed_in: false, methods }, 200);
     const c = (await getCustomer(env, email)) || {};
+    const established = await isEstablishedCustomer(env.DB, email, c);
     const orders = (await env.DB.prepare(
       "SELECT id, sold_at, status, payment_method, total_cents, items_json, fulfillment FROM sales" +
         " WHERE customer_email = ? AND status NOT IN ('pending','abandoned') ORDER BY sold_at DESC LIMIT 50"
@@ -1033,6 +1039,7 @@ async function authRoutes(path, request, env) {
       phone: c.phone || '',
       tax_exempt: !!c.tax_exempt,
       trusted: !!c.trusted,
+      established,
       orders: orders.map((o) => ({
         id: o.id, sold_at: o.sold_at, status: o.status, payment_method: o.payment_method,
         total_cents: o.total_cents, pickup: String(o.fulfillment || '').replace(/^pickup:/, ''),
@@ -2743,6 +2750,19 @@ async function adminRoutes(path, request, env) {
 
   // A customer's most recent distinct products, newest first — this store's
   // own orders plus history carried over from Shopify (purchase_history).
+  if (path === '/api/admin/customer-history/import' && request.method === 'POST') {
+    const body = await request.json().catch(() => null);
+    // This deliberately replaces only imported history, never sales, tax
+    // exemptions, card trust, or current customer contact details.
+    if (!body || body.source !== 'shopify') return json({ error: 'source must be shopify' }, 400);
+    try {
+      return json(await importPurchaseHistory(env.DB, body.purchases));
+    } catch (error) {
+      if (/^(provide between|invalid purchase line)/.test(error.message)) return json({ error: error.message }, 400);
+      throw error;
+    }
+  }
+
   if (path === '/api/admin/customer-history') {
     const email = cleanEmail(new URL(request.url).searchParams.get('email'));
     if (!email) return json({ items: [] });
@@ -2759,7 +2779,7 @@ async function adminRoutes(path, request, env) {
       for (const l of JSON.parse(s.items_json || '[]')) take(l.id, s.sold_at, l.qty, l.list_price_cents);
     }
     const old = (await env.DB.prepare(
-      'SELECT sold_at, product_id, qty, price_cents FROM purchase_history WHERE email = ? AND product_id IS NOT NULL'
+      "SELECT sold_at, product_id, qty, price_cents FROM purchase_history WHERE email = ? AND source = 'shopify' AND product_id IS NOT NULL"
     ).bind(email).all()).results || [];
     for (const h of old) take(h.product_id, h.sold_at.replace(' ', 'T'), h.qty, h.price_cents);
 

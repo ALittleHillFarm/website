@@ -89,6 +89,7 @@
                  percentages and whether cash is available -->
           </div>
         </fieldset>
+        <div id="cash-guidance" aria-live="polite"></div>
 
         <h2 class="serif" style="font-size:22px;margin:28px 0 16px">Pre-order terms</h2>
         <div class="panel dashed terms-box" id="terms-text">
@@ -214,6 +215,23 @@
   var errorHost = document.getElementById('checkout-error');
   var emailField = document.getElementById('f-email');
   var termsCheck = document.getElementById('f-terms');
+  var signedInCustomer = null;
+
+  function cashAllowed() {
+    return !config || !config.cash_established_only ||
+      !!(signedInCustomer && signedInCustomer.signed_in && signedInCustomer.established);
+  }
+
+  function updateCashGuidance() {
+    var host = document.getElementById('cash-guidance');
+    if (currentMethod() !== 'cash' || cashAllowed()) { host.innerHTML = ''; return; }
+    host.innerHTML = signedInCustomer && signedInCustomer.signed_in
+      ? '<p class="hint">We could not find a paid purchase for this account. Bought from us before? ' +
+        '<a href="https://alittlehillfarm.com/about.html#contact">Contact the farm</a> so we can link your history, ' +
+        'or choose card or bank transfer.</p>'
+      : '<p class="hint">Bought from us before? <a href="/account?return=%2Fcheckout">Log in with the email used for your previous purchases</a> ' +
+        'to pay cash at pickup. Your cart will be here when you return. You can also choose card or bank transfer.</p>';
+  }
 
   function showError(msg) {
     errorHost.innerHTML = '<div class="alert error">' + esc(msg) + '</div>';
@@ -222,7 +240,9 @@
   function clearError() { errorHost.innerHTML = ''; }
 
   function updateSubmitEnabled() {
-    submitBtn.disabled = !(quoteReady && termsCheck.checked && cart.length > 0);
+    submitBtn.disabled = !(quoteReady && termsCheck.checked && cart.length > 0 &&
+      (currentMethod() !== 'cash' || cashAllowed()));
+    updateCashGuidance();
   }
 
   function currentMethod() {
@@ -309,7 +329,8 @@
     var html = payOptionHtml('card', 'Card', 'Pay the posted price.', true);
     html += payOptionHtml('ach', 'Bank transfer', 'Save ' + achPct + '% — paid by ACH bank transfer.', false);
     if (config.cash_enabled) {
-      html += payOptionHtml('cash', 'Cash at pickup', 'Save ' + cashPct + '% — pay when you pick up.', false);
+      html += payOptionHtml('cash', 'Cash at pickup', 'Save ' + cashPct + '% — pay when you pick up.' +
+        (config.cash_established_only ? ' Returning customers: log in with your previous purchase email.' : ''), false);
     }
     document.getElementById('pay-options').innerHTML = html;
 
@@ -377,6 +398,8 @@
   function onMe(me) {
     var banner = document.getElementById('acct-banner');
     if (!banner || !me) return;
+    signedInCustomer = me;
+    updateSubmitEnabled();
     var m = me.methods || {};
     if (me.signed_in) {
       var nameF = document.getElementById('f-name');
@@ -392,7 +415,7 @@
     } else if (m.email || m.google) {
       banner.innerHTML = '<p class="hint" style="margin:-6px 0 16px">Have an account? ' +
         '<a href="/account?return=' + encodeURIComponent('/checkout') + '">Log in</a> for your saved details' +
-        ' and any tax exemption — or just continue as a guest.</p>';
+        ', returning-customer cash payment and any tax exemption — or continue as a guest with card or bank transfer.</p>';
     }
   }
   if (window.alhfMe) onMe(window.alhfMe);
@@ -404,6 +427,7 @@
     clearError();
 
     if (!form.reportValidity()) return;
+    if (currentMethod() === 'cash' && !cashAllowed()) { updateSubmitEnabled(); return; }
     if (!termsCheck.checked) { showError('Please accept the pre-order terms to continue.'); return; }
 
     submitBtn.disabled = true;
