@@ -1261,7 +1261,7 @@ async function sendOrderConfirmation(env, saleId) {
 // The admin builds the order (any product, including ones hidden from the
 // storefront like totes, a changed price, or a free-text line such as
 // freight), and the customer gets an email with a link to /pay?inv=<token>.
-// There they choose bank transfer (2% off) or card and pay through Stripe
+// There they choose bank transfer or card (same price) and pay through Stripe
 // like any other order; cash or check is recorded from the admin instead.
 //
 // An invoice is a row in `sales` with channel 'invoice' and status
@@ -1276,7 +1276,8 @@ const payLink = (token) => String(config.store_url || '').replace(/\/+$/, '') + 
  *  price (catalog or as written by the farm), so this does not consult the
  *  catalog. Same discount and tax rules as the storefront. */
 function priceInvoice(lines, method, customer) {
-  const discountBps = discountBpsFor(method);
+  // Invoices are one price whatever the payment method: no discount.
+  const discountBps = 0;
   let subtotal = 0, taxableBase = 0, listSubtotal = 0, cogs = 0;
   const out = lines.map((l) => {
     const unit = Math.round((l.list_price_cents * (10000 - discountBps)) / 10000);
@@ -1333,7 +1334,6 @@ async function sendInvoiceEmail(env, sale) {
   const lines = JSON.parse(sale.items_json || '[]');
   const customer = await getCustomer(env, sale.customer_email);
   const card = priceInvoice(lines, 'card', customer);
-  const ach = priceInvoice(lines, 'ach', customer);
   const link = payLink(sale.invoice_token);
   const ref = orderRef(sale.id);
   const rows = lines.map((l) => '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
@@ -1345,8 +1345,7 @@ async function sendInvoiceEmail(env, sale) {
     (sale.invoice_note ? '<p style="margin:0 0 14px;padding:10px 12px;background:#F3EEE4">' + escHtml(sale.invoice_note) + '</p>' : '') +
     '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
     '<table style="width:100%;font-size:14px;margin:0 0 16px">' +
-      '<tr><td>Total by bank transfer (2% off)</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(ach.total_cents) + '</td></tr>' +
-      '<tr><td>Total by card</td><td style="text-align:right">' + dollars(card.total_cents) + '</td></tr>' +
+      '<tr><td style="font-weight:600;color:#1E1B16">Total</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(card.total_cents) + '</td></tr>' +
       (card.tax_exempt ? '<tr><td colspan="2" style="color:#6B6353">Tax-exempt — no sales tax.</td></tr>' : '<tr><td colspan="2" style="color:#6B6353">Totals include Idaho sales tax.</td></tr>') +
     '</table>' +
     '<p style="margin:0 0 18px"><a href="' + escHtml(link) + '" style="background:#59803D;color:#fff;text-decoration:none;padding:12px 22px;border-radius:2px;display:inline-block;font-size:15px">Pay invoice</a></p>' +
@@ -1356,12 +1355,12 @@ async function sendInvoiceEmail(env, sale) {
   const text = ['Invoice ' + ref + ' from A Little Hill Farm', '',
     ...(sale.invoice_note ? [sale.invoice_note, ''] : []),
     ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '') + '  ' + dollars(l.list_price_cents * l.qty)),
-    '', 'Total by bank transfer (2% off): ' + dollars(ach.total_cents), 'Total by card: ' + dollars(card.total_cents), '',
+    '', 'Total: ' + dollars(card.total_cents), '',
     'Pay here: ' + link, '', 'Pickup: ' + pickupLabel(sale.fulfillment),
     'Rather pay by cash or check at pickup? Just reply and let us know.'].join('\n');
   const r = await sendEmail(env, {
     to: sale.customer_email,
-    subject: 'Invoice ' + ref + ' from A Little Hill Farm — ' + dollars(ach.total_cents),
+    subject: 'Invoice ' + ref + ' from A Little Hill Farm — ' + dollars(card.total_cents),
     text, html,
   });
   if (r.sent) {
@@ -2504,11 +2503,22 @@ async function attentionItems(env) {
   const now = Date.now();
   const items = [];
   const rows = (await env.DB.prepare(
-    "SELECT id, sold_at, status, payment_method, total_cents, notes FROM sales" +
+    "SELECT id, sold_at, status, payment_method, total_cents, notes, customer_name, customer_email, stripe_payment_intent FROM sales" +
       " WHERE status IN ('authorized','awaiting_cash','pending','processing','failed')" +
       " OR (notes LIKE '%DISPUTE OPENED%' AND sold_at >= ?)" +
       ' ORDER BY sold_at'
   ).bind(new Date(now - 90 * DAY).toISOString()).all()).results || [];
+
+  // One line per order, linking to that payment in the Stripe dashboard.
+  const stripeUrl = (pi) => 'https://dashboard.stripe.com/payments' + (pi ? '/' + pi : '');
+  const detail = (r) => {
+    const days = Math.floor((now - Date.parse(r.sold_at)) / DAY);
+    return {
+      text: (r.customer_name || r.customer_email || 'A customer') + ' · ' + dollars(r.total_cents) + ' · ordered ' +
+        r.sold_at.slice(0, 10) + ' (' + days + (days === 1 ? ' day' : ' days') + ' ago) · order ' + orderRef(r.id),
+      url: stripeUrl(r.stripe_payment_intent), link_label: 'View in Stripe',
+    };
+  };
 
   const held = rows.filter((r) => r.status === 'authorized' && r.payment_method === 'card');
   for (const r of held) {
@@ -2552,6 +2562,7 @@ async function attentionItems(env) {
       level: 'urgent',
       text: failed.length + (failed.length === 1 ? ' bank transfer has' : ' bank transfers have') +
         ' failed — contact the customer before ordering their items.',
+      details: failed.map(detail),
     });
   }
   // Bank transfers normally settle in about four business days.
@@ -2560,7 +2571,8 @@ async function attentionItems(env) {
     items.push({
       level: 'todo',
       text: slow.length + (slow.length === 1 ? ' bank transfer is' : ' bank transfers are') +
-        ' still processing after a week — check them in the Stripe dashboard.',
+        ' still processing after a week. Bank transfers usually settle in about four business days; a bank can take longer, or Stripe may be waiting on the customer — open the payment in Stripe to see where it is stuck.',
+      details: slow.map(detail),
     });
   }
   const unpaid = (await env.DB.prepare(
@@ -2579,6 +2591,8 @@ async function attentionItems(env) {
       level: 'urgent',
       text: disputes.length + (disputes.length === 1 ? ' payment dispute' : ' payment disputes') +
         ' opened in the last 90 days — answer them in the Stripe dashboard before the deadline.',
+      url: 'https://dashboard.stripe.com/disputes', link_label: 'Open disputes in Stripe',
+      details: disputes.map(detail),
     });
   }
   const down = (await env.DB.prepare("SELECT key, value, updated_at FROM alert_state WHERE key LIKE 'site:%' AND value = 'down'")
@@ -2595,7 +2609,7 @@ async function morningDigest(env) {
   const urgent = items.some((i) => i.level === 'urgent');
   await notify(env, {
     title: 'Farm store: ' + items.length + (items.length === 1 ? ' thing needs' : ' things need') + ' attention',
-    message: items.map((i) => '• ' + i.text).join('\n'),
+    message: items.map((i) => '• ' + i.text + (i.details || []).map((d) => '\n   – ' + d.text).join('')).join('\n'),
     priority: urgent ? 4 : 3,
     tags: urgent ? 'warning' : 'clipboard',
     click: adminUrl(),

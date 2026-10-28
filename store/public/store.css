@@ -574,3 +574,39 @@ details.how[open] summary { margin-bottom:2px; }
 }
 @media (max-width:560px) { #pr-bulk .pr-status.pr-flash { display:inline; } }
 .goat-save #pu-status.muted, .goat-save #lo-status.muted, .goat-save #ls-status.muted { color:var(--muted); }
+
+.attention .att-details { list-style:circle; margin:4px 0 6px; padding-left:20px; }
+.attention .att-details li { font-size:13.5px; color:var(--body); font-weight:400; }
+.attention li a { white-space:nowrap; }
+
+/* ---------- admin: invoice viewer (on the Orders tab) ---------- */
+.iv-back { position:fixed; inset:0; background:rgba(30,27,22,.55); z-index:50; overflow:auto; padding:24px 12px; }
+.iv-back[hidden] { display:none; }
+.iv-panel { max-width:720px; margin:0 auto; }
+.iv-bar { display:flex; gap:10px; justify-content:flex-end; margin-bottom:10px; }
+.iv-sheet { background:#fff; color:#1E1B16; padding:36px 40px; border:1px solid var(--line); font-size:14.5px; line-height:1.5; }
+.iv-sheet .muted { color:var(--muted); font-size:13px; }
+.iv-head { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:22px; }
+.iv-farm { font-family:var(--serif); font-size:26px; }
+.iv-title { text-align:right; }
+.iv-h { font-family:var(--serif); font-size:22px; }
+.iv-status { display:inline-block; margin-top:6px; padding:2px 10px; border:1px solid var(--moss); color:var(--moss-ink); font-size:12.5px; text-transform:uppercase; letter-spacing:.06em; }
+.iv-status.due { border-color:var(--rust); color:#7A3A24; }
+.iv-meta { display:flex; gap:40px; flex-wrap:wrap; margin-bottom:20px; }
+.iv-note { background:#F3EEE4; padding:10px 12px; margin:0 0 18px; }
+.iv-lines { width:100%; border-collapse:collapse; margin-bottom:14px; }
+.iv-lines th { text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:500; border-bottom:1px solid #1E1B16; padding:6px 0; }
+.iv-lines td { padding:8px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+.iv-lines .q { width:44px; } .iv-lines .n { text-align:right; white-space:nowrap; padding-left:14px; }
+.iv-totals { margin-left:auto; max-width:300px; }
+.iv-totals div { display:flex; justify-content:space-between; padding:3px 0; }
+.iv-totals .grand { border-top:1px solid #1E1B16; margin-top:4px; padding-top:6px; font-size:17px; font-weight:600; }
+.iv-pay { margin:20px 0 0; font-size:13.5px; word-break:break-all; }
+.iv-foot { margin:22px 0 0; }
+@media (max-width:560px) { .iv-sheet { padding:22px 18px; } .iv-meta { gap:18px; } }
+@media print {
+  body.iv-open > *:not(#inv-viewer) { display:none !important; }
+  .iv-back { position:static; background:none; padding:0; overflow:visible; }
+  .iv-bar { display:none; }
+  .iv-sheet { border:none; padding:0; }
+}

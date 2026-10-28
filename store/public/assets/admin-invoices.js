@@ -142,8 +142,7 @@
       box.innerHTML =
         '<div class="row"><span>Subtotal</span><span>' + money(r.card.subtotal_cents) + '</span></div>' +
         '<div class="row"><span>Idaho sales tax' + (r.tax_exempt ? ' (customer is tax-exempt)' : '') + '</span><span>' + money(r.card.tax_cents) + '</span></div>' +
-        '<div class="row total"><span>Total by card</span><span>' + money(r.card.total_cents) + '</span></div>' +
-        '<div class="row total"><span>Total by bank transfer or cash (2% off)</span><span>' + money(r.ach.total_cents) + '</span></div>';
+        '<div class="row total"><span>Total</span><span>' + money(r.card.total_cents) + '</span></div>';
     }).catch(function (err) {
       box.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>';
     });

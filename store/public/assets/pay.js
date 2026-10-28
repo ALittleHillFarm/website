@@ -33,8 +33,8 @@
       }
       host.innerHTML = head +
         '<div class="pay-choices">' +
-          '<div class="pay-choice"><div class="t">Bank transfer</div><div class="amt">' + money(inv.ach.total_cents) + '</div>' +
-            '<div class="d">2% off · pay securely from your bank account</div>' +
+          '<div class="pay-choice"><div class="t">Bank transfer</div><div class="amt">' + money(inv.card.total_cents) + '</div>' +
+            '<div class="d">Pay securely from your bank account</div>' +
             '<button type="button" class="btn" data-method="ach">Pay by bank transfer</button></div>' +
           '<div class="pay-choice"><div class="t">Card</div><div class="amt">' + money(inv.card.total_cents) + '</div>' +
             '<div class="d">Credit or debit card</div>' +

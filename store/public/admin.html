@@ -265,6 +265,15 @@
 
 </div>
 </main>
+<div id="inv-viewer" class="iv-back" role="dialog" aria-modal="true" aria-label="Invoice" hidden>
+  <div class="iv-panel">
+    <div class="iv-bar">
+      <button type="button" class="btn small" data-iv="print">Print</button>
+      <button type="button" class="btn small ghost" data-iv="close">Close</button>
+    </div>
+    <div class="iv-sheet" id="inv-sheet"></div>
+  </div>
+</div>
 
 <footer class="site-footer" data-chrome>
   <div class="cols">
@@ -396,6 +405,8 @@
     pending: 'badge muted'
   };
 
+  var salesById = {};
+
   function payLinkFor(sale) {
     return location.origin + '/pay?inv=' + encodeURIComponent(sale.invoice_token || '');
   }
@@ -417,9 +428,15 @@
         '<button type="button" class="btn small" data-action="capture" data-sale="' + esc(sale.id) + '">Charge card</button>' +
         '<button type="button" class="btn small ghost" data-action="capture-partial" data-sale="' + esc(sale.id) + '">Charge part…</button>';
     }
+    if (sale.channel === 'invoice') {
+      salesById[sale.id] = sale;
+      actions +=
+        '<button type="button" class="btn small" data-action="inv-view" data-sale="' + esc(sale.id) + '">View invoice</button>' +
+        '<button type="button" class="btn small ghost" data-action="inv-print" data-sale="' + esc(sale.id) + '">Print</button>';
+    }
     if (sale.status === 'invoiced') {
       actions +=
-        '<button type="button" class="btn small" data-action="inv-copy" data-sale="' + esc(sale.id) + '" data-link="' +
+        '<button type="button" class="btn small ghost" data-action="inv-copy" data-sale="' + esc(sale.id) + '" data-link="' +
           esc(payLinkFor(sale)) + '">Copy pay link</button>' +
         '<button type="button" class="btn small ghost" data-action="inv-send" data-sale="' + esc(sale.id) + '">Resend invoice</button>' +
         '<button type="button" class="btn small ghost" data-action="inv-cash" data-sale="' + esc(sale.id) + '">Paid cash/check</button>' +
@@ -471,7 +488,12 @@
       var items = data.items || [];
       var list = items.length
         ? '<ul>' + items.map(function (i) {
-            return '<li class="' + (i.level === 'urgent' ? 'urgent' : '') + '">' + esc(i.text) + '</li>';
+            var more = (i.details || []).map(function (d) {
+              return '<li>' + esc(d.text) + ' · <a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.link_label || 'View in Stripe') + ' ↗</a></li>';
+            }).join('');
+            return '<li class="' + (i.level === 'urgent' ? 'urgent' : '') + '">' + esc(i.text) +
+              (i.url ? ' <a href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.link_label || 'Open in Stripe') + ' ↗</a>' : '') +
+              (more ? '<ul class="att-details">' + more + '</ul>' : '') + '</li>';
           }).join('') + '</ul>'
         : '<p>Nothing needs attention right now.</p>';
       var phone = data.alerts_configured
@@ -490,6 +512,69 @@
     }).catch(function (err) {
       e.target.textContent = 'Could not send: ' + err.message;
     });
+  });
+
+  // ---- invoice viewer: the invoice as the customer sees it, on this page ----
+  function invoiceDate(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function invoiceHtml(sale) {
+    var lines = [];
+    try { lines = JSON.parse(sale.items_json || '[]'); } catch (e) {}
+    var listTotal = 0;
+    var rows = lines.map(function (l) {
+      var amount = (l.list_price_cents || 0) * (l.qty || 0);
+      listTotal += amount;
+      return '<tr><td class="q">' + esc(l.qty) + '</td><td>' + esc(l.name) + (l.unit ? ' <span class="muted">(' + esc(l.unit) + ')</span>' : '') +
+        '</td><td class="n">' + money(l.list_price_cents) + '</td><td class="n">' + money(amount) + '</td></tr>';
+    }).join('');
+    var discount = listTotal - Number(sale.subtotal_cents || 0);
+    var status = sale.status === 'invoiced' ? 'Unpaid' : sale.status === 'canceled' ? 'Cancelled'
+      : 'Paid' + (sale.payment_method ? ' · ' + sale.payment_method : '');
+    var owed = Number(sale.total_cents) - Number(sale.refunded_cents || 0);
+    return '<div class="iv-head"><div><div class="iv-farm">A Little Hill Farm</div>' +
+        '<div class="muted">Potlatch, Idaho · alittlehillfarm.com</div></div>' +
+        '<div class="iv-title"><div class="iv-h">Invoice ' + esc(String(sale.id).slice(0, 8)) + '</div>' +
+        '<div class="muted">' + esc(invoiceDate(sale.sold_at)) + '</div>' +
+        '<div class="iv-status ' + (sale.status === 'invoiced' ? 'due' : '') + '">' + esc(status) + '</div></div></div>' +
+      '<div class="iv-meta"><div><div class="label">Bill to</div><div>' + esc(sale.customer_name || '') + '</div>' +
+        '<div class="muted">' + esc(sale.customer_email || '') + (sale.customer_phone ? ' · ' + esc(sale.customer_phone) : '') + '</div></div>' +
+        '<div><div class="label">Pickup</div><div>' + esc(pickupLabel(sale.fulfillment)) + '</div></div></div>' +
+      (sale.invoice_note ? '<p class="iv-note">' + esc(sale.invoice_note) + '</p>' : '') +
+      '<table class="iv-lines"><thead><tr><th class="q">Qty</th><th>Item</th><th class="n">Price</th><th class="n">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="iv-totals">' +
+        '<div><span>Subtotal</span><span>' + money(listTotal) + '</span></div>' +
+        (discount > 0 ? '<div><span>Discount</span><span>−' + money(discount) + '</span></div>' : '') +
+        '<div><span>Idaho sales tax' + (Number(sale.tax_exempt) ? ' (exempt)' : '') + '</span><span>' + money(sale.tax_cents) + '</span></div>' +
+        '<div class="grand"><span>Total</span><span>' + money(sale.total_cents) + '</span></div>' +
+        (Number(sale.refunded_cents) > 0 ? '<div><span>Refunded</span><span>−' + money(sale.refunded_cents) + '</span></div>' +
+          '<div><span>Net</span><span>' + money(owed) + '</span></div>' : '') +
+      '</div>' +
+      (sale.status === 'invoiced' ? '<p class="iv-pay">Pay online: ' + esc(payLinkFor(sale)) +
+        '<br>Or pay cash or check at pickup.</p>' : '') +
+      '<p class="muted iv-foot">Thank you for supporting A Little Hill Farm.</p>';
+  }
+  function openInvoiceViewer(sale, thenPrint) {
+    if (!sale) return;
+    var v = document.getElementById('inv-viewer');
+    document.getElementById('inv-sheet').innerHTML = invoiceHtml(sale);
+    v.hidden = false;
+    document.body.classList.add('iv-open');
+    v.querySelector('[data-iv="close"]').focus();
+    if (thenPrint) setTimeout(function () { window.print(); }, 150);
+  }
+  function closeInvoiceViewer() {
+    document.getElementById('inv-viewer').hidden = true;
+    document.body.classList.remove('iv-open');
+  }
+  document.getElementById('inv-viewer').addEventListener('click', function (e) {
+    var t = e.target;
+    if (t.id === 'inv-viewer' || (t.getAttribute && t.getAttribute('data-iv') === 'close')) closeInvoiceViewer();
+    else if (t.getAttribute && t.getAttribute('data-iv') === 'print') window.print();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !document.getElementById('inv-viewer').hidden) closeInvoiceViewer();
   });
 
   function loadOrders() {
@@ -532,6 +617,9 @@
       var cents = Math.round(parseFloat(dollars) * 100);
       if (!isFinite(cents) || cents <= 0) { window.alert('Enter a dollar amount greater than zero.'); return; }
       job = runAction('/api/admin/capture', { sale_id: saleId, amount_cents: cents });
+    } else if (action === 'inv-view' || action === 'inv-print') {
+      openInvoiceViewer(salesById[saleId], action === 'inv-print');
+      return;
     } else if (action === 'inv-copy') {
       var link = btn.getAttribute('data-link');
       (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () {
