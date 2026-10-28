@@ -11,12 +11,29 @@
     });
   }
   function money(c) { return '$' + (Math.round(Number(c) || 0) / 100).toFixed(2); }
-  function fail(msg) { host.innerHTML = '<p class="alert error">' + esc(msg) + '</p>'; }
 
-  if (!token) { fail('This link is missing its invoice code. Please use the link in your invoice email.'); return; }
+  // How to reach the farm, shown wherever the customer might get stuck.
+  function contactHtml(c) {
+    c = c || {};
+    var parts = [];
+    if (c.email) parts.push('email <a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>');
+    if (c.phone) parts.push('call <a href="tel:' + esc(String(c.phone).replace(/[^0-9+]/g, '')) + '">' + esc(c.phone) + '</a>');
+    return parts.length ? '<p class="pay-contact">Questions? Please ' + parts.join(' or ') + '.</p>' : '';
+  }
+  function fail(msg, contact, ref) {
+    document.getElementById('pay-title').textContent = ref ? 'Invoice ' + ref : 'Your invoice';
+    host.innerHTML = '<p class="alert error">' + esc(msg) + '</p>' + contactHtml(contact);
+  }
+
+  if (!token) { fail('This link is missing its invoice code. Please use the whole link from your invoice email, or contact the farm.', null); return; }
 
   fetch('/api/invoice?t=' + encodeURIComponent(token))
-    .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Could not load the invoice.'); return d; }); })
+    .then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) { var e = new Error(d.error || 'Could not load the invoice.'); e.data = d; throw e; }
+        return d;
+      });
+    })
     .then(function (inv) {
       document.getElementById('pay-title').textContent = 'Invoice ' + inv.ref;
       var rows = inv.lines.map(function (l) {
@@ -26,12 +43,20 @@
       var head = '<p class="lede" style="margin-bottom:20px">For ' + esc(inv.customer_name || '') + ' · Pickup: ' + esc(inv.pickup) + '</p>' +
         (inv.note ? '<p class="alert success" style="margin-bottom:20px">' + esc(inv.note) + '</p>' : '') +
         '<div class="quote pay-lines">' + rows + '</div>';
+      var contact = contactHtml(inv.contact);
+      if (inv.state === 'processing') {
+        host.innerHTML = head + '<p class="alert success" style="margin-top:22px"><strong>Thank you — your bank payment is on its way.</strong> ' +
+          (inv.total_paid_cents ? money(inv.total_paid_cents) + ' ' : '') +
+          'Bank transfers take a few business days to settle, and you do not need to do anything else. We will email you a confirmation and be in touch about pickup.</p>' + contact;
+        return;
+      }
       if (inv.paid) {
         host.innerHTML = head + '<p class="alert success" style="margin-top:22px"><strong>Paid — thank you!</strong>' +
-          (inv.total_paid_cents ? ' ' + money(inv.total_paid_cents) + ' received.' : '') + ' We will be in touch about pickup.</p>';
+          (inv.total_paid_cents ? ' ' + money(inv.total_paid_cents) + ' received.' : '') + ' We will be in touch about pickup.</p>' + contact;
         return;
       }
       host.innerHTML = head +
+        '<div class="pay-total"><div class="label">Total due</div><div class="v serif" style="font-size:28px">' + money(inv.card.total_cents) + '</div></div>' +
         '<div class="pay-choices">' +
           '<div class="pay-choice"><div class="t">Bank transfer</div><div class="amt">' + money(inv.card.total_cents) + '</div>' +
             '<div class="d">Pay securely from your bank account</div>' +
@@ -40,11 +65,13 @@
             '<div class="d">Credit or debit card</div>' +
             '<button type="button" class="btn ghost" data-method="card">Pay by card</button></div>' +
         '</div>' +
-        '<p class="hint" style="margin-top:14px">' + (inv.tax_exempt ? 'Tax-exempt — no sales tax.' : 'Totals include Idaho sales tax.') +
-        ' Payments are processed by Stripe. Rather pay cash or check at pickup? Just reply to the invoice email.</p>' +
-        '<p id="pay-msg" class="form-msg" role="status"></p>';
+        '<p class="hint" style="margin-top:14px">' + (inv.tax_exempt ? 'Tax-exempt — no sales tax.' : 'Total includes Idaho sales tax.') +
+        ' Payments are processed by Stripe.</p>' +
+        '<p class="hint"><strong>What happens next:</strong> after you pay we email you a confirmation and get in touch about pickup. ' +
+        'Bank transfers take a few business days to settle. Rather pay cash or check at pickup? Just reply to the invoice email or contact us below.</p>' +
+        '<p id="pay-msg" class="form-msg" role="status"></p>' + contact;
     })
-    .catch(function (err) { fail(err.message); });
+    .catch(function (err) { fail(err.message, err.data && err.data.contact, err.data && err.data.canceled ? err.data.ref : ''); });
 
   host.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('button[data-method]');

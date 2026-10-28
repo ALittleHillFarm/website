@@ -78,6 +78,7 @@
           <option value="processing">Processing (bank transfer on its way)</option>
           <option value="failed">Failed (bank transfer bounced)</option>
           <option value="refunded">Refunded</option>
+          <option value="invoice_unsent">Invoices NOT sent to the customer (or email failed)</option>
           <option value="invoiced">Invoices — not paid yet</option>
           <option value="captured">Captured</option>
           <option value="pending">Pending</option>
@@ -248,7 +249,8 @@
     <p class="lede" style="font-size:14px;margin-bottom:20px">
       For orders that come in by phone — totes, big orders, regulars. The customer gets an email with a
       <strong>Pay invoice</strong> button and pays by bank transfer or card on the store. If they pay cash or check
-      at pickup instead, find the invoice on the Orders tab and press <strong>Paid cash/check</strong>.</p>
+      at pickup instead, find the invoice on the Orders tab and press <strong>Paid cash/check</strong>.
+      An invoice that has not been emailed is marked <strong>Not sent yet</strong> on the Orders tab, and shows in <em>Needs attention</em> if it stays that way.</p>
     <div id="invoice-app"><p class="lede">Loading…</p></div>
   </section>
 
@@ -411,6 +413,35 @@
     return location.origin + '/pay?inv=' + encodeURIComponent(sale.invoice_token || '');
   }
 
+  function when(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  // What the farm needs to know about an unpaid invoice's email, in words.
+  function invoiceSendInfo(sale) {
+    var count = Math.max(Number(sale.invoice_send_count) || 0, sale.invoice_sent_at ? 1 : 0);
+    var hint = '<div class="send-hint">Customer can’t find it? Ask them to check their junk/spam folder. ' +
+      'You can also press <strong>Copy pay link</strong> and text it to them, or <strong>Change email &amp; send</strong> if the address was wrong.</div>';
+    var info;
+    if (sale.invoice_last_error) {
+      info = { badgeClass: 'badge rust', badgeText: 'Email failed',
+        html: '<div class="send-state bad"><strong>Email failed:</strong> ' + esc(sale.invoice_last_error) + '. ' +
+          (count === 0 ? 'The customer has <strong>not</strong> received this invoice.'
+            : 'An earlier copy was sent ' + esc(when(sale.invoice_sent_at)) + ', but the latest one did not go out.') +
+          ' Press <strong>' + (count === 0 ? 'Send now' : 'Resend') + '</strong> to try again.</div>' + hint };
+    } else if (count === 0) {
+      info = { badgeClass: 'badge amber', badgeText: 'Not sent yet',
+        html: '<div class="send-state warn"><strong>Not sent yet.</strong> The customer does not know about this invoice. ' +
+          'Press <strong>Send now</strong> to email it.</div>' };
+    } else {
+      info = { badgeClass: 'badge', badgeText: 'Unpaid',
+        html: '<div class="send-state">Sent ' + esc(when(sale.invoice_sent_at)) + ' (' + count + (count === 1 ? ' time' : ' times') + ') to ' + esc(sale.customer_email || '') + '</div>' + hint };
+    }
+    info.count = count;
+    return info;
+  }
+
   function renderOrderCard(sale) {
     var notified = {};
     try { notified = JSON.parse(sale.notified_json || '{}'); } catch (e) {}
@@ -434,11 +465,19 @@
         '<button type="button" class="btn small" data-action="inv-view" data-sale="' + esc(sale.id) + '">View invoice</button>' +
         '<button type="button" class="btn small ghost" data-action="inv-print" data-sale="' + esc(sale.id) + '">Print</button>';
     }
+    var sendInfo = null;
     if (sale.status === 'invoiced') {
+      sendInfo = invoiceSendInfo(sale);
+      var who = ' data-sale="' + esc(sale.id) + '" data-email="' + esc(sale.customer_email || '') + '" data-count="' + sendInfo.count +
+        '" data-last="' + esc(sale.invoice_sent_at || '') + '"';
+      actions = (sendInfo.count === 0
+        ? '<button type="button" class="btn small" data-action="inv-send"' + who + '>Send now</button>'
+        : '') + actions;
       actions +=
         '<button type="button" class="btn small ghost" data-action="inv-copy" data-sale="' + esc(sale.id) + '" data-link="' +
           esc(payLinkFor(sale)) + '">Copy pay link</button>' +
-        '<button type="button" class="btn small ghost" data-action="inv-send" data-sale="' + esc(sale.id) + '">Resend invoice</button>' +
+        (sendInfo.count > 0 ? '<button type="button" class="btn small ghost" data-action="inv-send"' + who + '>Resend</button>' : '') +
+        '<button type="button" class="btn small ghost" data-action="inv-email"' + who + '>Change email &amp; send</button>' +
         '<button type="button" class="btn small ghost" data-action="inv-cash" data-sale="' + esc(sale.id) + '">Paid cash/check</button>' +
         '<button type="button" class="btn small rust" data-action="inv-cancel" data-sale="' + esc(sale.id) + '">Cancel invoice</button>';
     }
@@ -452,6 +491,8 @@
     }
 
     var badgeClass = STATUS_BADGE[sale.status] || 'badge muted';
+    var badgeText = sale.status === 'captured' ? 'paid' : sale.status;
+    if (sendInfo) { badgeClass = sendInfo.badgeClass; badgeText = sendInfo.badgeText; }
 
     return (
       '<article class="order">' +
@@ -460,7 +501,7 @@
             '<h3>' + esc(sale.customer_name || 'Unnamed customer') + '</h3>' +
             '<div class="email">Order ' + esc(String(sale.id).slice(0, 8)) + ' · ' + esc(sale.customer_email || '') + '</div>' +
           '</div>' +
-          '<span class="' + badgeClass + '">' + esc(sale.status === 'captured' ? 'paid' : sale.status) + '</span>' +
+          '<span class="' + badgeClass + '">' + esc(badgeText) + '</span>' +
         '</div>' +
         '<div class="facts">' +
           '<div><div class="label">Total</div><div class="v">' + money(sale.total_cents) + '</div></div>' +
@@ -470,17 +511,19 @@
           (Number(sale.refunded_cents) > 0
             ? '<div><div class="label">Refunded</div><div class="v">' + money(sale.refunded_cents) + '</div></div>' : '') +
         '</div>' +
+        (sendInfo ? sendInfo.html : '') +
         '<div class="checklist">' + checklist + '</div>' +
         (actions ? '<div class="actions">' + actions + '</div>' : '') +
       '</article>'
     );
   }
 
-  function setOrdersMessage(msg, isError) {
+  function setOrdersMessage(msg, isError, isOk) {
     var host = document.getElementById('orders-msg');
-    host.innerHTML = msg ? '<p class="' + (isError ? 'alert error' : 'lede') + '">' + esc(msg) + '</p>' : '';
+    host.innerHTML = msg ? '<p class="' + (isError ? 'alert error' : isOk ? 'alert success' : 'lede') + '">' + esc(msg) + '</p>' : '';
   }
 
+  var attentionSeen = false;
   // "Needs attention" — the same list the morning alert sends.
   function loadAttention() {
     var host = document.getElementById('attention');
@@ -489,9 +532,10 @@
       var list = items.length
         ? '<ul>' + items.map(function (i) {
             var more = (i.details || []).map(function (d) {
-              return '<li>' + esc(d.text) + ' · <a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.link_label || 'View in Stripe') + ' ↗</a></li>';
+              return '<li>' + esc(d.text) + (d.url ? ' · <a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.link_label || 'View in Stripe') + ' ↗</a>' : '') + '</li>';
             }).join('');
             return '<li class="' + (i.level === 'urgent' ? 'urgent' : '') + '">' + esc(i.text) +
+              (i.filter ? ' <button type="button" class="link-btn" data-show-filter="' + esc(i.filter) + '">Show them</button>' : '') +
               (i.url ? ' <a href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.link_label || 'Open in Stripe') + ' ↗</a>' : '') +
               (more ? '<ul class="att-details">' + more + '</ul>' : '') + '</li>';
           }).join('') + '</ul>'
@@ -499,12 +543,29 @@
       var phone = data.alerts_configured
         ? 'Alerts to your phone are on. <button type="button" class="link-btn" id="test-alert">Send a test alert</button>'
         : 'Alerts to your phone are not set up yet (see the store README, “Alerts”).';
+      // The first time the Orders tab opens, jump straight to invoices the
+      // customer has not received rather than an empty "card on hold" list.
+      var lost = items.some(function (i) { return i.filter === 'invoice_unsent'; });
+      var sel = document.getElementById('status-filter');
+      if (!attentionSeen && lost && sel.value === 'authorized') {
+        attentionSeen = true;
+        sel.value = 'invoice_unsent';
+        loadOrders();
+      }
+      attentionSeen = true;
       host.innerHTML = '<div class="attention' + (items.some(function (i) { return i.level === 'urgent'; }) ? ' has-urgent' : '') + '">' +
         '<h2 class="serif">Needs attention</h2>' + list + '<p class="phone">' + phone + '</p></div>';
     }).catch(function () { host.innerHTML = ''; });
   }
 
   document.getElementById('attention').addEventListener('click', function (e) {
+    var show = e.target && e.target.getAttribute && e.target.getAttribute('data-show-filter');
+    if (show) {
+      document.getElementById('status-filter').value = show;
+      loadOrders();
+      document.getElementById('orders-list').scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
     if (!e.target || e.target.id !== 'test-alert') return;
     e.target.disabled = true;
     getJSON('/api/admin/test-alert', { method: 'POST' }).then(function () {
@@ -577,13 +638,13 @@
     if (e.key === 'Escape' && !document.getElementById('inv-viewer').hidden) closeInvoiceViewer();
   });
 
-  function loadOrders() {
+  function loadOrders(okMsg) {
     loadAttention();
     var status = document.getElementById('status-filter').value;
     setOrdersMessage('Loading…');
     var url = '/api/admin/sales' + (status ? '?status=' + encodeURIComponent(status) : '');
-    getJSON(url).then(function (data) {
-      setOrdersMessage('');
+    return getJSON(url).then(function (data) {
+      setOrdersMessage(okMsg || '', false, !!okMsg);
       var sales = data.sales || [];
       document.getElementById('orders-list').innerHTML = sales.length
         ? sales.map(renderOrderCard).join('')
@@ -608,6 +669,8 @@
     var saleId = btn.getAttribute('data-sale');
     var action = btn.getAttribute('data-action');
     var job;
+    var doneMsg = null;
+    var failReload = false;
 
     if (action === 'capture') {
       job = runAction('/api/admin/capture', { sale_id: saleId });
@@ -627,13 +690,32 @@
       }).catch(function () { window.prompt('Copy this pay link:', link); });
       return;
     } else if (action === 'inv-send') {
+      var addr = btn.getAttribute('data-email');
+      var sentBefore = Number(btn.getAttribute('data-count')) > 0;
+      var okSend = window.confirm(sentBefore
+        ? 'Send a reminder for this invoice to ' + addr + '?\n\nIt was already sent ' + when(btn.getAttribute('data-last')) + '.'
+        : 'Email this invoice to ' + addr + ' now?');
+      if (!okSend) return;
       job = runAction('/api/admin/invoice', { action: 'send', sale_id: saleId });
+      doneMsg = function (r) { return 'Invoice emailed to ' + r.sent_to + ' at ' + when(r.sent_at) + '.'; };
+      failReload = true;
+    } else if (action === 'inv-email') {
+      var cur = btn.getAttribute('data-email');
+      var next = window.prompt('Correct the email address for this invoice.\nCurrently: ' + cur + '\n\nNew address:', cur);
+      if (next === null) return;
+      next = next.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) { window.alert('That does not look like an email address.'); return; }
+      if (!window.confirm('Change the address to ' + next + ' and email the invoice there now?')) return;
+      job = runAction('/api/admin/invoice', { action: 'send', sale_id: saleId, email: next });
+      doneMsg = function (r) { return 'Address updated. Invoice emailed to ' + r.sent_to + ' at ' + when(r.sent_at) + '.'; };
+      failReload = true;
     } else if (action === 'inv-cash') {
       var how = window.prompt('Paid how? Type cash or check.', 'cash');
       if (how === null) return;
       how = String(how).trim().toLowerCase();
       if (how !== 'cash' && how !== 'check') { window.alert('Type cash or check.'); return; }
       job = runAction('/api/admin/invoice', { action: 'record_payment', sale_id: saleId, method: how });
+      doneMsg = function (r) { return 'Recorded as paid (' + how + ', ' + money(r.total_cents) + ').' + (r.receipt_emailed ? ' A receipt was emailed to the customer.' : ''); };
     } else if (action === 'inv-cancel') {
       if (!window.confirm('Cancel this invoice? Its pay link will stop working.')) return;
       job = runAction('/api/admin/invoice', { action: 'cancel', sale_id: saleId });
@@ -667,8 +749,12 @@
     }
 
     btn.disabled = true;
-    job.then(function () { loadOrders(); })
-      .catch(function (err) { setOrdersMessage(err.message, true); btn.disabled = false; });
+    job.then(function (r) { loadOrders(doneMsg ? doneMsg(r || {}) : null); })
+      .catch(function (err) {
+        // A failed send is recorded on the invoice: reload so the card shows it.
+        if (failReload) loadOrders().then(function () { setOrdersMessage(err.message, true); });
+        else { setOrdersMessage(err.message, true); btn.disabled = false; }
+      });
   });
 
   document.getElementById('status-filter').addEventListener('change', loadOrders);

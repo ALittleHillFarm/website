@@ -101,8 +101,9 @@
       '<fieldset class="goat-set"><legend>Note to the customer (optional)</legend>' +
         '<div class="field"><textarea id="inv-note" rows="2" placeholder="e.g. Tote arrives the week of Oct 20 — we will call to set up pickup."></textarea></div></fieldset>' +
       '<div class="inv-totals" id="inv-totals"><p class="hint">Add items to see the totals.</p></div>' +
-      '<div class="goat-save"><button type="button" class="btn" data-act="send">Create &amp; email invoice</button>' +
-        '<button type="button" class="btn ghost" data-act="create">Create without emailing</button>' +
+      '<label class="send-now-row"><input type="checkbox" id="inv-sendnow" checked> ' +
+        '<span><strong>Email it to the customer now</strong> <span class="muted">— untick to save it without sending; you can send it later from the Orders tab.</span></span></label>' +
+      '<div class="goat-save"><button type="button" class="btn" data-act="create" id="inv-create">Create invoice</button>' +
         '<span id="inv-status" aria-live="polite"></span></div>';
   }
 
@@ -120,6 +121,7 @@
       },
       pickup: document.getElementById('inv-pickup').value,
       note: document.getElementById('inv-note').value,
+      send: document.getElementById('inv-sendnow') ? document.getElementById('inv-sendnow').checked : true,
       lines: lines,
     };
   }
@@ -197,13 +199,40 @@
     }).catch(function () {});
   }
 
-  function submit(send, btn) {
+  function when(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  // The result of creating an invoice, in words: was it emailed or not, and
+  // what to do about it.
+  function resultPanel(r) {
+    var linkRow = '<div class="link-row"><code>' + esc(r.link) + '</code> ' +
+      '<button type="button" class="btn small ghost" data-act="copylink" data-link="' + esc(r.link) + '">Copy pay link</button></div>';
+    if (r.emailed) {
+      return '<div class="inv-result"><div class="t">Invoice ' + esc(r.ref) + ' emailed</div>' +
+        'Emailed to <strong>' + esc(r.to) + '</strong> at ' + esc(when(r.sent_at)) + '. ' +
+        'If they say it did not arrive, ask them to check their junk/spam folder, or copy the pay link and text it.' + linkRow + '</div>';
+    }
+    if (r.email_requested) {
+      return '<div class="inv-result bad"><div class="t">Invoice ' + esc(r.ref) + ' saved, but the email did NOT go out</div>' +
+        'The customer has not received it (' + esc(r.email_error || 'unknown error') + '). ' +
+        'Nothing is lost: on the <strong>Orders</strong> tab it is marked “Email failed” with a <strong>Send now</strong> button to try again. ' +
+        'Or copy the pay link below and text it to them.' + linkRow + '</div>';
+    }
+    return '<div class="inv-result warn"><div class="t">Invoice ' + esc(r.ref) + ' saved — NOT sent</div>' +
+      'The customer does not know about this invoice yet. When you are ready, open the <strong>Orders</strong> tab and press <strong>Send now</strong>, ' +
+      'or copy the pay link and text it.' + linkRow + '</div>';
+  }
+
+  function submit(btn) {
     if (state.busy) return;
+    var send = document.getElementById('inv-sendnow').checked;
     var b = collect();
     b.action = 'create';
     b.send = send;
     var status = document.getElementById('inv-status');
-    if (send && !window.confirm('Email this invoice to ' + (b.customer && b.customer.email ? b.customer.email : 'the customer') + ' now?')) return;
+    if (send && !window.confirm('Create this invoice and email it to ' + (b.customer && b.customer.email ? b.customer.email : 'the customer') + ' now?')) return;
     state.busy = true;
     btn.disabled = true;
     status.textContent = send ? 'Creating and emailing…' : 'Creating…';
@@ -211,10 +240,7 @@
       state.lines = [{ product_id: '', qty: 1, price: '' }];
       state.loaded = false;
       return load().then(function () {
-        document.getElementById('inv-msg').innerHTML =
-          '<p class="alert success">Invoice ' + esc(r.ref) + ' created' +
-          (r.emailed ? ' and emailed.' : (send ? ' — but the email did not send (' + esc(r.email_error || '') + '). Use Resend on the Orders tab.' : '.')) +
-          ' Pay link: <a href="' + esc(r.link) + '" target="_blank" rel="noopener">' + esc(r.link) + '</a></p>';
+        document.getElementById('inv-msg').innerHTML = resultPanel(r);
         host.scrollIntoView({ behavior: 'smooth' });
       });
     }).catch(function (err) {
@@ -287,8 +313,14 @@
     if (act === 'add') state.lines.push({ product_id: '', qty: 1, price: '' });
     else if (act === 'add-custom') state.lines.push({ custom: true, name: 'Freight', qty: 1, price: '', taxable: false });
     else if (act === 'remove') state.lines.splice(+b.getAttribute('data-i'), 1);
-    else if (act === 'send') return submit(true, b);
-    else if (act === 'create') return submit(false, b);
+    else if (act === 'create') return submit(b);
+    else if (act === 'copylink') {
+      var link = b.getAttribute('data-link');
+      (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () {
+        b.textContent = 'Copied ✓';
+      }).catch(function () { window.prompt('Copy this pay link:', link); });
+      return;
+    }
     else return;
     if (!state.lines.length) state.lines.push({ product_id: '', qty: 1, price: '' });
     rerenderKeeping(keep);
@@ -301,6 +333,7 @@
     document.getElementById('inv-phone').value = keep.customer.phone;
     document.getElementById('inv-pickup').value = keep.pickup;
     document.getElementById('inv-note').value = keep.note;
+    document.getElementById('inv-sendnow').checked = keep.send;
     fillCustomer('email');
     renderRecent();
     schedulePreview();

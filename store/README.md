@@ -322,16 +322,43 @@ tag), so upload straight from the phone.
 (or type a new one), add items — any product, including ones hidden from the
 storefront such as totes; type a price to override the store price; *Add
 freight or other charge* for a free-text line (untaxed unless ticked) — choose
-pickup, add a note, and press *Create & email invoice*. The customer gets an
-email with a **Pay invoice** button that opens `/pay?inv=…`, where they pay by
-bank transfer (2% off) or card through Stripe. Paid cash or check instead?
-Orders tab → filter *Invoices — not paid yet* → **Paid cash/check**. The same
-card has Copy pay link, Resend and Cancel. Unpaid invoices show in *Needs
-attention* after a week.
+pickup, add a note, leave **Email it to the customer now** ticked (untick it to
+save without sending) and press *Create invoice*. A result panel says whether
+it was emailed or not, with a Copy pay link button. The customer's email has a
+**Pay invoice** button to `/pay?inv=…`, where they pay by bank transfer or card
+through Stripe (one price, no discount), plus the farm's email and phone
+(`config.json` → `email.reply_to`, `contact.phone`) and what happens after they pay.
+
+Every unpaid invoice on the Orders tab shows its email state: an amber **Not
+sent yet** (with a **Send now** button), *Sent Oct 26 3:12 PM (2 times)*, or a
+red **Email failed: reason**. Those that the customer has not received sort to
+the top, have their own status filter, and appear in *Needs attention* (and the
+morning alert) after an hour, next to *unpaid for over a week*. Each send,
+successful or not, is recorded in `sales.invoice_send_count / invoice_sent_at /
+invoice_last_error / invoice_last_attempt_at`. **Resend** sends a "Reminder:"
+email; **Change email & send** fixes a wrong address on an unpaid invoice
+(the old customer record is left alone). A second send within 30 seconds is
+refused. "Sent" means the email service accepted it, not that it reached an
+inbox; if a customer cannot find it, ask them to check junk/spam, or Copy pay
+link and text it.
+
+Paid by card or bank transfer: the customer gets a receipt, the farm gets an
+"Invoice paid" email and alert. A bank transfer that bounces puts the invoice
+back to unpaid, emails the customer to try again with the same link, and alerts
+the farm. Paid cash or check instead? Orders tab → **Paid cash/check** (records
+it, emails the customer a receipt). Invoices are not edited once sent: **Cancel
+invoice** (the link then says plainly it was cancelled and shows how to reach
+the farm) and make a new one. Cancelling, recording cash, or opening the pay
+page again also closes any Stripe payment page that was left open for the
+invoice. The reasoning, and what was deferred (automatic reminders, bounce
+tracking, copy-as-new), is in `research/invoice-flow.md`.
+
+For local testing with `DEV_EMAIL_LOG=1`, emails are printed instead of sent,
+and an address containing `+fail` simulates a send failure.
 
 **Needs attention.** The box at the top of the Orders tab lists card holds
 about to expire, orders waiting for review, cash to collect, checkouts Stripe
-never confirmed, disputes, and a website that is down. The morning alert
+never confirmed, invoices not sent or unpaid, disputes, and a website that is down. The morning alert
 sends the same list.
 
 ---

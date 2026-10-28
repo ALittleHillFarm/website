@@ -133,6 +133,21 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 /* ---------- status badges ---------- */
 .badge.moss { background:var(--moss); }
 .badge.muted { background:var(--muted); }
+.badge.amber { background:#9A5B00; }
+.badge.rust { background:var(--rust); }
+.send-state { font-size:14px; line-height:1.5; padding:9px 12px; margin:0 0 12px; background:var(--line-soft, #F3EEE4); border-left:3px solid var(--line); }
+.send-state.warn { background:#FBF0D9; border-left-color:#C98A12; color:#5E3B00; font-size:15px; }
+.send-state.bad { background:#F7E9E3; border-left-color:var(--rust); color:#7A3A24; }
+.send-hint { font-size:12.5px; line-height:1.5; color:var(--muted); margin:-6px 0 12px; }
+.inv-result { padding:16px 18px; margin:0 0 22px; border-left:4px solid var(--moss); background:#EAEFE4; color:var(--moss-ink); font-size:14.5px; line-height:1.6; }
+.inv-result.warn { border-left-color:#C98A12; background:#FBF0D9; color:#5E3B00; }
+.inv-result.bad { border-left-color:var(--rust); background:#F7E9E3; color:#7A3A24; }
+.inv-result .t { font-size:18px; font-family:var(--serif); margin-bottom:6px; }
+.inv-result .link-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+.inv-result code { word-break:break-all; font-size:12.5px; }
+.pay-contact { font-size:14px; line-height:1.7; margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
+.send-now-row { display:flex; align-items:center; gap:10px; margin:0 0 12px; font-size:15px; }
+.send-now-row input { width:20px; height:20px; }
 
 /* ---------- admin: tabs ---------- */
 .tabs { display:flex; gap:4px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:32px; }
