@@ -754,6 +754,27 @@ async function apiWebhook(request, env, ctx) {
     // A bank transfer bounced (closed account, insufficient funds...). Only
     // bank payments land here: a declined card never completes checkout.
     case 'payment_intent.payment_failed': {
+      // An invoice goes back to unpaid, so the same link works for another
+      // try; the customer is told, and so is the farm.
+      const inv = await env.DB.prepare(
+        "SELECT * FROM sales WHERE stripe_payment_intent = ? AND channel = 'invoice' AND status = 'processing'"
+      ).bind(obj.id).first();
+      if (inv) {
+        const back = await env.DB.prepare(
+          "UPDATE sales SET status = 'invoiced', notes = COALESCE(notes,'') || ' [BANK PAYMENT FAILED ' || ? || ']'" +
+            " WHERE id = ? AND status = 'processing'"
+        ).bind(new Date().toISOString(), inv.id).run();
+        if (back.meta && back.meta.changes) {
+          ctx.waitUntil(sendInvoicePaymentFailed(env, inv));
+          ctx.waitUntil(notify(env, {
+            title: 'Invoice bank payment failed',
+            message: (inv.customer_name || 'A customer') + '’s ' + dollars(obj.amount) + ' bank transfer for invoice ' + orderRef(inv.id) +
+              ' did not go through. The invoice is unpaid again and they were emailed to try again.',
+            priority: 4, tags: 'warning', click: adminUrl(),
+          }));
+        }
+        break;
+      }
       const r = await env.DB.prepare("UPDATE sales SET status = 'failed' WHERE stripe_payment_intent = ? AND status = 'processing'")
         .bind(obj.id).run();
       if (r.meta && r.meta.changes) {
@@ -1181,6 +1202,8 @@ async function sendEmail(env, { to, subject, text, html }) {
   // Local testing only (store/.dev.vars): print the email instead of sending.
   // Never set DEV_EMAIL_LOG on the live store.
   if (env.DEV_EMAIL_LOG === '1') {
+    // An address containing "+fail" simulates a provider error, to test the failure screens.
+    if (/\+fail/i.test(to)) return { sent: false, reason: 'simulated failure (dev)' };
     console.log('[dev email] to ' + to + ' | ' + subject + ' | ' + text.replace(/\s+/g, ' ').slice(0, 300));
     return { sent: true };
   }
@@ -1225,6 +1248,7 @@ async function sendOrderConfirmation(env, saleId) {
   if (!env.RESEND_API_KEY && env.DEV_EMAIL_LOG !== '1') return;
   const s = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(saleId).first();
   if (!s || !s.customer_email) return;
+  if (s.channel === 'invoice') { await sendInvoiceReceipt(env, saleId); return; }
   const lines = JSON.parse(s.items_json || '[]');
   const pickupId = String(s.fulfillment || '').replace(/^pickup:/, '');
   const pickup = (config.pickup_locations.find((l) => l.id === pickupId) || {}).label || pickupId;
@@ -1234,7 +1258,7 @@ async function sendOrderConfirmation(env, saleId) {
     : 'Your card is authorized but not charged yet. We charge it when we place the supplier order.';
   const rows = lines.map((l) =>
     '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) + (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') +
-    '</td><td style="padding:6px 0;text-align:right">' + dollars(l.line_total_cents != null ? l.line_total_cents : (l.unit_price_cents || 0) * (l.qty || 0)) + '</td></tr>').join('');
+    '</td><td style="padding:6px 0;text-align:right">' + dollars(lineAmount(l)) + '</td></tr>').join('');
   const html = emailShell(
     '<p style="margin:0 0 14px">Thank you' + (s.customer_name ? ', ' + escHtml(String(s.customer_name).split(' ')[0]) : '') +
     ' — your order is in.</p>' +
@@ -1330,46 +1354,88 @@ async function invoiceLines(env, raw) {
   });
 }
 
+/** How to reach the farm, for customers. Email is the reply-to address. */
+function farmContact() {
+  return { email: (config.email && config.email.reply_to) || '', phone: (config.contact && config.contact.phone) || '' };
+}
+
+/** Successful sends so far. Invoices emailed before send counts existed
+ *  have a sent date and a count of 0: count those as one. */
+const sendCount = (sale) => Math.max(Number(sale.invoice_send_count) || 0, sale.invoice_sent_at ? 1 : 0);
+
+/** Close any Stripe Checkout page still open for this invoice, so a link
+ *  that was cancelled, paid in cash, or re-opened cannot also be paid
+ *  there. Best effort: Stripe refuses if it already finished. */
+async function expireCheckout(env, sale) {
+  if (!sale || !sale.stripe_session_id) return;
+  try {
+    await stripe(env, 'POST', '/checkout/sessions/' + encodeURIComponent(sale.stripe_session_id) + '/expire', new URLSearchParams());
+  } catch (err) {
+    console.log('could not expire checkout session (usually fine): ' + err);
+  }
+}
+
+/** Email the invoice and record the attempt, whether or not it worked. */
 async function sendInvoiceEmail(env, sale) {
   const lines = JSON.parse(sale.items_json || '[]');
   const customer = await getCustomer(env, sale.customer_email);
   const card = priceInvoice(lines, 'card', customer);
   const link = payLink(sale.invoice_token);
   const ref = orderRef(sale.id);
+  const again = sendCount(sale) > 0;
+  const contact = farmContact();
+  const contactHtml = (contact.email || contact.phone)
+    ? '<p style="margin:0 0 6px;color:#6B6353;font-size:13px">Questions? Reply to this email' +
+      (contact.phone ? ' or call ' + escHtml(contact.phone) : '') + '.</p>' : '';
+  const contactText = (contact.email || contact.phone)
+    ? ['Questions? Reply to this email' + (contact.phone ? ' or call ' + contact.phone : '') + '.'] : [];
   const rows = lines.map((l) => '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
     (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') +
-    '</td><td style="padding:6px 0;text-align:right">' + dollars(l.list_price_cents * l.qty) + '</td></tr>').join('');
+    '</td><td style="padding:6px 0;text-align:right">' + dollars(lineAmount(l)) + '</td></tr>').join('');
+  const first = escHtml(String(sale.customer_name || '').split(' ')[0] || 'there');
   const html = emailShell(
-    '<p style="margin:0 0 14px">Hi ' + escHtml(String(sale.customer_name || '').split(' ')[0] || 'there') +
-      ' — here is your invoice from A Little Hill Farm.</p>' +
+    '<p style="margin:0 0 14px">Hi ' + first + ' — ' +
+      (again ? 'a friendly reminder: your invoice from A Little Hill Farm is still open.' : 'here is your invoice from A Little Hill Farm.') + '</p>' +
     (sale.invoice_note ? '<p style="margin:0 0 14px;padding:10px 12px;background:#F3EEE4">' + escHtml(sale.invoice_note) + '</p>' : '') +
     '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
     '<table style="width:100%;font-size:14px;margin:0 0 16px">' +
-      '<tr><td style="font-weight:600;color:#1E1B16">Total</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(card.total_cents) + '</td></tr>' +
-      (card.tax_exempt ? '<tr><td colspan="2" style="color:#6B6353">Tax-exempt — no sales tax.</td></tr>' : '<tr><td colspan="2" style="color:#6B6353">Totals include Idaho sales tax.</td></tr>') +
+      '<tr><td style="font-weight:600;color:#1E1B16">Total due</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(card.total_cents) + '</td></tr>' +
+      (card.tax_exempt ? '<tr><td colspan="2" style="color:#6B6353">Tax-exempt — no sales tax.</td></tr>' : '<tr><td colspan="2" style="color:#6B6353">Total includes Idaho sales tax.</td></tr>') +
     '</table>' +
     '<p style="margin:0 0 18px"><a href="' + escHtml(link) + '" style="background:#59803D;color:#fff;text-decoration:none;padding:12px 22px;border-radius:2px;display:inline-block;font-size:15px">Pay invoice</a></p>' +
     '<p style="margin:0 0 6px"><strong>Pickup:</strong> ' + escHtml(pickupLabel(sale.fulfillment)) + '</p>' +
+    '<p style="margin:0 0 6px;color:#6B6353;font-size:13px"><strong>After you pay:</strong> you will get a confirmation email, and we will be in touch about pickup. Bank transfers take a few business days to settle.</p>' +
     '<p style="margin:0 0 6px;color:#6B6353;font-size:13px">Rather pay by cash or check at pickup? Just reply and let us know.</p>' +
+    contactHtml +
     '<p style="margin:0;color:#6B6353;font-size:13px">Invoice ' + escHtml(ref) + '</p>');
   const text = ['Invoice ' + ref + ' from A Little Hill Farm', '',
+    ...(again ? ['A friendly reminder: this invoice is still open.', ''] : []),
     ...(sale.invoice_note ? [sale.invoice_note, ''] : []),
-    ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '') + '  ' + dollars(l.list_price_cents * l.qty)),
-    '', 'Total: ' + dollars(card.total_cents), '',
-    'Pay here: ' + link, '', 'Pickup: ' + pickupLabel(sale.fulfillment),
-    'Rather pay by cash or check at pickup? Just reply and let us know.'].join('\n');
+    ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '') + '  ' + dollars(lineAmount(l))),
+    '', 'Total due: ' + dollars(card.total_cents) + (card.tax_exempt ? ' (tax-exempt)' : ' (includes Idaho sales tax)'), '',
+    'Pay here: ' + link, '', 'Pickup: ' + pickupLabel(sale.fulfillment), '',
+    'After you pay: you will get a confirmation email, and we will be in touch about pickup. Bank transfers take a few business days to settle.',
+    'Rather pay by cash or check at pickup? Just reply and let us know.',
+    ...contactText].join('\n');
   const r = await sendEmail(env, {
     to: sale.customer_email,
-    subject: 'Invoice ' + ref + ' from A Little Hill Farm — ' + dollars(card.total_cents),
+    subject: (again ? 'Reminder: Invoice ' : 'Invoice ') + ref + ' from A Little Hill Farm — ' + dollars(card.total_cents),
     text, html,
   });
+  const at = new Date().toISOString();
   if (r.sent) {
-    await env.DB.prepare('UPDATE sales SET invoice_sent_at = ? WHERE id = ?').bind(new Date().toISOString(), sale.id).run();
+    await env.DB.prepare(
+      'UPDATE sales SET invoice_sent_at = ?, invoice_last_attempt_at = ?, invoice_last_error = NULL,' +
+        ' invoice_send_count = invoice_send_count + 1 WHERE id = ?'
+    ).bind(at, at, sale.id).run();
+  } else {
+    await env.DB.prepare('UPDATE sales SET invoice_last_attempt_at = ?, invoice_last_error = ? WHERE id = ?')
+      .bind(at, String(r.reason || 'unknown error').slice(0, 300), sale.id).run();
   }
-  return r;
+  return { ...r, at };
 }
 
-/** Admin: preview, create, resend, cancel, and the customer list. */
+/** Admin: preview, create, send, change email, cancel, record cash/check. */
 async function adminInvoices(request, env) {
   const b = await request.json();
   try {
@@ -1389,10 +1455,12 @@ async function adminInvoices(request, env) {
         return json({ card: publicQuote(card), ach: publicQuote(ach), tax_exempt: card.tax_exempt, known_customer: !!customer });
       }
 
-      // Remember the customer, never downgrading flags set in the admin.
+      // Remember the customer, never downgrading flags set in the admin or
+      // renaming someone we already know.
       await env.DB.prepare(
         'INSERT INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)' +
-          ' ON CONFLICT(email) DO UPDATE SET name = excluded.name, phone = COALESCE(excluded.phone, customers.phone)'
+          " ON CONFLICT(email) DO UPDATE SET name = COALESCE(NULLIF(customers.name, ''), excluded.name)," +
+          ' phone = COALESCE(customers.phone, excluded.phone)'
       ).bind(email, name, phone || null, new Date().toISOString()).run();
 
       const id = crypto.randomUUID();
@@ -1408,21 +1476,49 @@ async function adminInvoices(request, env) {
         'card', 'invoiced', 'pickup:' + pickup, JSON.stringify({ received: now }), token, cleanPara(b.note, 1000) || null).run();
 
       const sale = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(id).first();
-      const sent = b.send === false ? { sent: false, reason: 'not requested' } : await sendInvoiceEmail(env, sale);
-      return json({ ok: true, sale_id: id, ref: orderRef(id), link: payLink(token), emailed: sent.sent, email_error: sent.sent ? null : sent.reason });
+      const sent = b.send === false ? null : await sendInvoiceEmail(env, sale);
+      return json({
+        ok: true, sale_id: id, ref: orderRef(id), link: payLink(token), to: email,
+        emailed: !!(sent && sent.sent), email_requested: b.send !== false,
+        email_error: sent && !sent.sent ? sent.reason : null, sent_at: sent && sent.sent ? sent.at : null,
+      });
     }
 
     const sale = await env.DB.prepare("SELECT * FROM sales WHERE id = ? AND channel = 'invoice'").bind(String(b.sale_id || '')).first();
     if (!sale) return json({ error: 'no invoice with that id' }, 404);
 
+    // Send, resend, or correct the address and send.
     if (b.action === 'send') {
       if (sale.status !== 'invoiced') throw new BadRequest('this invoice is already ' + sale.status);
-      const r = await sendInvoiceEmail(env, sale);
-      return r.sent ? json({ ok: true }) : json({ error: 'email not sent: ' + r.reason }, 502);
+      // Guard against a double click or two people pressing it at once.
+      if (sale.invoice_last_attempt_at && Date.now() - Date.parse(sale.invoice_last_attempt_at) < 30000) {
+        throw new BadRequest('An email was just sent a moment ago. Give it a minute before sending again.');
+      }
+      let current = sale;
+      if (b.email != null && String(b.email).trim() !== '') {
+        const email = cleanEmail(b.email);
+        if (!email) throw new BadRequest('that does not look like an email address');
+        if (email !== sale.customer_email) {
+          // The invoice moves to the new address. The old customer record is
+          // left alone (it may be someone with other orders); the new address
+          // gets a record only if we have never seen it.
+          await env.DB.prepare(
+            'INSERT OR IGNORE INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)'
+          ).bind(email, sale.customer_name || null, sale.customer_phone || null, new Date().toISOString()).run();
+          await env.DB.prepare('UPDATE sales SET customer_email = ? WHERE id = ?').bind(email, sale.id).run();
+          current = { ...sale, customer_email: email };
+        }
+      }
+      const r = await sendInvoiceEmail(env, current);
+      return r.sent
+        ? json({ ok: true, sent_to: current.customer_email, sent_at: r.at })
+        : json({ error: 'The email did not go out (' + r.reason + '). The invoice is saved; try again, or copy the pay link and text it.' }, 502);
     }
     if (b.action === 'cancel') {
       if (sale.status !== 'invoiced') throw new BadRequest('only an unpaid invoice can be cancelled (this one is ' + sale.status + ')');
-      await env.DB.prepare("UPDATE sales SET status = 'canceled' WHERE id = ?").bind(sale.id).run();
+      const r = await env.DB.prepare("UPDATE sales SET status = 'canceled' WHERE id = ? AND status = 'invoiced'").bind(sale.id).run();
+      if (r.meta && r.meta.changes === 0) throw new BadRequest('this invoice just changed; refresh the list');
+      await expireCheckout(env, sale);
       return json({ ok: true });
     }
     // Paid outside the website: cash or check at pickup.
@@ -1431,18 +1527,76 @@ async function adminInvoices(request, env) {
       const method = b.method === 'check' ? 'check' : 'cash';
       const customer = await getCustomer(env, sale.customer_email);
       const q = priceInvoice(JSON.parse(sale.items_json || '[]'), 'cash', customer);
-      await env.DB.prepare(
+      const r = await env.DB.prepare(
         "UPDATE sales SET status = 'recorded', payment_method = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?," +
-          ' cogs_cents = ?, fulfilled_at = ? WHERE id = ?'
+          " cogs_cents = ?, fulfilled_at = ? WHERE id = ? AND status = 'invoiced'"
       ).bind(method, q.subtotal_cents, q.tax_cents, q.total_cents, q.cogs_cents, new Date().toISOString(), sale.id).run();
+      if (r.meta && r.meta.changes === 0) throw new BadRequest('this invoice just changed; refresh the list');
       await recordSaleMoves(env, sale.id);
-      return json({ ok: true, total_cents: q.total_cents });
+      await expireCheckout(env, sale);
+      const receipt = await sendInvoiceReceipt(env, sale.id);
+      return json({ ok: true, total_cents: q.total_cents, receipt_emailed: !!(receipt && receipt.sent) });
     }
   } catch (err) {
     if (err instanceof BadRequest) return json({ error: err.message }, 400);
     throw err;
   }
   return json({ error: 'unknown action' }, 400);
+}
+
+/** The customer's confirmation once an invoice is paid (online, or cash/check
+ *  recorded by the farm). Worded for an invoice, not a storefront order. */
+async function sendInvoiceReceipt(env, saleId) {
+  if (!env.RESEND_API_KEY && env.DEV_EMAIL_LOG !== '1') return null;
+  const s = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(saleId).first();
+  if (!s || !s.customer_email) return null;
+  const lines = JSON.parse(s.items_json || '[]');
+  const ref = orderRef(s.id);
+  const how = s.payment_method === 'cash' ? 'We received your cash payment.'
+    : s.payment_method === 'check' ? 'We received your check.'
+    : s.payment_method === 'ach' ? 'Your bank transfer is on its way. Bank payments take a few business days to settle; you do not need to do anything else.'
+    : 'Your card has been charged.';
+  const contact = farmContact();
+  const rows = lines.map((l) => '<tr><td style="padding:6px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
+    (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') +
+    '</td><td style="padding:6px 0;text-align:right">' + dollars(lineAmount(l)) + '</td></tr>').join('');
+  const html = emailShell(
+    '<p style="margin:0 0 14px">Thank you' + (s.customer_name ? ', ' + escHtml(String(s.customer_name).split(' ')[0]) : '') +
+      ' — invoice ' + escHtml(ref) + ' is paid.</p>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
+    '<table style="width:100%;font-size:14px;margin:0 0 16px">' +
+      '<tr><td>Subtotal</td><td style="text-align:right">' + dollars(s.subtotal_cents) + '</td></tr>' +
+      '<tr><td>Idaho sales tax' + (s.tax_exempt ? ' (exempt)' : '') + '</td><td style="text-align:right">' + dollars(s.tax_cents) + '</td></tr>' +
+      '<tr><td style="font-weight:600;color:#1E1B16">Total paid</td><td style="text-align:right;font-weight:600;color:#1E1B16">' + dollars(s.total_cents) + '</td></tr>' +
+    '</table>' +
+    '<p style="margin:0 0 10px"><strong>Payment.</strong> ' + escHtml(how) + '</p>' +
+    '<p style="margin:0 0 10px"><strong>Pickup.</strong> ' + escHtml(pickupLabel(s.fulfillment)) + '. We will be in touch to set a time.</p>' +
+    (contact.phone ? '<p style="margin:0 0 10px;color:#6B6353;font-size:13px">Questions? Reply to this email or call ' + escHtml(contact.phone) + '.</p>' : '') +
+    '<p style="margin:0;color:#6B6353;font-size:13px">Invoice ' + escHtml(ref) + '</p>');
+  const text = ['Thank you — invoice ' + ref + ' is paid.', '',
+    ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '') + '  ' + dollars(lineAmount(l))),
+    '', 'Total paid: ' + dollars(s.total_cents), '', 'Payment: ' + how,
+    'Pickup: ' + pickupLabel(s.fulfillment) + '. We will be in touch to set a time.',
+    ...(contact.phone ? ['', 'Questions? Reply to this email or call ' + contact.phone + '.'] : [])].join('\n');
+  return sendEmail(env, { to: s.customer_email, subject: 'Receipt: Invoice ' + ref + ' — ' + dollars(s.total_cents), text, html });
+}
+
+/** A bank transfer for an invoice bounced: tell the customer how to try again. */
+async function sendInvoicePaymentFailed(env, sale) {
+  if (!env.RESEND_API_KEY && env.DEV_EMAIL_LOG !== '1') return null;
+  const contact = farmContact();
+  const link = payLink(sale.invoice_token);
+  const ref = orderRef(sale.id);
+  const html = emailShell(
+    '<p style="margin:0 0 14px">Hi ' + escHtml(String(sale.customer_name || '').split(' ')[0] || 'there') +
+      ' — the bank payment for invoice ' + escHtml(ref) + ' did not go through, so nothing was paid.</p>' +
+    '<p style="margin:0 0 14px">This can happen when the bank declines a transfer or the account details were not right. You can try again with the same link, or pay by card instead.</p>' +
+    '<p style="margin:0 0 18px"><a href="' + escHtml(link) + '" style="background:#59803D;color:#fff;text-decoration:none;padding:12px 22px;border-radius:2px;display:inline-block;font-size:15px">Pay invoice</a></p>' +
+    (contact.phone ? '<p style="margin:0;color:#6B6353;font-size:13px">Questions? Reply to this email or call ' + escHtml(contact.phone) + '.</p>' : ''));
+  const text = 'The bank payment for invoice ' + ref + ' did not go through, so nothing was paid.\n\n' +
+    'Try again with the same link, or pay by card instead: ' + link +
+    (contact.phone ? '\n\nQuestions? Reply to this email or call ' + contact.phone + '.' : '');
+  return sendEmail(env, { to: sale.customer_email, subject: 'Invoice ' + ref + ': your bank payment did not go through', text, html });
 }
 
 // ---- the customer's pay page ----------------------------------------------
@@ -1452,9 +1606,20 @@ async function findInvoice(env, token) {
   return env.DB.prepare("SELECT * FROM sales WHERE invoice_token = ? AND channel = 'invoice'").bind(String(token)).first();
 }
 
+/** A cancelled invoice says so plainly (the customer holds the link, so there
+ *  is nothing to hide); an unknown link stays generic. */
+function invoiceGone(sale) {
+  const contact = farmContact();
+  if (sale && sale.status === 'canceled') {
+    return json({ error: 'This invoice was cancelled, so it can no longer be paid. If you think that is a mistake, please contact the farm.',
+      canceled: true, ref: orderRef(sale.id), contact }, 410);
+  }
+  return json({ error: 'This invoice link is not valid. Please check you used the whole link from your email, or contact the farm.', contact }, 404);
+}
+
 async function apiInvoice(request, env) {
   const sale = await findInvoice(env, new URL(request.url).searchParams.get('t'));
-  if (!sale || sale.status === 'canceled') return json({ error: 'This invoice link is not valid any more. Please contact us.' }, 404);
+  if (!sale || sale.status === 'canceled') return invoiceGone(sale);
   const lines = JSON.parse(sale.items_json || '[]');
   const customer = await getCustomer(env, sale.customer_email);
   const card = priceInvoice(lines, 'card', customer);
@@ -1462,7 +1627,9 @@ async function apiInvoice(request, env) {
   const res = json({
     ref: orderRef(sale.id),
     status: sale.status,
-    paid: !['invoiced'].includes(sale.status),
+    // unpaid: can pay; processing: bank transfer on its way; paid: done
+    state: sale.status === 'invoiced' ? 'unpaid' : sale.status === 'processing' ? 'processing' : 'paid',
+    paid: sale.status !== 'invoiced',
     customer_name: sale.customer_name,
     note: sale.invoice_note || '',
     pickup: pickupLabel(sale.fulfillment),
@@ -1471,6 +1638,7 @@ async function apiInvoice(request, env) {
     card: { subtotal_cents: card.subtotal_cents, tax_cents: card.tax_cents, total_cents: card.total_cents },
     ach: { subtotal_cents: ach.subtotal_cents, tax_cents: ach.tax_cents, total_cents: ach.total_cents },
     total_paid_cents: sale.status === 'invoiced' ? null : sale.total_cents,
+    contact: farmContact(),
   });
   res.headers.set('cache-control', 'no-store');
   return res;
@@ -1479,11 +1647,15 @@ async function apiInvoice(request, env) {
 async function apiInvoicePay(request, env) {
   const b = await request.json().catch(() => ({}));
   const sale = await findInvoice(env, b.t);
-  if (!sale || sale.status === 'canceled') return json({ error: 'This invoice link is not valid any more. Please contact us.' }, 404);
+  if (!sale || sale.status === 'canceled') return invoiceGone(sale);
   if (sale.status !== 'invoiced') return json({ error: 'This invoice has already been paid. Thank you!' }, 409);
   const method = b.method === 'ach' ? 'ach' : 'card';
   const customer = await getCustomer(env, sale.customer_email);
   const q = priceInvoice(JSON.parse(sale.items_json || '[]'), method, customer);
+
+  // Only one payment page can be open per invoice: close the earlier one so
+  // the customer cannot complete both and be charged twice.
+  await expireCheckout(env, sale);
 
   // The totals follow the method chosen. The webhook re-checks against the
   // method the customer actually completed, in case they switched.
@@ -2437,12 +2609,17 @@ async function notify(env, { title, message, priority, tags, click }) {
   }
 }
 
+/** What one stored line cost the customer. Storefront lines carry
+ *  line_total_cents; invoice lines are stored raw with list_price_cents. */
+const lineAmount = (l) => l.line_total_cents != null ? l.line_total_cents
+  : (l.unit_price_cents != null ? l.unit_price_cents : (l.list_price_cents || 0)) * (l.qty || 0);
+
 const dollars = (cents) => '$' + (Math.round(Number(cents) || 0) / 100).toFixed(2);
 const adminUrl = () => String(config.store_url || '').replace(/\/+$/, '') + '/admin';
 
 /** Tell the farm a new order came in. Called once per order. */
 async function notifyNewOrder(env, saleId) {
-  const s = await env.DB.prepare('SELECT total_cents, payment_method, status, items_json FROM sales WHERE id = ?')
+  const s = await env.DB.prepare('SELECT total_cents, payment_method, status, items_json, channel FROM sales WHERE id = ?')
     .bind(saleId).first();
   if (!s) return;
   let items = 0;
@@ -2453,7 +2630,7 @@ async function notifyNewOrder(env, saleId) {
     : 'card held, not yet charged — review and capture';
   await sendFarmOrderEmail(env, saleId, how);
   return notify(env, {
-    title: 'New order: ' + dollars(s.total_cents),
+    title: (s.channel === 'invoice' ? 'Invoice paid: ' : 'New order: ') + dollars(s.total_cents),
     message: (items ? items + (items === 1 ? ' item, ' : ' items, ') : '') + how + '.',
     tags: 'shopping_cart',
     click: adminUrl(),
@@ -2478,9 +2655,9 @@ async function sendFarmOrderEmail(env, saleId, how) {
     : 'Paid. Add it to the next supplier order.';
   const rows = lines.map((l) => '<tr><td style="padding:5px 0">' + escHtml(l.qty) + ' × ' + escHtml(l.name) +
     (l.unit ? ' <span style="color:#6B6353">(' + escHtml(l.unit) + ')</span>' : '') + '</td><td style="padding:5px 0;text-align:right">' +
-    dollars(l.line_total_cents) + '</td></tr>').join('');
+    dollars(lineAmount(l)) + '</td></tr>').join('');
   const html = emailShell(
-    '<p style="margin:0 0 6px;font-size:20px;color:#1E1B16">Order ' + escHtml(ref) + ' · ' + dollars(s.total_cents) + '</p>' +
+    '<p style="margin:0 0 6px;font-size:20px;color:#1E1B16">' + (s.channel === 'invoice' ? 'Invoice ' : 'Order ') + escHtml(ref) + ' · ' + dollars(s.total_cents) + '</p>' +
     '<p style="margin:0 0 14px">' + escHtml(s.customer_name || '') + ' · ' + escHtml(s.customer_email || '') +
       (s.customer_phone ? ' · ' + escHtml(s.customer_phone) : '') + '</p>' +
     '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
@@ -2494,7 +2671,7 @@ async function sendFarmOrderEmail(env, saleId, how) {
     ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')),
     '',
     'Payment: ' + how, 'Pickup: ' + pickupLabel(s.fulfillment), 'Next: ' + next, '', adminUrl()].join('\n');
-  await sendEmail(env, { to, subject: 'New order ' + ref + ' · ' + (s.customer_name || 'customer') + ' · ' + dollars(s.total_cents), text, html });
+  await sendEmail(env, { to, subject: (s.channel === 'invoice' ? 'Invoice paid ' : 'New order ') + ref + ' · ' + (s.customer_name || 'customer') + ' · ' + dollars(s.total_cents), text, html });
 }
 
 /** Everything that needs a person, newest problems first. Shared by the
@@ -2575,14 +2752,44 @@ async function attentionItems(env) {
       details: slow.map(detail),
     });
   }
-  const unpaid = (await env.DB.prepare(
-    "SELECT COUNT(*) AS n, COALESCE(SUM(total_cents),0) AS cents FROM sales WHERE status = 'invoiced' AND sold_at < ?"
-  ).bind(new Date(now - 7 * DAY).toISOString()).first()) || { n: 0 };
-  if (unpaid.n) {
+  // Invoices: one line per invoice (no Stripe link, they are not in Stripe yet).
+  const invRows = (await env.DB.prepare(
+    "SELECT id, sold_at, total_cents, customer_name, customer_email, invoice_sent_at, invoice_send_count," +
+      " invoice_last_error, invoice_last_attempt_at FROM sales WHERE channel = 'invoice' AND status = 'invoiced' ORDER BY sold_at"
+  ).all()).results || [];
+  const invDetail = (r, extra) => {
+    const days = Math.floor((now - Date.parse(r.sold_at)) / DAY);
+    return {
+      text: (r.customer_name || r.customer_email || 'A customer') + ' · ' + dollars(r.total_cents) + ' · invoice ' + orderRef(r.id) +
+        ' · created ' + r.sold_at.slice(0, 10) + (days >= 1 ? ' (' + days + (days === 1 ? ' day' : ' days') + ' ago)' : '') + (extra || ''),
+    };
+  };
+  const failedMail = invRows.filter((r) => r.invoice_last_error);
+  if (failedMail.length) {
     items.push({
-      level: 'todo',
-      text: unpaid.n + (unpaid.n === 1 ? ' invoice has' : ' invoices have') + ' been unpaid for over a week (' +
-        dollars(unpaid.cents) + ') — resend or follow up.',
+      level: 'urgent', filter: 'invoice_unsent',
+      text: failedMail.length + (failedMail.length === 1 ? ' invoice email' : ' invoice emails') +
+        ' did not go out — the customer has not received ' + (failedMail.length === 1 ? 'it' : 'them') +
+        '. Open the Orders tab and press Send now (or fix the email address), or copy the pay link and text it.',
+      details: failedMail.map((r) => invDetail(r, ' · error: ' + String(r.invoice_last_error).slice(0, 80))),
+    });
+  }
+  const unsent = invRows.filter((r) => !r.invoice_sent_at && !r.invoice_last_error && now - Date.parse(r.sold_at) > 60 * 60 * 1000);
+  if (unsent.length) {
+    items.push({
+      level: 'urgent', filter: 'invoice_unsent',
+      text: unsent.length + (unsent.length === 1 ? ' invoice has' : ' invoices have') +
+        ' not been sent to the customer yet — open the Orders tab and press Send now.',
+      details: unsent.map((r) => invDetail(r)),
+    });
+  }
+  const unpaid = invRows.filter((r) => r.invoice_sent_at && !r.invoice_last_error && now - Date.parse(r.sold_at) > 7 * DAY);
+  if (unpaid.length) {
+    items.push({
+      level: 'todo', filter: 'invoiced',
+      text: unpaid.length + (unpaid.length === 1 ? ' invoice has' : ' invoices have') + ' been unpaid for over a week (' +
+        dollars(unpaid.reduce((n, r) => n + r.total_cents, 0)) + ') — press Resend to remind them, or follow up.',
+      details: unpaid.map((r) => invDetail(r, ' · sent ' + r.invoice_sent_at.slice(0, 10))),
     });
   }
   const disputes = rows.filter((r) => /DISPUTE OPENED/.test(r.notes || ''));
@@ -2825,9 +3032,14 @@ async function adminRoutes(path, request, env) {
   if (path === '/api/admin/sales') {
     const status = new URL(request.url).searchParams.get('status');
     // Location (consignment) sales have their own tab; they are not orders.
-    const q = status
-      ? env.DB.prepare("SELECT * FROM sales WHERE status = ? AND channel != 'location' ORDER BY sold_at DESC LIMIT 500").bind(status)
-      : env.DB.prepare("SELECT * FROM sales WHERE channel != 'location' ORDER BY sold_at DESC LIMIT 500");
+    // Invoices the customer has not received (never sent, or the last email
+    // failed) always come first, so they cannot hide in a long list.
+    const lost = "(channel = 'invoice' AND status = 'invoiced' AND (invoice_sent_at IS NULL OR invoice_last_error IS NOT NULL))";
+    const q = status === 'invoice_unsent'
+      ? env.DB.prepare('SELECT * FROM sales WHERE ' + lost + ' ORDER BY sold_at DESC LIMIT 500')
+      : status
+      ? env.DB.prepare("SELECT * FROM sales WHERE status = ? AND channel != 'location' ORDER BY " + lost + " DESC, sold_at DESC LIMIT 500").bind(status)
+      : env.DB.prepare("SELECT * FROM sales WHERE channel != 'location' ORDER BY " + lost + " DESC, sold_at DESC LIMIT 500");
     return json({ sales: (await q.all()).results });
   }
 

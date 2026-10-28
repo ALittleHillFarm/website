@@ -85,9 +85,14 @@ CREATE TABLE sales (
   refunded_cents        INTEGER NOT NULL DEFAULT 0,  -- running total refunded
   refunded_at           TEXT,                        -- when the latest refund was given
   invoice_token         TEXT,       -- invoices only: the secret in the pay link
-  invoice_sent_at       TEXT,
-  invoice_note          TEXT        -- shown to the customer on the invoice
+  invoice_sent_at       TEXT,       -- last SUCCESSFUL email to the customer
+  invoice_note          TEXT,       -- shown to the customer on the invoice
+  invoice_send_count    INTEGER NOT NULL DEFAULT 0,  -- successful emails (first send + resends)
+  invoice_last_error    TEXT,       -- why the last attempt failed; NULL when it worked
+  invoice_last_attempt_at TEXT      -- last attempt of any kind (rate limit + admin display)
 );
+-- Existing databases: ALTER TABLE sales ADD COLUMN invoice_send_count INTEGER NOT NULL DEFAULT 0;
+--   ... ADD COLUMN invoice_last_error TEXT;  ... ADD COLUMN invoice_last_attempt_at TEXT;
 
 CREATE INDEX idx_sales_sold_at   ON sales (sold_at);
 CREATE INDEX idx_sales_status    ON sales (status);
