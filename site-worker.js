@@ -34,6 +34,18 @@ const SITEMAP_PAGES = ['/', '/does.html', '/bucks.html', '/breeding.html', '/gui
 
 export default {
   async fetch(request, env) {
+    const res = await handle(request, env);
+    const out = new Response(res.body, res);
+    out.headers.set('strict-transport-security', 'max-age=31536000');
+    out.headers.set('x-content-type-options', 'nosniff');
+    out.headers.set('x-frame-options', 'DENY');
+    if (!out.headers.has('content-security-policy')) out.headers.set('content-security-policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
+    if (!out.headers.has('referrer-policy')) out.headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+    return out;
+  },
+};
+
+async function handle(request, env) {
     const url = new URL(request.url);
 
     // One address for the farm: www goes to the bare domain, path and all.
@@ -59,8 +71,7 @@ export default {
     const path = url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname;
     const res = await env.ASSETS.fetch(new Request(new URL(path, url), request));
     return decorate(res, url, env, path);
-  },
-};
+}
 
 // ---------------------------------------------------------------------------
 // goat pages

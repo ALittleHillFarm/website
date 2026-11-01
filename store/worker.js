@@ -46,10 +46,40 @@ const json = (data, status = 200) =>
 // Router
 // ---------------------------------------------------------------------------
 
+/**
+ * Browser safety headers, added to every response. The store is never shown
+ * inside another site's frame (stops click-jacking the admin), browsers must
+ * always use HTTPS, and admin data is never kept in any cache.
+ */
+function withSecurityHeaders(res, path) {
+  const out = new Response(res.body, res);
+  const h = out.headers;
+  h.set('strict-transport-security', 'max-age=31536000');
+  h.set('x-content-type-options', 'nosniff');
+  h.set('x-frame-options', 'DENY');
+  if (!h.has('content-security-policy')) h.set('content-security-policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
+  if (!h.has('referrer-policy')) h.set('referrer-policy', 'strict-origin-when-cross-origin');
+  h.set('permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  if (path === '/admin' || path.startsWith('/api/admin/') || path === '/api/me' || path.startsWith('/api/auth/') ||
+      path.startsWith('/auth/') || path.startsWith('/api/invoice')) {
+    h.set('cache-control', 'private, no-store, max-age=0');
+  }
+  return out;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    return withSecurityHeaders(await route(request, env, ctx, path), path);
+  },
 
+  // Cron triggers (wrangler.toml): site checks and the morning digest.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(scheduled(event, env));
+  },
+};
+
+async function route(request, env, ctx, path) {
     try {
       if (path === '/api/me' || path.startsWith('/api/auth/') || path.startsWith('/auth/google')) {
         const res = await authRoutes(path, request, env);
@@ -79,13 +109,7 @@ export default {
       console.error(err && err.stack ? err.stack : String(err));
       return json({ error: 'internal_error' }, 500);
     }
-  },
-
-  // Cron triggers (wrangler.toml): site checks and the morning digest.
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(scheduled(event, env));
-  },
-};
+}
 
 // ---------------------------------------------------------------------------
 // Catalog + config (public)
@@ -958,6 +982,9 @@ const SESSION_DAYS = 60;
 const CODE_MINUTES = 10;
 const CODE_ATTEMPTS = 5;
 const CODES_PER_HOUR = 5;
+const CODES_PER_DAY = 10;            // per address
+const WRONG_GUESSES_PER_DAY = 10;    // per address, across all its codes
+const CODES_PER_HOUR_ALL = 60;       // store-wide, protects our email reputation
 
 const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -1087,9 +1114,17 @@ async function authRoutes(path, request, env) {
     const since = new Date(Date.now() - 3600 * 1000).toISOString();
     const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_codes WHERE email = ? AND created_at > ?')
       .bind(email, since).first();
-    if (recent && recent.n >= CODES_PER_HOUR) {
+    const day = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const today = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_codes WHERE email = ? AND created_at > ?')
+      .bind(email, day).first();
+    const everyone = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_codes WHERE created_at > ?').bind(since).first();
+    if ((recent && recent.n >= CODES_PER_HOUR) || (today && today.n >= CODES_PER_DAY) ||
+        (everyone && everyone.n >= CODES_PER_HOUR_ALL)) {
       return json({ error: 'Too many codes requested. Wait a while, then try again.' }, 429);
     }
+    // Old codes are only kept for these counts.
+    await env.DB.prepare('DELETE FROM login_codes WHERE created_at < ?')
+      .bind(new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString()).run();
 
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
     await env.DB.prepare(
@@ -1122,6 +1157,11 @@ async function authRoutes(path, request, env) {
     ).bind(email).first();
     const bad = json({ error: 'That code is not right, or it has expired. Ask for a new one.' }, 400);
     if (!row || code.length !== 6 || Date.parse(row.expires_at) < Date.now() || row.attempts >= CODE_ATTEMPTS) return bad;
+    const wrong = await env.DB.prepare('SELECT COALESCE(SUM(attempts),0) AS n FROM login_codes WHERE email = ? AND created_at > ?')
+      .bind(email, new Date(Date.now() - 24 * 3600 * 1000).toISOString()).first();
+    if (wrong && wrong.n >= WRONG_GUESSES_PER_DAY) {
+      return json({ error: 'Too many wrong codes for this email today. Try again tomorrow, or sign in with Google.' }, 429);
+    }
     await env.DB.prepare('UPDATE login_codes SET attempts = attempts + 1 WHERE rowid = ?').bind(row.rid).run();
     if (!timingSafeEqual(row.code_hash, await hmac(env.SESSION_SECRET, email + ':' + code))) return bad;
 
