@@ -2447,6 +2447,112 @@ async function adminLocations(request, env) {
   return json({ error: 'unknown action' }, 400);
 }
 
+// ---- breeding schedule -------------------------------------------------------
+
+const BREEDING_STATUSES = ['planned', 'bred', 'kidded', 'skipped'];
+const BREEDING_SETTINGS = { breeding_eyebrow: 60, breeding_title: 100, breeding_lede: 400 };
+
+function cleanDate(v, what, required) {
+  const s = String(v || '').trim();
+  if (!s) {
+    if (required) throw new BadRequest('enter ' + what);
+    return null;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(Date.parse(s + 'T00:00:00Z')) ||
+      new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) !== s) {
+    throw new BadRequest(what + ' is not a real date');
+  }
+  return s;
+}
+
+function cleanReg(v) {
+  const s = String(v || '').trim().slice(0, 30);
+  if (s && !/^[A-Za-z0-9 -]+$/.test(s)) throw new BadRequest('a registration number has only letters, numbers and dashes');
+  return s || null;
+}
+
+async function adminBreedings(request, env) {
+  if (request.method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT * FROM breedings ORDER BY due_on DESC, id').all()).results || [];
+    const goats = ((await env.DB.prepare('SELECT id, template, status, data, sort FROM goats ORDER BY template, sort, id').all()).results || [])
+      .map((g) => {
+        let d = {};
+        try { d = JSON.parse(g.data || '{}'); } catch { /* shown by id */ }
+        return { id: g.id, template: g.template, hidden: g.status !== 'active', name: d.name || g.id,
+          registered_name: d.registered_name || '', reg: d.reg || '' };
+      });
+    const settings = {};
+    for (const r of (await env.DB.prepare("SELECT key, value FROM site_settings WHERE key LIKE 'breeding_%'").all()).results || []) {
+      settings[r.key] = r.value;
+    }
+    return json({ breedings: rows, goats, settings, site_url: config.farm_url });
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  const b = await request.json();
+  const now = new Date().toISOString();
+  try {
+    if (b.action === 'save_settings') {
+      for (const [key, max] of Object.entries(BREEDING_SETTINGS)) {
+        const v = cleanText(b[key], max);
+        if (v) {
+          await env.DB.prepare(
+            'INSERT INTO site_settings (key, value, updated_at) VALUES (?,?,?)' +
+              ' ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+          ).bind(key, v, now).run();
+        } else {
+          await env.DB.prepare('DELETE FROM site_settings WHERE key = ?').bind(key).run();
+        }
+      }
+      return json({ ok: true });
+    }
+
+    if (b.action === 'save') {
+      const doeName = cleanText(b.doe_name, 120);
+      if (!doeName) throw new BadRequest('enter the doe’s name');
+      const sireName = cleanText(b.sire_name, 120);
+      if (!sireName) throw new BadRequest('enter the buck’s name');
+      const status = BREEDING_STATUSES.includes(b.status) ? b.status : 'planned';
+      const bredOn = cleanDate(b.bred_on, 'the date she was bred', false);
+      const dueOn = cleanDate(b.due_on, 'the due date', true);
+      const known = async (id, template) => {
+        const v = String(id || '');
+        if (!v) return null;
+        return (await env.DB.prepare('SELECT id FROM goats WHERE id = ? AND template = ?').bind(v, template).first()) ? v : null;
+      };
+      const fields = [
+        await known(b.doe_id, 'doe'), doeName, await known(b.sire_id, 'buck'), sireName,
+        cleanReg(b.dam_reg), cleanReg(b.sire_reg), cleanText(b.freshening, 20) || null,
+        bredOn, dueOn, status, cleanText(b.outcome, 200) || null, cleanPara(b.note, 1000) || null, b.show === false ? 0 : 1,
+      ];
+      if (b.id) {
+        const r = await env.DB.prepare('SELECT id FROM breedings WHERE id = ?').bind(String(b.id)).first();
+        if (!r) return json({ error: 'no pairing with that id' }, 404);
+        await env.DB.prepare(
+          'UPDATE breedings SET doe_id=?, doe_name=?, sire_id=?, sire_name=?, dam_reg=?, sire_reg=?, freshening=?,' +
+            ' bred_on=?, due_on=?, status=?, outcome=?, note=?, show=?, updated_at=? WHERE id=?'
+        ).bind(...fields, now, r.id).run();
+        return json({ ok: true, id: r.id });
+      }
+      const id = crypto.randomUUID();
+      await env.DB.prepare(
+        'INSERT INTO breedings (doe_id, doe_name, sire_id, sire_name, dam_reg, sire_reg, freshening, bred_on, due_on,' +
+          ' status, outcome, note, show, id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(...fields, id, now, now).run();
+      return json({ ok: true, id });
+    }
+
+    if (b.action === 'delete') {
+      await env.DB.prepare('DELETE FROM breedings WHERE id = ?').bind(String(b.id || '')).run();
+      return json({ ok: true });
+    }
+  } catch (err) {
+    if (err instanceof BadRequest) return json({ error: err.message }, 400);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
 // ---- location (consignment) sales reports -----------------------------------
 
 async function loadReport(env, id) {
@@ -2998,6 +3104,7 @@ async function adminRoutes(path, request, env) {
   if (path === '/api/admin/products') return adminProducts(request, env);
   if (path === '/api/admin/purchases') return adminPurchases(request, env);
   if (path === '/api/admin/locations') return adminLocations(request, env);
+  if (path === '/api/admin/breedings') return adminBreedings(request, env);
   if (path === '/api/admin/location-reports') return adminLocationReports(request, env);
   if (path === '/api/admin/invoice' && request.method === 'POST') return adminInvoices(request, env);
 

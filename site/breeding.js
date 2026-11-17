@@ -1,0 +1,87 @@
+/**
+ * The breeding schedule page — rendered from the `breedings` table in D1.
+ *
+ * The farm edits pairings in the store's admin screen (Breeding tab); this
+ * file turns those rows into the cards on /breeding.html when the page is
+ * requested, so an edit is live on the next load. The static markup in
+ * breeding.html is only a fallback for a database with no pairings at all.
+ *
+ * Row shape: see `breedings` in store/schema.sql.
+ */
+import { esc } from './chrome.js';
+import { smallImg, goatHref } from './goats.js';
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+
+export async function loadBreeding(env) {
+  const all = (await env.DB.prepare('SELECT * FROM breedings ORDER BY due_on, id').all()).results || [];
+  const settings = {};
+  const rows = (await env.DB.prepare("SELECT key, value FROM site_settings WHERE key LIKE 'breeding_%'").all()).results || [];
+  for (const r of rows) settings[r.key] = r.value;
+  return {
+    total: all.length,
+    // Hidden rows and pairings that were skipped stay in the admin only.
+    rows: all.filter((r) => r.show && r.status !== 'skipped'),
+    settings,
+  };
+}
+
+/** "2026-04-08" -> { d: '8', m: 'April 2026' }, or null for anything else. */
+export function dueParts(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m || +m[2] < 1 || +m[2] > 12) return null;
+  return { d: String(+m[3]), m: MONTHS[+m[2] - 1] + ' ' + m[1] };
+}
+
+const regOf = (v) => String(v || '').replace(/\s+/g, '');
+
+export function pedigreeLink(sireReg, damReg) {
+  const sire = regOf(sireReg), dam = regOf(damReg);
+  if (!sire || !dam) return '';
+  return 'https://genetics.adga.org/PlannedPedigreePrint.aspx?SireNum=' + encodeURIComponent(sire) + '&DamNum=' + encodeURIComponent(dam);
+}
+
+export function breedingCard(row, goatsById) {
+  const doe = row.doe_id ? goatsById.get(row.doe_id) : null;
+  const sire = row.sire_id ? goatsById.get(row.sire_id) : null;
+  const due = dueParts(row.due_on) || { d: '', m: row.due_on || '' };
+  const photo = doe && doe.hero
+    ? smallImg(doe.hero, doe.name)
+    : '';
+  const name = doe
+    ? `<a href="${esc(goatHref(doe))}" style="text-decoration:none;color:inherit">${esc(row.doe_name)}</a>`
+    : esc(row.doe_name);
+  const buck = sire
+    ? `<a href="${esc(goatHref(sire))}" style="text-decoration:none;color:inherit">${esc(row.sire_name)}</a>`
+    : esc(row.sire_name);
+  const pedigree = pedigreeLink(row.sire_reg || (sire && sire.reg), row.dam_reg || (doe && doe.reg));
+  const kidded = row.status === 'kidded'
+    ? `<div class="to">Kidded${row.outcome ? ': <strong>' + esc(row.outcome) + '</strong>' : ''}</div>`
+    : '';
+  return `    <article>
+      <div class="date"><div class="d">${esc(due.d)}</div><div class="m">${esc(due.m)}</div></div>
+      <div class="pair">
+        <div class="av">${photo}</div>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <span class="nm">${name}</span>${row.freshening ? `
+            <span class="chip">${esc(row.freshening)}</span>` : ''}
+          </div>
+          <div class="to">bred to <strong>${buck}</strong></div>
+          ${kidded}
+        </div>
+      </div>
+      <div class="go">${pedigree ? `<a class="btn ghost" href="${esc(pedigree)}" target="_blank" rel="noopener">Pedigree</a>` : ''}</div>
+    </article>
+`;
+}
+
+/** The inside of <div class="sched">. */
+export function breedingCards(rows, goats) {
+  if (!rows.length) {
+    return '    <p class="lede">No pairings are scheduled right now. Check back soon.</p>\n';
+  }
+  const byId = new Map(goats.map((g) => [g.id, g]));
+  return rows.map((r) => breedingCard(r, byId)).join('') + '  ';
+}

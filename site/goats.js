@@ -138,7 +138,7 @@ const src = (p) => (p.src.startsWith('/') || /^https?:/.test(p.src) ? p.src : '/
 const small = (p) => (p.thumb ? (p.thumb.startsWith('/') ? p.thumb : '/' + p.thumb) : src(p));
 
 /** An image shown small (cards, rosters, avatars): the thumbnail when there is one. */
-function smallImg(p, alt, extra = '') {
+export function smallImg(p, alt, extra = '') {
   return `<img src="${esc(small(p))}" alt="${esc(alt)}"${extra}>`;
 }
 

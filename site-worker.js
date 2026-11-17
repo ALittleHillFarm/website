@@ -26,6 +26,7 @@ import {
   loadGoats, loadGoat, goatPage, rosterArticle, herdCard, numberWord, capitalise,
 } from './site/goats.js';
 import { oldShopifyAddress } from './site/redirects.js';
+import { loadBreeding, breedingCards } from './site/breeding.js';
 
 // Pages whose herd sections come from the database.
 const HERD_PAGES = new Set(['/index.html', '/does.html', '/bucks.html']);
@@ -114,6 +115,19 @@ async function decorate(res, url, env, assetPath) {
       console.error('goats table unavailable, serving static herd: ' + err);
     }
   }
+  // The breeding page: pairings, heading and intro come from the database.
+  // With no pairings stored at all, the page's own markup is served as it is.
+  let breeding = null;
+  if (path === '/breeding.html') {
+    try {
+      const b = await loadBreeding(env);
+      if (b.total > 0 || Object.keys(b.settings).length) breeding = { ...b, goats: await loadGoats(env) };
+    } catch (err) {
+      console.error('breeding tables unavailable, serving static page: ' + err);
+    }
+  }
+  const setting = (key) => (breeding && breeding.settings[key]) || '';
+
   const does = herd ? herd.filter((g) => g.template === 'doe') : [];
   const bucks = herd ? herd.filter((g) => g.template === 'buck') : [];
 
@@ -129,8 +143,8 @@ async function decorate(res, url, env, assetPath) {
           end.before(headExtras({
             origin: url.origin,
             path: res.status === 404 ? '/404.html' : path,
-            title: unescapeHtml(meta.title.trim()),
-            description: unescapeHtml(meta.description),
+            title: setting('breeding_title') ? setting('breeding_title') + ' — A Little Hill Farm' : unescapeHtml(meta.title.trim()),
+            description: setting('breeding_lede') || unescapeHtml(meta.description),
             image: meta.image,
             type: path.startsWith('/goats/') ? 'profile' : 'website',
             jsonld: isHome || path === '/about.html' ? farmJsonLd(url.origin) : null,
@@ -174,6 +188,21 @@ async function decorate(res, url, env, assetPath) {
           if (f) e.setInnerContent(f());
         },
       });
+  }
+
+  if (breeding) {
+    rewriter
+      .on('title', { element(e) { if (setting('breeding_title')) e.setInnerContent(setting('breeding_title') + ' — A Little Hill Farm'); } })
+      .on('meta[name="description"]', { element(e) { if (setting('breeding_lede')) e.setAttribute('content', setting('breeding_lede')); } })
+      .on('[data-setting]', {
+        element(e) {
+          const v = setting(e.getAttribute('data-setting'));
+          if (v) e.setInnerContent(v);
+        },
+      });
+    if (breeding.total > 0) {
+      rewriter.on('[data-breedings]', { element(e) { e.setInnerContent(breedingCards(breeding.rows, breeding.goats), { html: true }); } });
+    }
   }
 
   const out = new Response(rewriter.transform(res).body, res);

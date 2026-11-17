@@ -54,6 +54,7 @@
     <button type="button" role="tab" id="tab-locations" aria-controls="panel-locations" aria-selected="false">Locations</button>
     <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Tax report</button>
     <button type="button" role="tab" id="tab-goats" aria-controls="panel-goats" aria-selected="false">Goats</button>
+    <button type="button" role="tab" id="tab-breeding" aria-controls="panel-breeding" aria-selected="false">Breeding</button>
   </div>
 
   <!-- ============================================================ -->
@@ -263,6 +264,17 @@
       Everything on the herd pages of the farm website. Changes go live as soon as you press <strong>Save</strong>.
       Use the arrows to change the order goats appear in on the Does and Bucks pages.</p>
     <div id="goats-app"><p class="lede">Loading…</p></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Breeding — the schedule on the farm site (assets/admin-breeding.js) -->
+  <!-- ============================================================ -->
+  <section id="panel-breeding" class="tab-panel" role="tabpanel" aria-labelledby="tab-breeding" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Breeding schedule</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      The pairings and due dates on the Breeding page of the farm website. Changes go live as soon as you press
+      <strong>Save</strong>. Pick the doe and buck from your herd and her name, photo and Pedigree button fill themselves in.</p>
+    <div id="breeding-app"><p class="lede">Loading…</p></div>
   </section>
 
 </div>
@@ -886,6 +898,7 @@
 </script>
 <script src="assets/admin-ui.js"></script>
 <script src="assets/admin-goats.js"></script>
+<script src="assets/admin-breeding.js"></script>
 <script src="assets/admin-invoices.js"></script>
 <script src="assets/admin-products.js"></script>
 <script src="assets/admin-purchases.js"></script>

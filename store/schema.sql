@@ -359,3 +359,40 @@ INSERT OR IGNORE INTO locations (id, name, kind, commission_bps, tax_collected_b
 -- A sale takes each product out of stock once. Lets recordSaleMoves() be called
 -- more than once for the same sale (webhook retries, capture then webhook).
 CREATE UNIQUE INDEX IF NOT EXISTS stock_moves_sale_once ON stock_moves (ref, product_id) WHERE kind = 'sale';
+
+-- ---------------------------------------------------------------------------
+-- breedings — the breeding schedule on the farm site's /breeding.html, edited
+-- from /admin (Breeding tab) and rendered live by the farm worker
+-- (site/breeding.js). One row per planned or completed pairing.
+--
+-- doe_id / sire_id optionally point at goats.id so the page can show her photo
+-- and link to her page; an outside buck is just a name (and a registration
+-- number for the Pedigree button). status 'skipped' keeps the record but
+-- leaves it off the page; show = 0 hides any row (last season's, say).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS breedings (
+  id          TEXT PRIMARY KEY,
+  doe_id      TEXT,
+  doe_name    TEXT NOT NULL,
+  sire_id     TEXT,
+  sire_name   TEXT NOT NULL,
+  dam_reg     TEXT,            -- ADGA numbers, for the Pedigree button
+  sire_reg    TEXT,
+  freshening  TEXT,            -- e.g. 2F = second freshening
+  bred_on     TEXT,            -- YYYY-MM-DD
+  due_on      TEXT NOT NULL,   -- YYYY-MM-DD
+  status      TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','bred','kidded','skipped')),
+  outcome     TEXT,            -- shown once kidded, e.g. "2 doelings, 1 buckling"
+  note        TEXT,            -- private, never shown on the site
+  show        INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_breedings_due ON breedings (due_on);
+
+-- Small page settings (the breeding page's heading and intro).
+CREATE TABLE IF NOT EXISTS site_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

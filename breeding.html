@@ -17,11 +17,12 @@
 <main id="main">
 <div class="wrap">
   <header class="page-head">
-    <p class="eyebrow">Kidding Season</p>
-    <h1 class="serif">Spring 2026 Breeding Schedule</h1>
-    <p class="lede">Four pairings, four due dates, April into May. Each planned pedigree links straight through to ADGA Genetics.</p>
+    <p class="eyebrow" data-setting="breeding_eyebrow">Kidding Season</p>
+    <h1 class="serif" data-setting="breeding_title">Spring 2026 Breeding Schedule</h1>
+    <p class="lede" data-setting="breeding_lede">Four pairings, four due dates, April into May. Each planned pedigree links straight through to ADGA Genetics.</p>
   </header>
-  <div class="sched">
+  <!-- Pairings, heading and intro are edited in the store admin (Breeding tab) and filled in by site-worker.js; this markup is the fallback. -->
+  <div class="sched" data-breedings>
     <article>
       <div class="date"><div class="d">8</div><div class="m">April 2026</div></div>
       <div class="pair">
