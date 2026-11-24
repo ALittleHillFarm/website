@@ -5,8 +5,9 @@
  * file turns those rows into the cards on /breeding.html when the page is
  * requested, so an edit is live on the next load. The static markup in
  * breeding.html is only a fallback for a database with no pairings at all.
- * The home page's "<year> Kiddings" block and count, and the menu's label,
- * come from the same rows (currentKiddings, scheduleYear below).
+ * The home page's "<year> Kiddings" block and count, the menu's label and each
+ * buck's "Breeding to <year>" fact come from the same rows (currentKiddings,
+ * scheduleYear and withScheduleFacts below).
  *
  * Row shape: see `breedings` in store/schema.sql.
  */
@@ -85,13 +86,39 @@ export function kiddingsTiles(rows, goats) {
   if (!rows.length) {
     return '\n      <div class="lede" style="background:var(--card);padding:22px 20px">No pairings are scheduled right now. Check back soon.</div>\n    ';
   }
-  const byId = new Map((goats || []).map((g) => [g.id, g]));
-  const nameOf = (id, typed) => (id && byId.has(id) ? byId.get(id).name : '') || typed || '';
+  const nameOf = shortNames(goats);
   return rows.map((r) => `
       <a href="/breeding.html" style="background:var(--card);padding:22px 20px;text-decoration:none;color:inherit;display:block">
         <div class="eyebrow">Due ${esc(dueShort(r.due_on))}</div>
         <div class="serif" style="font-size:19px;line-height:1.25;margin-top:10px">${esc(nameOf(r.doe_id, r.doe_name))} <span style="color:var(--muted)">×</span> ${esc(nameOf(r.sire_id, r.sire_name))}</div>
       </a>`).join('') + '\n    ';
+}
+
+/** A goat's short name from the herd by id, else the name typed in the admin. */
+const shortNames = (goats) => {
+  const byId = new Map((goats || []).map((g) => [g.id, g]));
+  return (id, typed) => (id && byId.has(id) ? byId.get(id).name : '') || typed || '';
+};
+
+/** A hand-typed goat fact that names a season's breedings, e.g. "Breeding to 2026". */
+const isBreedingFact = (f) => /^\s*breeding\s+to\b/i.test(f.label || '');
+
+/**
+ * A buck with his "Breeding to <year>" fact generated from the schedule: the
+ * does paired to him (by sire_id, as picked in the admin) among the current
+ * year's pairings, in due-date order. It replaces any hand-typed "Breeding to
+ * …" fact, so the row can never name last season; a buck with no pairing this
+ * year simply has no such row. `rows` null (the schedule could not be read)
+ * leaves the goat exactly as typed. Does and the other facts are untouched.
+ */
+export function withScheduleFacts(g, rows, goats) {
+  if (g.template !== 'buck' || !rows) return g;
+  const { year, rows: current } = currentKiddings(rows);
+  const nameOf = shortNames(goats);
+  const does = [...new Set(current.filter((r) => r.sire_id === g.id).map((r) => nameOf(r.doe_id, r.doe_name)).filter(Boolean))];
+  const facts = g.facts.filter((f) => !isBreedingFact(f));
+  if (does.length) facts.push({ label: `Breeding to ${year}`, value: does.join(' · ') });
+  return { ...g, facts };
 }
 
 /** The menu and footer link to this page: "2027 Kiddings", or plain "Kiddings" with no schedule. */

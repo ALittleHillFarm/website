@@ -68,6 +68,14 @@ the stat reads "0 Kiddings due" and the grid says no pairings are scheduled; if
 the database is unreachable the static markup (the last season entered by hand)
 is served as it is, so refresh it now and then.
 
+A buck's "Breeding to <year>" row (on the Bucks page and on his own page) is
+generated the same way: the does paired to him in the Breeding tab, for the
+current year, by their short names. Pick him from the herd list when entering a
+pairing; one with his name only typed in is not matched to him. A fact typed on
+the goat with a "Breeding to…" label is ignored while the schedule can be read,
+so it can't name last season; with no pairing this year the buck simply has no
+such row.
+
 Goat pages (`/goats/<id>.html`) have no file at all; `site/goats.js` renders
 them from the table. `/sitemap.xml` lists the pages and every shown goat.
 

@@ -17,6 +17,8 @@
  *   - on the home page, the current year's kiddings (breedings table) into
  *     data-count="kiddings-..." and data-breedings="home"
  *   - on the breeding page, the whole schedule into data-breedings
+ *   - on the Bucks page and a buck's own page, his "Breeding to <year>" fact,
+ *     generated from the schedule (withScheduleFacts)
  *
  * The static files keep their last-known content inside those elements, so
  * if the database is unreachable a page still renders.
@@ -31,11 +33,14 @@ import {
 import { oldShopifyAddress } from './site/redirects.js';
 import {
   loadBreeding, breedingCards, scheduleYear, kiddingsLabel, loadKiddingsLabel,
-  currentKiddings, kiddingsDueLabel, kiddingsTiles,
+  currentKiddings, kiddingsDueLabel, kiddingsTiles, withScheduleFacts,
 } from './site/breeding.js';
 
 // Pages whose herd sections come from the database.
 const HERD_PAGES = new Set(['/index.html', '/does.html', '/bucks.html']);
+// Pages that read the breeding schedule: the breeding page itself, the home
+// page's kiddings block, and the bucks' "Breeding to <year>" rows.
+const SCHEDULE_PAGES = new Set(['/index.html', '/breeding.html', '/bucks.html']);
 // Static pages listed in the sitemap, most important first.
 const SITEMAP_PAGES = ['/', '/does.html', '/bucks.html', '/breeding.html', '/guide.html', '/about.html'];
 
@@ -99,6 +104,14 @@ async function goatResponse(id, request, env) {
     return env.ASSETS.fetch(new Request(new URL('/404.html', request.url), request))
       .then((r) => new Response(r.body, { status: 404, headers: r.headers }));
   }
+  if (g.template === 'buck') {
+    // His "Breeding to <year>" row follows the schedule, as on the Bucks page.
+    try {
+      g = withScheduleFacts(g, (await loadBreeding(env)).rows, await loadGoats(env));
+    } catch (err) {
+      console.error('breeding schedule unavailable, serving the buck\'s typed facts: ' + err);
+    }
+  }
   return new Response(goatPage(g), { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
@@ -125,8 +138,8 @@ async function decorate(res, url, env, assetPath) {
   // heading and intro (with no pairings stored at all, its own markup is
   // served as it is); the home page shows the current year's pairings.
   let breeding = null;   // breeding.html only
-  let schedule = null;   // the shown pairings, loaded for breeding.html and the home page
-  if (path === '/breeding.html' || path === '/index.html') {
+  let schedule = null;   // the shown pairings, loaded for the pages in SCHEDULE_PAGES
+  if (SCHEDULE_PAGES.has(path)) {
     try {
       const b = await loadBreeding(env);
       schedule = b.rows;
@@ -136,13 +149,14 @@ async function decorate(res, url, env, assetPath) {
     }
   }
   const setting = (key) => (breeding && breeding.settings[key]) || '';
-  // The menu's "<year> Kiddings" follows the schedule (the breeding and home
-  // pages already have it loaded; every other page asks for just the latest date).
+  // The menu's "<year> Kiddings" follows the schedule (the pages that read it
+  // already have it loaded; every other page asks for just the latest date).
   const kiddings = schedule ? kiddingsLabel(scheduleYear(schedule)) : await loadKiddingsLabel(env);
   const current = path === '/index.html' && schedule ? currentKiddings(schedule) : null;
 
   const does = herd ? herd.filter((g) => g.template === 'doe') : [];
-  const bucks = herd ? herd.filter((g) => g.template === 'buck') : [];
+  // Each buck's "Breeding to <year>" row comes from the schedule, not from typed facts.
+  const bucks = herd ? herd.filter((g) => g.template === 'buck').map((g) => withScheduleFacts(g, schedule, herd)) : [];
 
   const rewriter = new HTMLRewriter()
     .on('title', { text(t) { meta.title += t.text; } })

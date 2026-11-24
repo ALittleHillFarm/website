@@ -5,8 +5,9 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   breedingCards, dueParts, pedigreeLink, scheduleYear, kiddingsLabel, loadKiddingsLabel, loadBreeding,
-  currentKiddings, kiddingsDueLabel, kiddingsTiles, dueShort,
+  currentKiddings, kiddingsDueLabel, kiddingsTiles, dueShort, withScheduleFacts,
 } from '../../site/breeding.js';
+import { normalize, rosterArticle, goatPageBody } from '../../site/goats.js';
 import { headerInner, footerInner } from '../../site/chrome.js';
 
 const goats = [
@@ -135,6 +136,9 @@ test('the breeding page and the menu agree on which pairings count', async (t) =
 
 const herd = [
   { id: 'cookie', name: 'Cookie' },
+  { id: 'calypso', name: 'Calypso' },
+  { id: 'maple-sugar', name: 'Maple Sugar' },
+  { id: 'royal-tea', name: 'Royal Tea' },
   { id: 'toby', name: 'Toby', registered_name: 'Amores Farm Time Will Tell' },
   { id: 'polaris', name: 'Polaris' },
 ];
@@ -226,4 +230,86 @@ test('the home page carries every marker the worker fills (it cannot be run in N
   const grid = html.split('data-breedings="home"')[1].split('</section>')[0];
   const n = +/data-count="kiddings-n">(\d+)</.exec(html)[1];
   assert.equal((grid.match(/<div class="eyebrow">Due /g) || []).length, n);
+});
+
+// ---- a buck's "Breeding to <year>" fact comes from the schedule ----------------
+
+/** A buck as the site loads him, with the facts typed on him in the admin. */
+const buckRow = (id, name, facts) => normalize({
+  id, sort: 10, status: 'active', template: 'buck', registry: null,
+  data: JSON.stringify({ name, registered_name: name + ' Registered', dob: '2025-04-17', facts }),
+});
+const handTyped = [
+  { label: 'Breeding to 2026', value: 'Maple Sugar' },
+  { label: 'Temperament', value: 'Friendly' },
+];
+const factsOf = (g) => g.facts.map((f) => [f.label, f.value]);
+
+async function season2026(t) {
+  const env = breedingsDb(t, []);
+  env.add('2026-04-08', { doe_id: 'cookie', doe: 'DLMG Farms JM Cookies & Cream', sire_id: 'polaris', buck: 'TUA Farms BB Polaris' });
+  env.add('2026-04-09', { doe_id: 'calypso', sire_id: 'polaris' });
+  env.add('2026-04-30', { doe_id: 'maple-sugar', sire_id: 'toby' });
+  env.add('2026-05-01', { doe_id: 'royal-tea', sire_id: 'polaris' });
+  return env;
+}
+
+test('each buck lists the does paired to him this year, by short name, in due-date order', async (t) => {
+  const rows = (await loadBreeding(await season2026(t))).rows;
+  const polaris = withScheduleFacts(buckRow('polaris', 'Polaris', []), rows, herd);
+  assert.deepEqual(factsOf(polaris), [['Breeding to 2026', 'Cookie · Calypso · Royal Tea']]);
+  const toby = withScheduleFacts(buckRow('toby', 'Toby', []), rows, herd);
+  assert.deepEqual(factsOf(toby), [['Breeding to 2026', 'Maple Sugar']]);
+});
+
+test('a typed "Breeding to" fact is replaced, and the buck’s other facts are kept', async (t) => {
+  const rows = (await loadBreeding(await season2026(t))).rows;
+  const toby = withScheduleFacts(buckRow('toby', 'Toby', [...handTyped, { label: '  breeding TO 2025', value: 'Old' }]), rows, herd);
+  assert.deepEqual(factsOf(toby), [['Temperament', 'Friendly'], ['Breeding to 2026', 'Maple Sugar']]);
+});
+
+test('next year’s pairings move the row on; a buck with none this year has no row', async (t) => {
+  const env = await season2026(t);
+  env.add('2027-03-30', { doe_id: 'cookie', sire_id: 'toby' });
+  const rows = (await loadBreeding(env)).rows;
+  assert.deepEqual(factsOf(withScheduleFacts(buckRow('toby', 'Toby', handTyped), rows, herd)),
+    [['Temperament', 'Friendly'], ['Breeding to 2027', 'Cookie']]);
+  // Polaris has no 2027 pairing: no row at all, and last season's typed fact is not left behind.
+  assert.deepEqual(factsOf(withScheduleFacts(buckRow('polaris', 'Polaris', handTyped), rows, herd)),
+    [['Temperament', 'Friendly']]);
+});
+
+test('hidden and skipped pairings are left out, a repeat doe is named once, and an outside doe is named as typed', async (t) => {
+  const env = breedingsDb(t, []);
+  env.add('2026-04-08', { doe_id: 'cookie', sire_id: 'toby' });
+  env.add('2026-04-20', { doe_id: 'cookie', sire_id: 'toby' });
+  env.add('2026-04-21', { doe_id: 'calypso', sire_id: 'toby', show: 0 });
+  env.add('2026-04-22', { doe_id: 'royal-tea', sire_id: 'toby', status: 'skipped' });
+  env.add('2026-05-01', { doe: 'Doe From Away', sire_id: 'toby' });
+  env.add('2026-05-02', { doe: 'Typed Buck Only', buck: 'Toby' }); // no sire_id: not matched to him
+  const toby = withScheduleFacts(buckRow('toby', 'Toby', []), (await loadBreeding(env)).rows, herd);
+  assert.deepEqual(factsOf(toby), [['Breeding to 2026', 'Cookie · Doe From Away']]);
+});
+
+test('does are left alone, and an unreadable schedule leaves the typed facts as they were', async (t) => {
+  const rows = (await loadBreeding(await season2026(t))).rows;
+  const doe = normalize({ id: 'cookie', sort: 1, status: 'active', template: 'doe', registry: null,
+    data: JSON.stringify({ name: 'Cookie', facts: handTyped }) });
+  assert.equal(withScheduleFacts(doe, rows, herd), doe);
+  const toby = buckRow('toby', 'Toby', handTyped);
+  assert.equal(withScheduleFacts(toby, null, herd), toby);
+  // A schedule that was read but is empty clears the row rather than keep a stale one.
+  assert.deepEqual(factsOf(withScheduleFacts(toby, [], herd)), [['Temperament', 'Friendly']]);
+});
+
+test('the Bucks roster card and the buck’s own page both show the generated row, escaped', async (t) => {
+  const env = breedingsDb(t, []);
+  env.add('2027-03-30', { doe_id: 'cookie', sire_id: 'toby' });
+  env.add('2027-04-12', { doe: '<b>Away</b> & Co', sire_id: 'toby' });
+  const toby = withScheduleFacts(buckRow('toby', 'Toby', handTyped), (await loadBreeding(env)).rows, herd);
+  for (const html of [rosterArticle(toby), goatPageBody(toby)]) {
+    assert.match(html, /<div class="label">Breeding to 2027<\/div><div class="v">Cookie · &lt;b&gt;Away&lt;\/b&gt; &amp; Co<\/div>/);
+    assert.ok(!html.includes('2026'), 'last season’s typed fact is gone');
+    assert.match(html, /Temperament/);
+  }
 });
