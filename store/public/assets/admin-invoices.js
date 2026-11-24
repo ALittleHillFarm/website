@@ -250,6 +250,8 @@
 
   // ---- events ---------------------------------------------------------------
   tab.addEventListener('click', load);
+  // The Customers tab added, changed or removed someone: fetch the list again next time.
+  document.addEventListener('customers-changed', function () { state.loaded = false; });
 
   host.addEventListener('input', function (e) {
     var t = e.target;

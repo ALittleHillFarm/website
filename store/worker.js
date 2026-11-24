@@ -26,7 +26,9 @@
 import catalog from './products.json';
 import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
-import { isEstablishedCustomer, importPurchaseHistory } from './lib/customers.js';
+import {
+  isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer,
+} from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
 
@@ -2553,6 +2555,26 @@ async function adminBreedings(request, env) {
   return json({ error: 'unknown action' }, 400);
 }
 
+// ---- customers ------------------------------------------------------------------
+
+async function adminCustomers(request, env) {
+  if (request.method === 'GET') {
+    return json(await listCustomers(env.DB, { detail: new URL(request.url).searchParams.get('detail') === '1' }));
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+  const b = await request.json().catch(() => null);
+  if (!b || typeof b !== 'object') return json({ error: 'send the customer as JSON' }, 400);
+  try {
+    if (b.action === 'add') return json({ ok: true, customer: await addCustomer(env.DB, b) });
+    if (b.action === 'update') return json({ ok: true, customer: await updateCustomer(env.DB, b) });
+    if (b.action === 'delete') return json({ ok: true, ...(await deleteCustomer(env.DB, b.email)) });
+  } catch (err) {
+    if (err instanceof CustomerError) return json({ error: err.message }, err.status);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
 // ---- location (consignment) sales reports -----------------------------------
 
 async function loadReport(env, id) {
@@ -3108,13 +3130,8 @@ async function adminRoutes(path, request, env) {
   if (path === '/api/admin/location-reports') return adminLocationReports(request, env);
   if (path === '/api/admin/invoice' && request.method === 'POST') return adminInvoices(request, env);
 
-  // Everyone we know, for the invoice form's customer picker.
-  if (path === '/api/admin/customers') {
-    const rows = (await env.DB.prepare(
-      'SELECT email, name, phone, tax_exempt, trusted FROM customers ORDER BY name COLLATE NOCASE, email'
-    ).all()).results || [];
-    return json({ customers: rows });
-  }
+  // Everyone we know: the invoice form's customer picker and the Customers tab.
+  if (path === '/api/admin/customers') return adminCustomers(request, env);
 
   // A customer's most recent distinct products, newest first — this store's
   // own orders plus history carried over from Shopify (purchase_history).

@@ -47,6 +47,7 @@
   <div class="tabs" role="tablist" aria-label="Admin sections">
     <button type="button" role="tab" id="tab-orders" aria-controls="panel-orders" aria-selected="true">Orders</button>
     <button type="button" role="tab" id="tab-invoice" aria-controls="panel-invoice" aria-selected="false">New invoice</button>
+    <button type="button" role="tab" id="tab-customers" aria-controls="panel-customers" aria-selected="false">Customers</button>
     <button type="button" role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Record a sale</button>
     <button type="button" role="tab" id="tab-products" aria-controls="panel-products" aria-selected="false">Products</button>
     <button type="button" role="tab" id="tab-purchases" aria-controls="panel-purchases" aria-selected="false">Purchases</button>
@@ -264,6 +265,17 @@
       Everything on the herd pages of the farm website. Changes go live as soon as you press <strong>Save</strong>.
       Use the arrows to change the order goats appear in on the Does and Bucks pages.</p>
     <div id="goats-app"><p class="lede">Loading…</p></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Customers — view, add, edit, remove (assets/admin-customers.js) -->
+  <!-- ============================================================ -->
+  <section id="panel-customers" class="tab-panel" role="tabpanel" aria-labelledby="tab-customers" tabindex="0" hidden>
+    <h2 class="serif" style="font-size:22px;margin-bottom:6px">Customers</h2>
+    <p class="lede" style="font-size:14px;margin-bottom:20px">
+      Everyone the store knows. Add a customer, fix their details, mark someone <strong>trusted</strong> or
+      <strong>tax-exempt</strong>, or remove them. Removing a customer never deletes their orders or past purchases.</p>
+    <div id="customers-app"><p class="lede">Loading…</p></div>
   </section>
 
   <!-- ============================================================ -->
@@ -899,6 +911,7 @@
 <script src="assets/admin-ui.js"></script>
 <script src="assets/admin-goats.js"></script>
 <script src="assets/admin-breeding.js"></script>
+<script src="assets/admin-customers.js"></script>
 <script src="assets/admin-invoices.js"></script>
 <script src="assets/admin-products.js"></script>
 <script src="assets/admin-purchases.js"></script>

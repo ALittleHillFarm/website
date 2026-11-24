@@ -398,6 +398,19 @@ customer's **tax exemption** or **trusted** status applies: those are keyed to
 the signed-in email, so typing someone else's email at checkout gets nothing.
 New orders also get an automatic confirmation email.
 
+**The customer list.** Admin → **Customers** shows everyone the store knows
+(search by name, email or phone), with how many paid orders and old Shopify
+lines each has. **Add a customer**, **Edit** one (name, phone, *trusted*,
+*tax-exempt* and its ST-101 reference, private notes) or **Remove** one. The
+email is fixed once a customer exists — their orders, history and sign-in are
+all matched by it — so a new address means adding a new customer. Removing a
+customer deletes only that record (contact details, notes and the two flags);
+orders and Shopify history are untouched and they can still sign in and order.
+Under the list, *emails with Shopify purchases but no customer record* are
+people whose history was imported but who were never saved as customers, each
+with an **Add as customer** button. The New invoice form's name and email
+search uses this same list.
+
 **Cash at pickup:** a signed-in customer is established if their email has an
 imported Shopify purchase or a paid store sale (`captured` / `recorded`, with
 some payment remaining after refunds), or staff have marked them `trusted`.
