@@ -27,7 +27,8 @@ import catalog from './products.json';
 import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
 import {
-  isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer,
+  isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer, importShopifyCustomers,
+  rememberOrderCustomer,
 } from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
@@ -597,6 +598,11 @@ async function apiCheckout(request, env, ctx) {
     )
     .run();
 
+  // A new customer joins the customer list the moment their order exists. A
+  // signed-in customer already has a record (updated above); a guest's typed
+  // email only ever adds a missing one, so it cannot edit someone else's.
+  if (!customer) await saveOrderCustomer(env, { email, name, phone }, { fillBlanks: false });
+
   // Cash never touches Stripe, so no webhook will announce it — do it here.
   if (method === 'cash') {
     ctx.waitUntil(notifyNewOrder(env, saleId));
@@ -914,6 +920,16 @@ function timingSafeEqual(a, b) {
 // ---------------------------------------------------------------------------
 // Customers
 // ---------------------------------------------------------------------------
+
+/** Add whoever an order was entered for to the customer list. The order is
+ *  already saved by now, so a problem here is logged, never allowed to fail it. */
+async function saveOrderCustomer(env, person, options) {
+  try {
+    await rememberOrderCustomer(env.DB, person, options);
+  } catch (err) {
+    console.error('could not add the customer to the list: ' + (err && err.message ? err.message : err));
+  }
+}
 
 const getCustomer = (env, email) =>
   env.DB.prepare('SELECT * FROM customers WHERE email = ?')
@@ -2568,6 +2584,12 @@ async function adminCustomers(request, env) {
     if (b.action === 'add') return json({ ok: true, customer: await addCustomer(env.DB, b) });
     if (b.action === 'update') return json({ ok: true, customer: await updateCustomer(env.DB, b) });
     if (b.action === 'delete') return json({ ok: true, ...(await deleteCustomer(env.DB, b.email)) });
+    // Shopify's customer export, as text. Only writes when dry_run is explicitly false.
+    if (b.action === 'import') {
+      return json({ ok: true, ...(await importShopifyCustomers(env.DB, b.csv, {
+        includeNeverOrdered: b.include_never_ordered === true, dryRun: b.dry_run !== false,
+      })) });
+    }
   } catch (err) {
     if (err instanceof CustomerError) return json({ error: err.message }, err.status);
     throw err;
@@ -3494,6 +3516,10 @@ async function adminRoutes(path, request, env) {
         b.notes || null
       )
       .run();
+
+    // With an email, the buyer joins the customer list (name and phone fill in
+    // if we already had them without). Without one there is nothing to key them by.
+    await saveOrderCustomer(env, { email: b.customer_email, name: b.customer_name, phone: b.customer_phone }, { fillBlanks: true });
 
     await recordSaleMoves(env, id);
     return json({ ok: true, sale_id: id });

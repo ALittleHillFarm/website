@@ -174,3 +174,176 @@ export async function deleteCustomer(db, email) {
   await db.prepare('DELETE FROM customers WHERE email = ? COLLATE NOCASE').bind(found.email).run();
   return { removed: found.email };
 }
+
+// ---------------------------------------------------------------------------
+// Bringing customers over from Shopify's "Customers" CSV export.
+//
+// Safe to run again and again: people who are not here yet are added; people
+// who are keep everything they have, and only a blank name or phone is filled
+// in. The two flags that change how an order is handled (trusted, tax-exempt)
+// are never carried over — Shopify's tax-exempt marks are listed for the farm
+// to confirm against its ST-101s, not applied.
+// ---------------------------------------------------------------------------
+
+const MAX_CSV_CHARS = 2_000_000;
+const MAX_CSV_ROWS = 5000;
+
+/** Rows of fields from CSV text: quoted fields, doubled quotes, line breaks inside quotes, a BOM, CRLF. */
+export function parseCsv(input) {
+  const s = String(input == null ? '' : input).replace(/^﻿/, '');
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quoted) {
+      if (ch !== '"') field += ch;
+      else if (s[i + 1] === '"') { field += '"'; i++; }
+      else quoted = false;
+    } else if (ch === '"' && field === '') {
+      quoted = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && s[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+}
+
+/** Shopify guards ids and phone numbers from spreadsheets with a leading apostrophe. */
+const unquoteCell = (v) => String(v == null ? '' : v).trim().replace(/^'/, '').trim();
+
+/** US numbers read as 208-555-0100 (how the farm writes them); anything else is kept as typed. */
+export function tidyPhone(v) {
+  const raw = unquoteCell(v);
+  const digits = raw.replace(/\D/g, '');
+  const national = digits.length === 11 && digits[0] === '1' ? digits.slice(1) : digits;
+  return national.length === 10
+    ? national.slice(0, 3) + '-' + national.slice(3, 6) + '-' + national.slice(6)
+    : raw.slice(0, 40);
+}
+
+/**
+ * Read a Shopify customer export. Returns who can be imported and what was
+ * left out, so the farm can see both before anything is written.
+ */
+export function shopifyCustomers(csv, { includeNeverOrdered = false } = {}) {
+  if (typeof csv !== 'string' || !csv.trim()) throw new CustomerError('choose the customer export file first');
+  if (csv.length > MAX_CSV_CHARS) throw new CustomerError('that file is too large to be a customer export');
+  const table = parseCsv(csv);
+  const header = (table[0] || []).map((h) => h.trim().toLowerCase());
+  const col = (name) => header.indexOf(name.toLowerCase());
+  const at = { email: col('Email'), first: col('First Name'), last: col('Last Name'), phone: col('Phone'),
+    addressPhone: col('Default Address Phone'), orders: col('Total Orders'), exempt: col('Tax Exempt') };
+  if (at.email < 0 || at.first < 0 || at.orders < 0) {
+    throw new CustomerError('that does not look like Shopify’s customer export (it needs Email, First Name and Total Orders columns)');
+  }
+  if (table.length - 1 > MAX_CSV_ROWS) throw new CustomerError('that file has too many rows to be a customer export');
+  const cell = (r, i) => (i < 0 ? '' : unquoteCell(r[i]));
+
+  const people = new Map();
+  const result = { rows: table.length - 1, people: [], no_email: [], never_ordered: 0, tax_exempt: [], duplicates: 0 };
+  for (const r of table.slice(1)) {
+    const name = text([cell(r, at.first), cell(r, at.last)].filter(Boolean).join(' '), 120);
+    const orders = Math.max(0, Math.floor(Number(cell(r, at.orders)) || 0));
+    const email = normalEmail(cell(r, at.email));
+    const exempt = cell(r, at.exempt).toLowerCase() === 'yes';
+    if (!email) {
+      // Their email is the only way the store tells people apart, so these cannot be added.
+      if (orders > 0) result.no_email.push({ name: name || '(no name)', orders });
+      continue;
+    }
+    if (exempt) result.tax_exempt.push({ name: name || email, email });
+    if (!orders && !includeNeverOrdered) { result.never_ordered++; continue; }
+    const person = { email, name: name || null, orders, phone: tidyPhone(cell(r, at.phone) || cell(r, at.addressPhone)) || null };
+    const seen = people.get(email);
+    if (seen) {
+      result.duplicates++;
+      if (person.orders > seen.orders) people.set(email, { ...person, name: person.name || seen.name, phone: person.phone || seen.phone });
+    } else {
+      people.set(email, person);
+    }
+  }
+  result.people = [...people.values()];
+  return result;
+}
+
+/**
+ * Add the export's customers that are not here yet, and fill blank names and
+ * phones on the ones that are. `dryRun` (the default) only reports what would
+ * happen. Nothing existing is overwritten and no flag is changed.
+ */
+export async function importShopifyCustomers(db, csv, { includeNeverOrdered = false, dryRun = true, now = new Date().toISOString() } = {}) {
+  const read = shopifyCustomers(csv, { includeNeverOrdered });
+  const have = new Map(((await db.prepare('SELECT email, name, phone FROM customers').all()).results || [])
+    .map((c) => [String(c.email).toLowerCase(), c]));
+  const add = [], fill = [];
+  let already = 0;
+  for (const p of read.people) {
+    const mine = have.get(p.email);
+    if (!mine) { add.push(p); continue; }
+    const name = !String(mine.name || '').trim() && p.name ? p.name : null;
+    const phone = !String(mine.phone || '').trim() && p.phone ? p.phone : null;
+    if (name || phone) fill.push({ email: mine.email, name, phone });
+    else already++;
+  }
+  if (!dryRun) {
+    const writes = [
+      ...add.map((p) => db.prepare('INSERT OR IGNORE INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)')
+        .bind(p.email, p.name, p.phone, now)),
+      ...fill.map((p) => db.prepare(
+        "UPDATE customers SET name = COALESCE(NULLIF(name, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?) WHERE email = ?"
+      ).bind(p.name, p.phone, p.email)),
+    ];
+    for (let i = 0; i < writes.length; i += 40) await db.batch(writes.slice(i, i + 40));
+  }
+  return {
+    dry_run: !!dryRun,
+    file_rows: read.rows,
+    add: add.map(({ email, name, orders }) => ({ email, name, orders })),
+    filled: fill.length,
+    already,
+    no_email: read.no_email,
+    never_ordered: read.never_ordered,
+    tax_exempt: read.tax_exempt,
+    duplicates: read.duplicates,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Whoever an order is entered for becomes a customer.
+// ---------------------------------------------------------------------------
+
+/**
+ * Make sure the person an order was entered for is in the customer list.
+ * Adds them if their email is new; never changes trusted or tax-exempt.
+ *
+ * `fillBlanks` says whether an existing record may have a missing name or
+ * phone filled in. Staff entering an order may (they know who it is); a guest
+ * typing an email at checkout may not, since that email might be somebody
+ * else's and a stranger should not be able to edit their record.
+ *
+ * Returns true if the person was added, false if they were already here or
+ * the email was not usable (the order itself is never blocked by this).
+ */
+export async function rememberOrderCustomer(db, { email, name, phone }, { fillBlanks = false, now = new Date().toISOString() } = {}) {
+  const who = normalEmail(email);
+  if (!who) return false;
+  const person = [who, text(name, 120) || null, text(phone, 40) || null, now];
+  if (!fillBlanks) {
+    const r = await db.prepare('INSERT OR IGNORE INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)').bind(...person).run();
+    return !!(r && r.meta && r.meta.changes);
+  }
+  const was = await oneCustomer(db, who);
+  await db.prepare(
+    'INSERT INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)' +
+      " ON CONFLICT(email) DO UPDATE SET name = COALESCE(NULLIF(customers.name, ''), excluded.name)," +
+      " phone = COALESCE(NULLIF(customers.phone, ''), excluded.phone)"
+  ).bind(...person).run();
+  return !was;
+}

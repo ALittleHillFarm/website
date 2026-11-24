@@ -406,6 +406,24 @@ email is fixed once a customer exists — their orders, history and sign-in are
 all matched by it — so a new address means adding a new customer. Removing a
 customer deletes only that record (contact details, notes and the two flags);
 orders and Shopify history are untouched and they can still sign in and order.
+**Who is added automatically.** Anyone an order is entered for joins the list at
+that moment: a customer checking out (even as a guest), an invoice, or a sale
+recorded by hand *with an email* (the email is how the store tells people apart,
+so a hand-entered sale with no email adds nobody). Orders only ever add a missing
+person or fill in a blank name or phone — they never change *trusted* or
+*tax-exempt*, and a guest typing an existing customer's email cannot edit that
+customer. An order that is turned away (cash not allowed, bad email) adds nobody;
+a card checkout that is abandoned does, since they did enter an order — remove
+them here if you do not want them.
+
+**Importing from Shopify.** Under the list, *Import customers from Shopify*
+takes Shopify's Customers → Export CSV. It shows what it would do first (who is
+added, who is already here, who has no email, who never ordered), then adds only
+people who are missing and fills blank names and phones. Tax-exempt marks in the
+file are listed but **not** carried over: confirm each against its ST-101 and
+tick it on their record. Safe to repeat. The CSV holds customer details, so keep
+it out of git.
+
 Under the list, *emails with Shopify purchases but no customer record* are
 people whose history was imported but who were never saved as customers, each
 with an **Add as customer** button. The New invoice form's name and email

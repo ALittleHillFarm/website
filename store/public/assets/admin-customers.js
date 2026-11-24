@@ -16,7 +16,7 @@
   var tab = document.getElementById('tab-customers');
   if (!host || !tab) return;
 
-  var state = { list: [], historyOnly: [], filter: '', editing: null, isNew: false, dirty: false, busy: false };
+  var state = { list: [], historyOnly: [], filter: '', editing: null, isNew: false, dirty: false, busy: false, csv: '', previewId: 0 };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -110,7 +110,7 @@
         '<span class="muted" id="cu-count" style="margin-left:12px"></span></p>' +
       '<div class="field" style="max-width:420px"><label for="cu-search">Find a customer</label>' +
         '<input type="text" id="cu-search" autocomplete="off" placeholder="Name, email or phone" value="' + esc(state.filter) + '"></div>' +
-      '<div id="cu-list"></div>' + historyOnlyHtml();
+      '<div id="cu-list"></div>' + historyOnlyHtml() + importHtml();
     paintList();
   }
   function paintList() {
@@ -119,6 +119,83 @@
     document.getElementById('cu-count').textContent = state.filter
       ? shown + ' of ' + plural(state.list.length, 'customer', 'customers')
       : plural(state.list.length, 'customer', 'customers');
+  }
+
+
+  // ---- bringing customers over from Shopify ------------------------------------------
+  function importHtml() {
+    return '<details class="how" style="margin-top:22px"><summary>Import customers from Shopify</summary>' +
+      '<div style="margin-top:12px">' +
+        '<p class="hint" style="margin-bottom:12px">In Shopify: <strong>Customers → Export → All customers</strong>, as a CSV file, then choose it below. ' +
+          'You see what would happen before anything is saved. It is safe to do again: it only adds people who are missing and fills in blank names and phones. ' +
+          'It never changes anyone’s trusted or tax-exempt setting.</p>' +
+        '<div class="field"><label for="cu-file">Shopify customer export (.csv)</label><input type="file" id="cu-file" accept=".csv,text/csv"></div>' +
+        '<div class="check-row" style="margin-bottom:14px"><input type="checkbox" id="cu-never">' +
+          '<label for="cu-never">Also include people who never ordered (newsletter sign-ups and “Login with Shop” accounts)</label></div>' +
+        '<div id="cu-import-out" aria-live="polite"></div>' +
+      '</div></details>';
+  }
+
+  function namesList(items, line) {
+    return '<ul style="margin:8px 0 0 18px;font-size:13.5px;line-height:1.7">' + items.map(function (x) { return '<li>' + line(x) + '</li>'; }).join('') + '</ul>';
+  }
+
+  function previewHtml(r) {
+    var out = '<div class="alert" style="margin:0 0 14px"><strong>' + esc(plural(r.file_rows, 'row', 'rows')) + '</strong> in the file.</div>';
+    out += '<p><strong>' + esc(plural(r.add.length, 'person', 'people')) + ' would be added.</strong>' +
+      (r.add.length ? '</p><details><summary class="link-btn">Who</summary>' +
+        namesList(r.add, function (a) { return esc(a.name || '(no name)') + ' <span class="muted">· ' + esc(a.email) + ' · ' + esc(plural(a.orders, 'order', 'orders')) + '</span>'; }) + '</details>' : '</p>');
+    out += '<p>' + esc(plural(r.already, 'person is', 'people are')) + ' already customers' +
+      (r.filled ? ', and ' + esc(plural(r.filled, 'of them has', 'of them have')) + ' a blank name or phone that would be filled in' : '') + '.</p>';
+    if (r.no_email.length) {
+      out += '<p><strong>' + esc(plural(r.no_email.length, 'customer', 'customers')) + ' ordered but ' + (r.no_email.length === 1 ? 'has' : 'have') + ' no email in Shopify</strong>, ' +
+        'so they cannot be added (the email is how the store knows someone). Add them with <em>Add a customer</em> when you have their email.</p>' +
+        '<details><summary class="link-btn">Who</summary>' + namesList(r.no_email, function (n) { return esc(n.name) + ' <span class="muted">· ' + esc(plural(n.orders, 'order', 'orders')) + '</span>'; }) + '</details>';
+    }
+    if (r.never_ordered) out += '<p class="muted">' + esc(plural(r.never_ordered, 'person', 'people')) + ' who never ordered ' + (r.never_ordered === 1 ? 'was' : 'were') + ' left out (tick the box above to include them).</p>';
+    if (r.tax_exempt.length) {
+      out += '<p><strong>Marked tax-exempt in Shopify:</strong> ' + esc(r.tax_exempt.map(function (t) { return t.name + ' (' + t.email + ')'; }).join('; ')) +
+        '. This is <strong>not</strong> carried over. Open their record and tick tax-exempt once you have confirmed their ST-101.</p>';
+    }
+    var todo = r.add.length + r.filled;
+    out += '<div class="goat-save"><button type="button" class="btn" data-act="import-apply"' + (todo ? '' : ' disabled') + '>' +
+      (r.add.length ? 'Add ' + esc(plural(r.add.length, 'customer', 'customers')) : 'Fill in blanks') + '</button>' +
+      '<span id="cu-import-status" aria-live="polite">' + (todo ? '' : 'Nothing to do — everyone in the file is already here.') + '</span></div>';
+    return out;
+  }
+
+  function runPreview() {
+    var out = document.getElementById('cu-import-out');
+    var file = document.getElementById('cu-file').files[0];
+    if (!file) { state.csv = ''; out.innerHTML = ''; return; }
+    var id = ++state.previewId;
+    out.innerHTML = '<p class="muted">Reading the file…</p>';
+    file.text().then(function (text) {
+      state.csv = text;
+      return api('POST', { action: 'import', csv: text, dry_run: true, include_never_ordered: checked('cu-never') });
+    }).then(function (r) {
+      if (id === state.previewId) out.innerHTML = previewHtml(r);
+    }).catch(function (err) {
+      state.csv = '';
+      if (id === state.previewId) out.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>';
+    });
+  }
+
+  function applyImport(btn) {
+    if (state.busy || !state.csv) return;
+    state.busy = true; btn.disabled = true;
+    var st = document.getElementById('cu-import-status');
+    st.textContent = 'Saving…';
+    api('POST', { action: 'import', csv: state.csv, dry_run: false, include_never_ordered: checked('cu-never') }).then(function (r) {
+      state.busy = false; state.csv = '';
+      var parts = [];
+      if (r.add.length) parts.push('Added ' + plural(r.add.length, 'customer', 'customers'));
+      if (r.filled) parts.push('filled in blanks for ' + r.filled);
+      return load().then(function () { renderList(); note(parts.join(', ') + '.'); });
+    }).catch(function (err) {
+      state.busy = false; btn.disabled = false;
+      st.textContent = 'Not saved: ' + err.message;
+    });
   }
 
   // ---- the editor ---------------------------------------------------------------
@@ -217,7 +294,10 @@
     var st = document.getElementById('cu-status');
     if (st && !st.textContent) st.textContent = 'Not saved yet';
   });
-  host.addEventListener('change', function () { if (state.editing) state.dirty = true; });
+  host.addEventListener('change', function (ev) {
+    if (ev.target.id === 'cu-file' || (ev.target.id === 'cu-never' && state.csv)) return runPreview();
+    if (state.editing) state.dirty = true;
+  });
   host.addEventListener('keydown', function (ev) {
     if (ev.key === 'Enter' && state.editing && ev.target.tagName === 'INPUT' && ev.target.type !== 'checkbox') {
       ev.preventDefault();
@@ -249,5 +329,6 @@
     }
     if (act === 'save') return save(b);
     if (act === 'delete') return remove(b);
+    if (act === 'import-apply') return applyImport(b);
   });
 })();
