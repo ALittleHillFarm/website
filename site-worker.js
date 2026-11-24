@@ -26,7 +26,7 @@ import {
   loadGoats, loadGoat, goatPage, rosterArticle, herdCard, numberWord, capitalise,
 } from './site/goats.js';
 import { oldShopifyAddress } from './site/redirects.js';
-import { loadBreeding, breedingCards } from './site/breeding.js';
+import { loadBreeding, breedingCards, scheduleYear, kiddingsLabel, loadKiddingsLabel } from './site/breeding.js';
 
 // Pages whose herd sections come from the database.
 const HERD_PAGES = new Set(['/index.html', '/does.html', '/bucks.html']);
@@ -127,6 +127,9 @@ async function decorate(res, url, env, assetPath) {
     }
   }
   const setting = (key) => (breeding && breeding.settings[key]) || '';
+  // The menu's "<year> Kiddings" follows the schedule (the breeding page
+  // already has it loaded; every other page asks for just the latest date).
+  const kiddings = breeding ? kiddingsLabel(scheduleYear(breeding.rows)) : await loadKiddingsLabel(env);
 
   const does = herd ? herd.filter((g) => g.template === 'doe') : [];
   const bucks = herd ? herd.filter((g) => g.template === 'buck') : [];
@@ -153,10 +156,10 @@ async function decorate(res, url, env, assetPath) {
       },
     })
     .on('header[data-chrome]', {
-      element(e) { e.setInnerContent(headerInner(currentNav(path, meta.section)), { html: true }); },
+      element(e) { e.setInnerContent(headerInner(currentNav(path, meta.section), kiddings), { html: true }); },
     })
     .on('footer[data-chrome]', {
-      element(e) { e.setInnerContent(footerInner(), { html: true }); },
+      element(e) { e.setInnerContent(footerInner(kiddings), { html: true }); },
     });
 
   if (herd) {

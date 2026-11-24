@@ -14,11 +14,18 @@ export const EMAIL = 'christine@alittlehillfarm.com';
 export const PHONE = '208-875-9563';
 export const SITE_NAME = 'A Little Hill Farm';
 
-export const NAV = [
+/**
+ * The menu. The breeding page's label carries the year of the current
+ * schedule ("2027 Kiddings"), which follows the pairings entered in the store
+ * admin (site/breeding.js, kiddingsLabel) so it never needs editing here.
+ */
+export const KIDDINGS_LABEL = 'Kiddings';
+
+export const navLinks = (kiddings = KIDDINGS_LABEL) => [
   ['Herd', '/'],
   ['Does', '/does.html'],
   ['Bucks', '/bucks.html'],
-  ['2026 Kiddings', '/breeding.html'],
+  [kiddings, '/breeding.html'],
   ['Goat Guide', '/guide.html'],
   ['About', '/about.html'],
   ['Feed Store', STORE_URL],
@@ -36,10 +43,10 @@ export function currentNav(pathname, section) {
   return pathname;
 }
 
-export function headerInner(current) {
-  const links = NAV.map(
+export function headerInner(current, kiddings) {
+  const links = navLinks(kiddings).map(
     ([label, href]) =>
-      `      <a href="${href}"${href === current ? ' aria-current="page"' : ''}>${label}</a>`
+      `      <a href="${href}"${href === current ? ' aria-current="page"' : ''}>${esc(label)}</a>`
   ).join('\n');
   return `
   <div class="bar">
@@ -57,7 +64,7 @@ ${links}
 `;
 }
 
-export function footerInner() {
+export function footerInner(kiddings = KIDDINGS_LABEL) {
   const tel = '+1' + PHONE.replace(/-/g, '');
   return `
   <div class="cols">
@@ -70,7 +77,7 @@ export function footerInner() {
       <ul>
         <li><a href="/does.html">Does</a></li>
         <li><a href="/bucks.html">Bucks</a></li>
-        <li><a href="/breeding.html">2026 Kiddings</a></li>
+        <li><a href="/breeding.html">${esc(kiddings)}</a></li>
       </ul>
     </div>
     <div>

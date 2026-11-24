@@ -53,6 +53,11 @@ Does and Bucks pages it also fills elements marked `data-goats="…"` and
 `data-count="…"` from the `goats` table. The static herd markup inside those
 elements is the fallback if the database is ever unreachable.
 
+The menu and footer link to the breeding page reads "<year> Kiddings". The year
+is the latest due date among the pairings the page shows (`store admin →
+Breeding`), so adding next season's pairings moves it on with no code change;
+with nothing scheduled it reads just "Kiddings".
+
 Goat pages (`/goats/<id>.html`) have no file at all; `site/goats.js` renders
 them from the table. `/sitemap.xml` lists the pages and every shown goat.
 
