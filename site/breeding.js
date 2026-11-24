@@ -8,11 +8,14 @@
  *
  * Row shape: see `breedings` in store/schema.sql.
  */
-import { esc } from './chrome.js';
+import { esc, KIDDINGS_LABEL } from './chrome.js';
 import { smallImg, goatHref } from './goats.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
   'August', 'September', 'October', 'November', 'December'];
+
+/** A pairing the page lists: not hidden, and not one that was skipped. */
+export const isShown = (r) => !!r.show && r.status !== 'skipped';
 
 export async function loadBreeding(env) {
   const all = (await env.DB.prepare('SELECT * FROM breedings ORDER BY due_on, id').all()).results || [];
@@ -22,7 +25,7 @@ export async function loadBreeding(env) {
   return {
     total: all.length,
     // Hidden rows and pairings that were skipped stay in the admin only.
-    rows: all.filter((r) => r.show && r.status !== 'skipped'),
+    rows: all.filter(isShown),
     settings,
   };
 }
@@ -32,6 +35,40 @@ export function dueParts(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
   if (!m || +m[2] < 1 || +m[2] > 12) return null;
   return { d: String(+m[3]), m: MONTHS[+m[2] - 1] + ' ' + m[1] };
+}
+
+/**
+ * The year the schedule is for: the latest due-date year among the pairings
+ * shown on the page, or null when there are none. Last season's pairings can
+ * stay on the page; the new season's make the year move on by themselves.
+ */
+export function scheduleYear(rows) {
+  let year = null;
+  for (const r of rows || []) {
+    const m = /^(\d{4})-\d{2}-\d{2}$/.exec(String(r.due_on || ''));
+    if (m && (year === null || +m[1] > year)) year = +m[1];
+  }
+  return year;
+}
+
+/** The menu and footer link to this page: "2027 Kiddings", or plain "Kiddings" with no schedule. */
+export const kiddingsLabel = (year) => (year ? `${year} ${KIDDINGS_LABEL}` : KIDDINGS_LABEL);
+
+/**
+ * The same label for pages that do not otherwise load the schedule (every
+ * page has the menu). One small query; if the table cannot be read the menu
+ * simply drops the year rather than show a wrong one.
+ */
+export async function loadKiddingsLabel(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT MAX(due_on) AS latest FROM breedings WHERE show != 0 AND status != 'skipped'"
+    ).first();
+    return kiddingsLabel(scheduleYear([{ due_on: row && row.latest }]));
+  } catch (err) {
+    console.error('breeding schedule unavailable for the menu label: ' + err);
+    return kiddingsLabel(null);
+  }
 }
 
 const regOf = (v) => String(v || '').replace(/\s+/g, '');
