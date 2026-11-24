@@ -5,6 +5,8 @@
  * file turns those rows into the cards on /breeding.html when the page is
  * requested, so an edit is live on the next load. The static markup in
  * breeding.html is only a fallback for a database with no pairings at all.
+ * The home page's "<year> Kiddings" block and count, and the menu's label,
+ * come from the same rows (currentKiddings, scheduleYear below).
  *
  * Row shape: see `breedings` in store/schema.sql.
  */
@@ -37,6 +39,11 @@ export function dueParts(iso) {
   return { d: String(+m[3]), m: MONTHS[+m[2] - 1] + ' ' + m[1] };
 }
 
+const dueYear = (iso) => {
+  const m = /^(\d{4})-\d{2}-\d{2}$/.exec(String(iso || ''));
+  return m ? +m[1] : null;
+};
+
 /**
  * The year the schedule is for: the latest due-date year among the pairings
  * shown on the page, or null when there are none. Last season's pairings can
@@ -45,10 +52,46 @@ export function dueParts(iso) {
 export function scheduleYear(rows) {
   let year = null;
   for (const r of rows || []) {
-    const m = /^(\d{4})-\d{2}-\d{2}$/.exec(String(r.due_on || ''));
-    if (m && (year === null || +m[1] > year)) year = +m[1];
+    const y = dueYear(r.due_on);
+    if (y !== null && (year === null || y > year)) year = y;
   }
   return year;
+}
+
+/**
+ * What the home page shows of the schedule: the shown pairings due in the
+ * schedule's year (see scheduleYear), in due-date order. Last season's
+ * pairings can stay on the breeding page without muddying "2027 Kiddings".
+ */
+export function currentKiddings(rows) {
+  const year = scheduleYear(rows);
+  return { year, rows: year === null ? [] : (rows || []).filter((r) => dueYear(r.due_on) === year) };
+}
+
+/** The home page's stat label: "Kiddings due 2027", or "Kiddings due" with none to show. */
+export const kiddingsDueLabel = (year) => (year ? `Kiddings due ${year}` : 'Kiddings due');
+
+/** "2026-04-08" -> "April 8" (anything else comes back as it was typed). */
+export function dueShort(iso) {
+  const p = dueParts(iso);
+  return p ? `${p.m.replace(/ \d{4}$/, '')} ${p.d}` : String(iso || '');
+}
+
+/**
+ * The home page's grid of pairings. Goats from the herd go by their short
+ * name ("Cookie × Toby"); an outside doe or buck by the name typed in the admin.
+ */
+export function kiddingsTiles(rows, goats) {
+  if (!rows.length) {
+    return '\n      <div class="lede" style="background:var(--card);padding:22px 20px">No pairings are scheduled right now. Check back soon.</div>\n    ';
+  }
+  const byId = new Map((goats || []).map((g) => [g.id, g]));
+  const nameOf = (id, typed) => (id && byId.has(id) ? byId.get(id).name : '') || typed || '';
+  return rows.map((r) => `
+      <a href="/breeding.html" style="background:var(--card);padding:22px 20px;text-decoration:none;color:inherit;display:block">
+        <div class="eyebrow">Due ${esc(dueShort(r.due_on))}</div>
+        <div class="serif" style="font-size:19px;line-height:1.25;margin-top:10px">${esc(nameOf(r.doe_id, r.doe_name))} <span style="color:var(--muted)">×</span> ${esc(nameOf(r.sire_id, r.sire_name))}</div>
+      </a>`).join('') + '\n    ';
 }
 
 /** The menu and footer link to this page: "2027 Kiddings", or plain "Kiddings" with no schedule. */

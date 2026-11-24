@@ -5,7 +5,7 @@ on Cloudflare Workers, sharing one D1 database and one photo bucket. No
 framework and no npm dependencies.
 
 ```
-index.html          home — herd cards and counts filled from the database
+index.html          home — herd cards, counts and this year's kiddings filled from the database
 does.html           the does   (roster filled from the database)
 bucks.html          the bucks  (roster filled from the database)
 breeding.html       kidding schedule
@@ -57,6 +57,16 @@ The menu and footer link to the breeding page reads "<year> Kiddings". The year
 is the latest due date among the pairings the page shows (`store admin →
 Breeding`), so adding next season's pairings moves it on with no code change;
 with nothing scheduled it reads just "Kiddings".
+
+The home page's kiddings come from the same pairings: the stat
+(`data-count="kiddings-n"`, `"kiddings-due"`), the heading
+(`data-count="kiddings-label"`) and the grid of cards (`data-breedings="home"`).
+They cover the pairings due in that year only, so last season's can stay on
+the breeding page without being counted. A goat from the herd shows by its short name
+("Cookie × Toby"), an outside one as typed in the admin. With nothing to show
+the stat reads "0 Kiddings due" and the grid says no pairings are scheduled; if
+the database is unreachable the static markup (the last season entered by hand)
+is served as it is, so refresh it now and then.
 
 Goat pages (`/goats/<id>.html`) have no file at all; `site/goats.js` renders
 them from the table. `/sitemap.xml` lists the pages and every shown goat.

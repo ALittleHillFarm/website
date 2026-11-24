@@ -14,9 +14,12 @@
  *     <meta name="description"> and optional <meta name="share-image">
  *   - on the home, Does and Bucks pages, the herd from the database into
  *     elements marked data-goats="..." and data-count="..."
+ *   - on the home page, the current year's kiddings (breedings table) into
+ *     data-count="kiddings-..." and data-breedings="home"
+ *   - on the breeding page, the whole schedule into data-breedings
  *
- * The static files keep their last-known herd content inside those
- * elements, so if the database is unreachable a page still renders.
+ * The static files keep their last-known content inside those elements, so
+ * if the database is unreachable a page still renders.
  *
  * html_handling = "none" keeps /does.html links working without redirects,
  * but also turns off index.html resolution, so "/" is mapped here.
@@ -26,7 +29,10 @@ import {
   loadGoats, loadGoat, goatPage, rosterArticle, herdCard, numberWord, capitalise,
 } from './site/goats.js';
 import { oldShopifyAddress } from './site/redirects.js';
-import { loadBreeding, breedingCards, scheduleYear, kiddingsLabel, loadKiddingsLabel } from './site/breeding.js';
+import {
+  loadBreeding, breedingCards, scheduleYear, kiddingsLabel, loadKiddingsLabel,
+  currentKiddings, kiddingsDueLabel, kiddingsTiles,
+} from './site/breeding.js';
 
 // Pages whose herd sections come from the database.
 const HERD_PAGES = new Set(['/index.html', '/does.html', '/bucks.html']);
@@ -115,21 +121,25 @@ async function decorate(res, url, env, assetPath) {
       console.error('goats table unavailable, serving static herd: ' + err);
     }
   }
-  // The breeding page: pairings, heading and intro come from the database.
-  // With no pairings stored at all, the page's own markup is served as it is.
-  let breeding = null;
-  if (path === '/breeding.html') {
+  // The breeding schedule. The breeding page renders all of it, with its own
+  // heading and intro (with no pairings stored at all, its own markup is
+  // served as it is); the home page shows the current year's pairings.
+  let breeding = null;   // breeding.html only
+  let schedule = null;   // the shown pairings, loaded for breeding.html and the home page
+  if (path === '/breeding.html' || path === '/index.html') {
     try {
       const b = await loadBreeding(env);
-      if (b.total > 0 || Object.keys(b.settings).length) breeding = { ...b, goats: await loadGoats(env) };
+      schedule = b.rows;
+      if (path === '/breeding.html' && (b.total > 0 || Object.keys(b.settings).length)) breeding = { ...b, goats: await loadGoats(env) };
     } catch (err) {
       console.error('breeding tables unavailable, serving static page: ' + err);
     }
   }
   const setting = (key) => (breeding && breeding.settings[key]) || '';
-  // The menu's "<year> Kiddings" follows the schedule (the breeding page
-  // already has it loaded; every other page asks for just the latest date).
-  const kiddings = breeding ? kiddingsLabel(scheduleYear(breeding.rows)) : await loadKiddingsLabel(env);
+  // The menu's "<year> Kiddings" follows the schedule (the breeding and home
+  // pages already have it loaded; every other page asks for just the latest date).
+  const kiddings = schedule ? kiddingsLabel(scheduleYear(schedule)) : await loadKiddingsLabel(env);
+  const current = path === '/index.html' && schedule ? currentKiddings(schedule) : null;
 
   const does = herd ? herd.filter((g) => g.template === 'doe') : [];
   const bucks = herd ? herd.filter((g) => g.template === 'buck') : [];
@@ -190,6 +200,26 @@ async function decorate(res, url, env, assetPath) {
           const f = count[e.getAttribute('data-count')];
           if (f) e.setInnerContent(f());
         },
+      });
+  }
+
+  // The home page's kiddings: count, year and the grid of pairings. Filled
+  // whether or not the herd loaded (goats only supply the short names).
+  if (current) {
+    const counts = {
+      'kiddings-n': () => String(current.rows.length),
+      'kiddings-due': () => kiddingsDueLabel(current.year),
+      'kiddings-label': () => kiddings,
+    };
+    rewriter
+      .on('[data-count]', {
+        element(e) {
+          const f = counts[e.getAttribute('data-count')];
+          if (f) e.setInnerContent(f());
+        },
+      })
+      .on('[data-breedings="home"]', {
+        element(e) { e.setInnerContent(kiddingsTiles(current.rows, herd || []), { html: true }); },
       });
   }
 

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   breedingCards, dueParts, pedigreeLink, scheduleYear, kiddingsLabel, loadKiddingsLabel, loadBreeding,
+  currentKiddings, kiddingsDueLabel, kiddingsTiles, dueShort,
 } from '../../site/breeding.js';
 import { headerInner, footerInner } from '../../site/chrome.js';
 
@@ -56,9 +57,9 @@ function breedingsDb(t, pairings = []) {
   sqlite.exec(readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
   t.after(() => sqlite.close());
   let n = 0;
-  const add = (due_on, { status = 'planned', show = 1 } = {}) => {
-    sqlite.prepare('INSERT INTO breedings (id, doe_name, sire_name, due_on, status, show, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)')
-      .run('b' + n++, 'Doe', 'Buck', due_on, status, show, '2026-01-01', '2026-01-01');
+  const add = (due_on, { status = 'planned', show = 1, doe = 'Doe', buck = 'Buck', doe_id = null, sire_id = null } = {}) => {
+    sqlite.prepare('INSERT INTO breedings (id, doe_id, doe_name, sire_id, sire_name, due_on, status, show, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run('b' + n++, doe_id, doe, sire_id, buck, due_on, status, show, '2026-01-01', '2026-01-01');
   };
   for (const [due_on, extra] of pairings) add(due_on, extra);
   const DB = {
@@ -128,4 +129,101 @@ test('the breeding page and the menu agree on which pairings count', async (t) =
   const page = await loadBreeding(env);
   assert.equal(kiddingsLabel(scheduleYear(page.rows)), await loadKiddingsLabel(env));
   assert.equal(await loadKiddingsLabel(env), '2027 Kiddings');
+});
+
+// ---- the home page's kiddings: count, year and grid ----------------------------
+
+const herd = [
+  { id: 'cookie', name: 'Cookie' },
+  { id: 'toby', name: 'Toby', registered_name: 'Amores Farm Time Will Tell' },
+  { id: 'polaris', name: 'Polaris' },
+];
+
+test('the stat label carries the year, or none when there is nothing to show', () => {
+  assert.equal(kiddingsDueLabel(2027), 'Kiddings due 2027');
+  assert.equal(kiddingsDueLabel(null), 'Kiddings due');
+});
+
+test('due dates read as "April 8" on the home grid', () => {
+  assert.equal(dueShort('2026-04-08'), 'April 8');
+  assert.equal(dueShort('2027-12-30'), 'December 30');
+  assert.equal(dueShort('soon'), 'soon');
+  assert.equal(dueShort(''), '');
+});
+
+test('herd goats go by their short name, outside ones as typed', () => {
+  const html = kiddingsTiles([
+    { doe_id: 'cookie', doe_name: 'DLMG Farms JM Cookies & Cream', sire_id: 'toby', sire_name: 'Amores Farm Time Will Tell', due_on: '2026-04-08' },
+    { doe_id: 'gone', doe_name: 'Sold Doe', sire_id: null, sire_name: 'Outside Buck', due_on: '2026-05-01' },
+  ], herd);
+  assert.match(html, /<div class="eyebrow">Due April 8<\/div>/);
+  assert.match(html, />Cookie <span[^>]*>×<\/span> Toby</);
+  assert.ok(!html.includes('Amores Farm'), 'a linked buck shows his short name, not his registered one');
+  // A doe who has left the herd (or never was in it) is shown as typed.
+  assert.match(html, />Sold Doe <span[^>]*>×<\/span> Outside Buck</);
+  assert.equal((html.match(/href="\/breeding\.html"/g) || []).length, 2);
+});
+
+test('names typed in the admin are escaped on the home grid, and the herd may be missing', () => {
+  const html = kiddingsTiles([{ doe_id: 'cookie', doe_name: '<b>Cookie</b> & Co', sire_name: 'X"Y', due_on: '2026-04-08' }], null);
+  assert.ok(!html.includes('<b>'));
+  assert.match(html, /&lt;b&gt;Cookie&lt;\/b&gt; &amp; Co/);
+  assert.match(html, /X&quot;Y/);
+});
+
+test('with no pairings the home grid says so instead of listing any', () => {
+  const html = kiddingsTiles([], herd);
+  assert.match(html, /No pairings are scheduled right now\. Check back soon\./);
+  assert.ok(!html.includes('eyebrow'));
+});
+
+test('the home page shows only the schedule year’s pairings, and ignores hidden and skipped ones', async (t) => {
+  const env = breedingsDb(t, [['2026-04-08'], ['2026-05-01']]);
+  let cur = currentKiddings((await loadBreeding(env)).rows);
+  assert.equal(cur.year, 2026);
+  assert.equal(cur.rows.length, 2);
+
+  // Next spring's pairings go in; last spring's stay on the breeding page but not in the count.
+  env.add('2027-04-20', { doe: 'Cookie', buck: 'Toby' });
+  env.add('2027-05-02', { show: 0 });
+  env.add('2027-05-03', { status: 'skipped' });
+  const page = await loadBreeding(env);
+  assert.equal(page.rows.length, 3);
+  cur = currentKiddings(page.rows);
+  assert.equal(cur.year, 2027);
+  assert.deepEqual(cur.rows.map((r) => r.due_on), ['2027-04-20']);
+  assert.equal(kiddingsDueLabel(cur.year), 'Kiddings due 2027');
+});
+
+test('kidded pairings still count towards the year they were due', async (t) => {
+  const env = breedingsDb(t, [['2026-04-08', { status: 'kidded' }], ['2026-05-01', { status: 'bred' }]]);
+  assert.equal(currentKiddings((await loadBreeding(env)).rows).rows.length, 2);
+});
+
+test('with nothing shown the home page has no year and a count of zero', async (t) => {
+  for (const env of [breedingsDb(t, []), breedingsDb(t, [['2026-04-08', { show: 0 }], ['2026-05-01', { status: 'skipped' }]])]) {
+    const cur = currentKiddings((await loadBreeding(env)).rows);
+    assert.deepEqual(cur, { year: null, rows: [] });
+    assert.equal(kiddingsDueLabel(cur.year), 'Kiddings due');
+  }
+  assert.deepEqual(currentKiddings(null), { year: null, rows: [] });
+  assert.deepEqual(currentKiddings([{ due_on: 'soon' }]), { year: null, rows: [] });
+});
+
+test('the home page, the breeding page and the menu all agree on the year', async (t) => {
+  const env = breedingsDb(t, [['2026-04-08'], ['2027-04-20'], ['2028-04-01', { show: 0 }]]);
+  const page = await loadBreeding(env);
+  assert.equal(currentKiddings(page.rows).year, scheduleYear(page.rows));
+  assert.equal(kiddingsLabel(currentKiddings(page.rows).year), await loadKiddingsLabel(env));
+});
+
+test('the home page carries every marker the worker fills (it cannot be run in Node, so guard the contract)', () => {
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  for (const marker of ['data-count="kiddings-n"', 'data-count="kiddings-due"', 'data-count="kiddings-label"', 'data-breedings="home"']) {
+    assert.equal(html.split(marker).length - 1, 1, `${marker} appears exactly once`);
+  }
+  // The fallback is self-consistent: its count is the number of its cards.
+  const grid = html.split('data-breedings="home"')[1].split('</section>')[0];
+  const n = +/data-count="kiddings-n">(\d+)</.exec(html)[1];
+  assert.equal((grid.match(/<div class="eyebrow">Due /g) || []).length, n);
 });
