@@ -28,7 +28,7 @@ import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
 import {
   isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer, importShopifyCustomers,
-  rememberOrderCustomer,
+  rememberOrderCustomer, customerProfile,
 } from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
@@ -2575,7 +2575,17 @@ async function adminBreedings(request, env) {
 
 async function adminCustomers(request, env) {
   if (request.method === 'GET') {
-    return json(await listCustomers(env.DB, { detail: new URL(request.url).searchParams.get('detail') === '1' }));
+    const q = new URL(request.url).searchParams;
+    // One customer's page: their record, orders here, and old Shopify purchases.
+    if (q.get('email')) {
+      try {
+        return json(await customerProfile(env.DB, q.get('email')));
+      } catch (err) {
+        if (err instanceof CustomerError) return json({ error: err.message }, err.status);
+        throw err;
+      }
+    }
+    return json(await listCustomers(env.DB, { detail: q.get('detail') === '1' }));
   }
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
   const b = await request.json().catch(() => null);
