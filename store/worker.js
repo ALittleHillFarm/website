@@ -26,7 +26,10 @@
 import catalog from './products.json';
 import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
-import { isEstablishedCustomer, importPurchaseHistory } from './lib/customers.js';
+import {
+  isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer, importShopifyCustomers,
+  rememberOrderCustomer,
+} from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
 
@@ -595,6 +598,11 @@ async function apiCheckout(request, env, ctx) {
     )
     .run();
 
+  // A new customer joins the customer list the moment their order exists. A
+  // signed-in customer already has a record (updated above); a guest's typed
+  // email only ever adds a missing one, so it cannot edit someone else's.
+  if (!customer) await saveOrderCustomer(env, { email, name, phone }, { fillBlanks: false });
+
   // Cash never touches Stripe, so no webhook will announce it — do it here.
   if (method === 'cash') {
     ctx.waitUntil(notifyNewOrder(env, saleId));
@@ -912,6 +920,16 @@ function timingSafeEqual(a, b) {
 // ---------------------------------------------------------------------------
 // Customers
 // ---------------------------------------------------------------------------
+
+/** Add whoever an order was entered for to the customer list. The order is
+ *  already saved by now, so a problem here is logged, never allowed to fail it. */
+async function saveOrderCustomer(env, person, options) {
+  try {
+    await rememberOrderCustomer(env.DB, person, options);
+  } catch (err) {
+    console.error('could not add the customer to the list: ' + (err && err.message ? err.message : err));
+  }
+}
 
 const getCustomer = (env, email) =>
   env.DB.prepare('SELECT * FROM customers WHERE email = ?')
@@ -2553,6 +2571,32 @@ async function adminBreedings(request, env) {
   return json({ error: 'unknown action' }, 400);
 }
 
+// ---- customers ------------------------------------------------------------------
+
+async function adminCustomers(request, env) {
+  if (request.method === 'GET') {
+    return json(await listCustomers(env.DB, { detail: new URL(request.url).searchParams.get('detail') === '1' }));
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+  const b = await request.json().catch(() => null);
+  if (!b || typeof b !== 'object') return json({ error: 'send the customer as JSON' }, 400);
+  try {
+    if (b.action === 'add') return json({ ok: true, customer: await addCustomer(env.DB, b) });
+    if (b.action === 'update') return json({ ok: true, customer: await updateCustomer(env.DB, b) });
+    if (b.action === 'delete') return json({ ok: true, ...(await deleteCustomer(env.DB, b.email)) });
+    // Shopify's customer export, as text. Only writes when dry_run is explicitly false.
+    if (b.action === 'import') {
+      return json({ ok: true, ...(await importShopifyCustomers(env.DB, b.csv, {
+        includeNeverOrdered: b.include_never_ordered === true, dryRun: b.dry_run !== false,
+      })) });
+    }
+  } catch (err) {
+    if (err instanceof CustomerError) return json({ error: err.message }, err.status);
+    throw err;
+  }
+  return json({ error: 'unknown action' }, 400);
+}
+
 // ---- location (consignment) sales reports -----------------------------------
 
 async function loadReport(env, id) {
@@ -3108,13 +3152,8 @@ async function adminRoutes(path, request, env) {
   if (path === '/api/admin/location-reports') return adminLocationReports(request, env);
   if (path === '/api/admin/invoice' && request.method === 'POST') return adminInvoices(request, env);
 
-  // Everyone we know, for the invoice form's customer picker.
-  if (path === '/api/admin/customers') {
-    const rows = (await env.DB.prepare(
-      'SELECT email, name, phone, tax_exempt, trusted FROM customers ORDER BY name COLLATE NOCASE, email'
-    ).all()).results || [];
-    return json({ customers: rows });
-  }
+  // Everyone we know: the invoice form's customer picker and the Customers tab.
+  if (path === '/api/admin/customers') return adminCustomers(request, env);
 
   // A customer's most recent distinct products, newest first — this store's
   // own orders plus history carried over from Shopify (purchase_history).
@@ -3477,6 +3516,10 @@ async function adminRoutes(path, request, env) {
         b.notes || null
       )
       .run();
+
+    // With an email, the buyer joins the customer list (name and phone fill in
+    // if we already had them without). Without one there is nothing to key them by.
+    await saveOrderCustomer(env, { email: b.customer_email, name: b.customer_name, phone: b.customer_phone }, { fillBlanks: true });
 
     await recordSaleMoves(env, id);
     return json({ ok: true, sale_id: id });

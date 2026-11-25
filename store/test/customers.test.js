@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
-import { isEstablishedCustomer, importPurchaseHistory } from '../lib/customers.js';
+import {
+  isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer,
+  parseCsv, tidyPhone, shopifyCustomers, importShopifyCustomers, rememberOrderCustomer,
+} from '../lib/customers.js';
 
 // Wrangler accepts JSON imports without attributes; Node requires attributes.
 // Load the actual request handler, with only those two imports adapted.
@@ -246,4 +249,388 @@ test('history import requires admin authentication and rejects cross-site change
   const response = await worker.fetch(makeRequest({ authorization }), env, {});
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { imported_lines: 1, customers: 1 });
+});
+
+// ---- the admin's customer list ------------------------------------------------
+
+const rejectsWith = (promise, status, message) =>
+  assert.rejects(promise, (e) => e instanceof CustomerError && e.status === status && (!message || message.test(e.message)));
+
+test('the list shows everyone by name, nameless customers by email', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare('INSERT INTO customers (email, name, created_at) VALUES (?,?,?)').run('zed@example.com', null, '2026-02-01');
+  sqlite.prepare('INSERT INTO customers (email, name, created_at) VALUES (?,?,?)').run('amy@example.com', 'amy Adams', '2026-02-01');
+  const { customers } = await listCustomers(db);
+  assert.deepEqual(customers.map((c) => c.email), ['amy@example.com', 'returning@example.com', 'zed@example.com']);
+  // The invoice picker reads these.
+  for (const key of ['email', 'name', 'phone', 'tax_exempt', 'trusted']) assert.ok(key in customers[0]);
+});
+
+test('the detailed list counts paid orders and Shopify lines, and finds history with no customer row', async (t) => {
+  const { db, sqlite } = database(t);
+  sale(sqlite, 'captured');
+  sale(sqlite, 'recorded', { email: 'RETURNING@example.com' });
+  sale(sqlite, 'captured', { refunded: 5000 });   // fully refunded: not a paid order
+  sale(sqlite, 'awaiting_cash');                  // not paid yet
+  history(sqlite); history(sqlite);
+  history(sqlite, 'kim@example.com'); history(sqlite, 'Kim@Example.com');
+  history(sqlite, 'Returning@example.com');       // same person, other spelling: not "missing"
+  const { customers, history_only } = await listCustomers(db, { detail: true });
+  assert.equal(customers[0].paid_orders, 2);
+  assert.equal(customers[0].history_lines, 3);
+  assert.deepEqual(history_only.map((h) => [h.email, h.lines]), [['Kim@Example.com', 1], ['kim@example.com', 1]]);
+  assert.equal(history_only[0].last_purchase, '2025-01-01');
+});
+
+test('adding a customer cleans what was typed and stores the flags', async (t) => {
+  const { db } = database(t);
+  const c = await addCustomer(db, { email: '  Kim@Example.COM ', name: '  Kim   Smith ', phone: ' 208 555 0101 ',
+    tax_exempt: true, exemption_ref: 'ST-101 on file', trusted: true, notes: 'Pays at pickup', bogus: 'dropped' }, '2026-11-24T00:00:00Z');
+  assert.deepEqual({ ...c }, { email: 'kim@example.com', name: 'Kim Smith', phone: '208 555 0101', tax_exempt: 1,
+    exemption_ref: 'ST-101 on file', trusted: 1, notes: 'Pays at pickup', created_at: '2026-11-24T00:00:00Z' });
+  const plain = await addCustomer(db, { email: 'bri@example.com', name: 'Bri' });
+  assert.equal(plain.tax_exempt, 0);
+  assert.equal(plain.trusted, 0);
+  assert.equal(plain.phone, null);
+});
+
+test('adding needs a real email and a name, and never overwrites someone we have', async (t) => {
+  const { db, sqlite } = database(t);
+  await rejectsWith(addCustomer(db, { email: 'not an email', name: 'X' }), 400, /email/);
+  await rejectsWith(addCustomer(db, { email: '', name: 'X' }), 400, /email/);
+  await rejectsWith(addCustomer(db, { email: 'new@example.com', name: '   ' }), 400, /name/);
+  sqlite.prepare("UPDATE customers SET trusted = 1 WHERE email = 'returning@example.com'").run();
+  await rejectsWith(addCustomer(db, { email: 'Returning@Example.com', name: 'Someone Else' }), 409, /already/);
+  const row = sqlite.prepare("SELECT name, trusted FROM customers WHERE email = 'returning@example.com'").get();
+  assert.deepEqual({ ...row }, { name: 'Returning Customer', trusted: 1 });
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+});
+
+test('editing changes details and flags but never the email, orders or history', async (t) => {
+  const { db, sqlite } = database(t);
+  sale(sqlite, 'captured'); history(sqlite);
+  const c = await updateCustomer(db, { email: 'RETURNING@example.com', name: 'Returning C.', phone: '208-555-0102',
+    tax_exempt: true, exemption_ref: 'ST-101 2026-05', trusted: true, notes: 'Farm stand' });
+  assert.deepEqual({ ...c, created_at: undefined }, { email: 'returning@example.com', name: 'Returning C.', phone: '208-555-0102',
+    tax_exempt: 1, exemption_ref: 'ST-101 2026-05', trusted: 1, notes: 'Farm stand', created_at: undefined });
+  // Turning flags off and blanking optional fields works too.
+  const cleared = await updateCustomer(db, { email: 'returning@example.com', name: '', tax_exempt: false, trusted: false });
+  assert.deepEqual([cleared.name, cleared.phone, cleared.tax_exempt, cleared.trusted, cleared.notes], [null, null, 0, 0, null]);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales').get().n, 1);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM purchase_history').get().n, 1);
+  await rejectsWith(updateCustomer(db, { email: 'nobody@example.com', name: 'N' }), 404);
+  await rejectsWith(updateCustomer(db, { email: 'oops', name: 'N' }), 400, /email/);
+});
+
+test('a trusted flag set in the admin is what the checkout reads', async (t) => {
+  const { db } = database(t);
+  const c = await addCustomer(db, { email: 'friend@example.com', name: 'Friend', trusted: true });
+  assert.equal(await isEstablishedCustomer(db, c.email, c), true);
+  const off = await updateCustomer(db, { email: c.email, name: 'Friend', trusted: false });
+  assert.equal(await isEstablishedCustomer(db, c.email, off), false);
+});
+
+test('removing a customer deletes only the record; orders and history stay', async (t) => {
+  const { db, sqlite } = database(t);
+  sale(sqlite, 'captured'); history(sqlite);
+  assert.deepEqual(await deleteCustomer(db, ' Returning@Example.com '), { removed: 'returning@example.com' });
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales').get().n, 1);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM purchase_history').get().n, 1);
+  // Their past purchases still make them a repeat customer.
+  assert.equal(await isEstablishedCustomer(db, 'returning@example.com', null), true);
+  await rejectsWith(deleteCustomer(db, 'returning@example.com'), 404);
+  await rejectsWith(deleteCustomer(db, ''), 400);
+});
+
+async function adminCall(db, method, body, { path = '/api/admin/customers', headers = {} } = {}) {
+  const env = { DB: db, ADMIN_PASSWORD: 'test-admin-password' };
+  const authorization = 'Basic ' + Buffer.from('admin:test-admin-password').toString('base64');
+  const response = await worker.fetch(new Request('https://store.example.com' + path, {
+    method, headers: { 'content-type': 'application/json', authorization, ...headers },
+    body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+  }), env, {});
+  return { response, body: await response.json() };
+}
+
+test('the customer endpoint is admin-only and rejects cross-site changes', async (t) => {
+  const { db, sqlite } = database(t);
+  const env = { DB: db, ADMIN_PASSWORD: 'test-admin-password' };
+  const bare = (method, body) => worker.fetch(new Request('https://store.example.com/api/admin/customers', {
+    method, headers: { 'content-type': 'application/json' }, body }), env, {});
+  assert.equal((await bare('GET')).status, 401);
+  assert.equal((await bare('POST', JSON.stringify({ action: 'delete', email: 'returning@example.com' }))).status, 401);
+  const cross = await adminCall(db, 'POST', { action: 'delete', email: 'returning@example.com' }, { headers: { origin: 'https://other.example.com' } });
+  assert.equal(cross.response.status, 403);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+});
+
+test('add, edit and remove a customer through the admin endpoint', async (t) => {
+  const { db, sqlite } = database(t);
+  let r = await adminCall(db, 'POST', { action: 'add', email: 'bri@example.com', name: 'Bri Jones', phone: '208-555-0103' });
+  assert.equal(r.response.status, 200);
+  assert.equal(r.body.customer.email, 'bri@example.com');
+  r = await adminCall(db, 'POST', { action: 'add', email: 'bri@example.com', name: 'Again' });
+  assert.equal(r.response.status, 409);
+  r = await adminCall(db, 'POST', { action: 'update', email: 'bri@example.com', name: 'Bri J.', trusted: true });
+  assert.equal(r.response.status, 200);
+  assert.equal(sqlite.prepare("SELECT name, trusted FROM customers WHERE email = 'bri@example.com'").get().trusted, 1);
+  r = await adminCall(db, 'GET', undefined, { path: '/api/admin/customers?detail=1' });
+  assert.deepEqual(r.body.customers.map((c) => c.email), ['bri@example.com', 'returning@example.com']);
+  assert.ok('history_only' in r.body && 'paid_orders' in r.body.customers[0]);
+  r = await adminCall(db, 'GET', undefined);
+  assert.ok(!('history_only' in r.body) && !('paid_orders' in r.body.customers[0]));
+  r = await adminCall(db, 'POST', { action: 'delete', email: 'bri@example.com' });
+  assert.deepEqual(r.body, { ok: true, removed: 'bri@example.com' });
+  r = await adminCall(db, 'POST', { action: 'delete', email: 'bri@example.com' });
+  assert.equal(r.response.status, 404);
+  assert.equal((await adminCall(db, 'POST', { action: 'explode' })).response.status, 400);
+  assert.equal((await adminCall(db, 'POST', 'not json')).response.status, 400);
+  assert.equal((await adminCall(db, 'PUT', {})).response.status, 405);
+  assert.equal((await adminCall(db, 'POST', { action: 'add', email: 'bad', name: 'X' })).response.status, 400);
+});
+
+// ---- importing Shopify's customer export ---------------------------------------
+
+// Shaped like the real export (BOM, apostrophe-guarded ids and phones, quoting), with invented people.
+const SHOPIFY_CSV = '\uFEFF' + [
+  'Customer ID,First Name,Last Name,Email,Default Address Phone,Phone,Total Spent,Total Orders,Note,Tax Exempt,Tags',
+  "'1,Pat,Example,Pat@Example.com,,'+12085550101,310.58,4,,no,",
+  `'2,Sam,"O'Neil, Jr.",sam@example.com,"'(208) 555-0102",,3068.10,1,,yes,newsletter`,
+  "'3,Newsletter,Only,news@example.com,,,0.00,0,,no,newsletter",
+  "'4,Pat,Example,second-pat@example.com,,,0.00,0,,no,Login with Shop",
+  "'5,Lee,Nomail,,,'+12085550103,50.00,2,,no,",
+  "'6,,,ghost@example.com,,,20.00,1,,no,",
+  "'7,Returning,Customer,RETURNING@example.com,,'+12085550104,80.00,3,,no,",
+  "'8,Pat,Dupe,pat@example.com,,,5.00,1,,no,",
+].join('\r\n') + '\r\n';
+
+test('the CSV reader handles quotes, commas and line breaks inside quotes, a BOM and CRLF', () => {
+  assert.deepEqual(parseCsv('\uFEFFa,b\r\n"x, ""y""","line\nbreak"\r\n\r\nlast,'), [['a', 'b'], ['x, "y"', 'line\nbreak'], ['last', '']]);
+  assert.deepEqual(parseCsv('5" pipe,ok'), [['5" pipe', 'ok']]);
+  assert.deepEqual(parseCsv(''), []);
+});
+
+test('phone numbers read the way the farm writes them', () => {
+  assert.equal(tidyPhone("'+12085550101"), '208-555-0101');
+  assert.equal(tidyPhone('(208) 555-0102'), '208-555-0102');
+  assert.equal(tidyPhone('2085550103'), '208-555-0103');
+  assert.equal(tidyPhone(''), '');
+  assert.equal(tidyPhone('+44 20 7946 0958'), '+44 20 7946 0958');
+});
+
+test('the export is read for people who have ordered and have an email', () => {
+  const r = shopifyCustomers(SHOPIFY_CSV);
+  assert.equal(r.rows, 8);
+  assert.deepEqual(r.people.map((p) => [p.email, p.name, p.phone, p.orders]), [
+    ['pat@example.com', 'Pat Example', '208-555-0101', 4],         // the account with orders wins the duplicate
+    ['sam@example.com', "Sam O'Neil, Jr.", '208-555-0102', 1],
+    ['ghost@example.com', null, null, 1],
+    ['returning@example.com', 'Returning Customer', '208-555-0104', 3],
+  ]);
+  assert.equal(r.duplicates, 1);
+  assert.equal(r.never_ordered, 2);                                 // newsletter signups and "Login with Shop" accounts
+  assert.deepEqual(r.no_email, [{ name: 'Lee Nomail', orders: 2 }]); // cannot be keyed without an email
+  assert.deepEqual(r.tax_exempt, [{ name: "Sam O'Neil, Jr.", email: 'sam@example.com' }]);
+  assert.equal(shopifyCustomers(SHOPIFY_CSV, { includeNeverOrdered: true }).people.length, 6);
+});
+
+test('something that is not a customer export is refused', () => {
+  for (const bad of ['', '   ', 'name,total\nx,1', 'Name,Email\nx,y@example.com']) {
+    assert.throws(() => shopifyCustomers(bad), CustomerError);
+  }
+  assert.throws(() => shopifyCustomers(null), CustomerError);
+});
+
+test('a dry run reports and writes nothing', async (t) => {
+  const { db, sqlite } = database(t);
+  const r = await importShopifyCustomers(db, SHOPIFY_CSV);
+  assert.equal(r.dry_run, true);
+  assert.deepEqual(r.add.map((a) => a.email), ['pat@example.com', 'sam@example.com', 'ghost@example.com']);
+  assert.equal(r.already, 0);
+  assert.equal(r.filled, 1);           // returning@example.com exists with a name but no phone
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+});
+
+test('importing adds missing people, fills blanks only, and never touches flags or other tables', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare("UPDATE customers SET trusted = 1, tax_exempt = 1, exemption_ref = 'ST-101', name = 'Kept Name', notes = 'mine' WHERE email = 'returning@example.com'").run();
+  sale(sqlite, 'captured'); history(sqlite);
+  const r = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false, now: '2026-11-24T00:00:00Z' });
+  assert.equal(r.dry_run, false);
+  const rows = Object.fromEntries(sqlite.prepare('SELECT * FROM customers').all().map((c) => [c.email, { ...c }]));
+  assert.deepEqual(Object.keys(rows).sort(), ['ghost@example.com', 'pat@example.com', 'returning@example.com', 'sam@example.com']);
+  // The existing customer keeps their name, flags and notes; only the blank phone is filled.
+  assert.deepEqual([rows['returning@example.com'].name, rows['returning@example.com'].phone, rows['returning@example.com'].trusted,
+    rows['returning@example.com'].tax_exempt, rows['returning@example.com'].exemption_ref, rows['returning@example.com'].notes],
+  ['Kept Name', '208-555-0104', 1, 1, 'ST-101', 'mine']);
+  // New people start with no special treatment — even Sam, whom Shopify had as tax-exempt.
+  for (const e of ['pat@example.com', 'sam@example.com', 'ghost@example.com']) {
+    assert.deepEqual([rows[e].trusted, rows[e].tax_exempt, rows[e].exemption_ref, rows[e].created_at], [0, 0, null, '2026-11-24T00:00:00Z']);
+  }
+  assert.equal(rows['sam@example.com'].name, "Sam O'Neil, Jr.");
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales').get().n, 1);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM purchase_history').get().n, 1);
+});
+
+test('running the same import again changes nothing', async (t) => {
+  const { db, sqlite } = database(t);
+  await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
+  const before = JSON.stringify(sqlite.prepare('SELECT * FROM customers ORDER BY email').all());
+  const again = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
+  assert.deepEqual([again.add.length, again.filled, again.already], [0, 0, 4]);
+  assert.equal(JSON.stringify(sqlite.prepare('SELECT * FROM customers ORDER BY email').all()), before);
+});
+
+test('an existing customer whose email Shopify capitalizes differently is not added twice', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare('INSERT INTO customers (email, name, created_at) VALUES (?,?,?)').run('pat@example.com', 'Pat', '2026-01-01');
+  const r = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
+  assert.ok(!r.add.some((a) => a.email === 'pat@example.com'));
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM customers WHERE email = 'pat@example.com'").get().n, 1);
+  assert.equal(sqlite.prepare("SELECT phone FROM customers WHERE email = 'pat@example.com'").get().phone, '208-555-0101');
+});
+
+test('the import endpoint is a dry run unless told otherwise', async (t) => {
+  const { db, sqlite } = database(t);
+  let r = await adminCall(db, 'POST', { action: 'import', csv: SHOPIFY_CSV });
+  assert.equal(r.response.status, 200);
+  assert.equal(r.body.dry_run, true);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+  r = await adminCall(db, 'POST', { action: 'import', csv: SHOPIFY_CSV, dry_run: false, include_never_ordered: true });
+  assert.equal(r.body.dry_run, false);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 6);
+  r = await adminCall(db, 'POST', { action: 'import', csv: 'not,a,customer,file\n1,2,3,4' });
+  assert.equal(r.response.status, 400);
+  assert.match(r.body.error, /Shopify/);
+});
+
+// ---- whoever an order is entered for joins the customer list ----------------------
+
+/** A checkout from a visitor, with Stripe answered by a stand-in. */
+async function checkoutAs(db, { email, name = 'New Person', phone = '208-555-0150', method = 'card', cookie, stripe = 'ok' } = {}) {
+  const env = { DB: db, SESSION_SECRET: 'test-only-secret', STRIPE_SECRET_KEY: 'sk_test_stand_in' };
+  const headers = { 'content-type': 'application/json' };
+  if (cookie) headers.cookie = cookie;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => stripe === 'ok'
+    ? new Response(JSON.stringify({ id: 'cs_test_1', url: 'https://pay.example/session', payment_intent: 'pi_test_1' }))
+    : new Response(JSON.stringify({ error: { message: 'down' } }), { status: 500 });
+  const work = [];
+  try {
+    const response = await worker.fetch(new Request('https://store.example.com/api/checkout', {
+      method: 'POST', headers,
+      body: JSON.stringify({ items: [{ id: 'kelp', qty: 1 }], payment_method: method, email, name, phone, pickup: 'farm', terms_ack: true }),
+    }), env, { waitUntil(p) { work.push(p); } });
+    await Promise.all(work);
+    return { response, body: await response.json() };
+  } catch (error) {
+    return { error };   // Stripe being down surfaces as an exception from the worker
+  } finally { globalThis.fetch = realFetch; }
+}
+const customerRow = (sqlite, email) => { const r = sqlite.prepare('SELECT * FROM customers WHERE email = ?').get(email); return r ? { ...r } : null; };
+
+test('a guest who orders for the first time is added to the customer list', async (t) => {
+  const { db, sqlite } = database(t);
+  const { response, body } = await checkoutAs(db, { email: 'newbie@example.com', name: 'Nora Newbie', phone: '208-555-0150' });
+  assert.equal(response.status, 200);
+  assert.ok(body.sale_id);
+  const c = customerRow(sqlite, 'newbie@example.com');
+  assert.deepEqual([c.name, c.phone, c.trusted, c.tax_exempt, c.exemption_ref], ['Nora Newbie', '208-555-0150', 0, 0, null]);
+  assert.equal(sqlite.prepare('SELECT customer_email FROM sales WHERE id = ?').get(body.sale_id).customer_email, 'newbie@example.com');
+});
+
+test('a second order from the same guest does not add them twice or change them', async (t) => {
+  const { db, sqlite } = database(t);
+  await checkoutAs(db, { email: 'newbie@example.com', name: 'Nora Newbie' });
+  await checkoutAs(db, { email: 'NEWBIE@example.com', name: 'A Different Name', phone: '999' });
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM customers WHERE email LIKE 'newbie%'").get().n, 1);
+  assert.equal(customerRow(sqlite, 'newbie@example.com').name, 'Nora Newbie');
+});
+
+test('a guest typing an existing customer’s email cannot edit that customer', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare("UPDATE customers SET phone = NULL, trusted = 1, tax_exempt = 1 WHERE email = 'returning@example.com'").run();
+  await checkoutAs(db, { email: 'returning@example.com', name: 'Mallory', phone: '666-0000' });
+  const c = customerRow(sqlite, 'returning@example.com');
+  assert.deepEqual([c.name, c.phone, c.trusted, c.tax_exempt], ['Returning Customer', null, 1, 1]);
+});
+
+test('a signed-in customer keeps one record, updated with the details they just used', async (t) => {
+  const { db, sqlite } = database(t);
+  const cookie = await session('returning@example.com', 'test-only-secret');
+  await checkoutAs(db, { email: 'returning@example.com', name: 'Returning C.', phone: '208-555-0188', cookie });
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+  const c = customerRow(sqlite, 'returning@example.com');
+  assert.deepEqual([c.name, c.phone], ['Returning C.', '208-555-0188']);
+});
+
+test('an order that is turned away adds nobody', async (t) => {
+  const { db, sqlite } = database(t);
+  // Cash at pickup needs an established, signed-in customer: this guest is refused.
+  const r = await checkoutAs(db, { email: 'nope@example.com', method: 'cash' });
+  assert.equal(r.response.status, 401);
+  assert.equal(customerRow(sqlite, 'nope@example.com'), null);
+  const bad = await checkoutAs(db, { email: 'not-an-email' });
+  assert.equal(bad.response.status, 400);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+});
+
+test('the customer is kept even if Stripe cannot start the payment, and a list problem never loses an order', async (t) => {
+  const { db, sqlite } = database(t);
+  const down = await checkoutAs(db, { email: 'later@example.com', stripe: 'down' });
+  assert.match(down.error.message, /Stripe/);
+  assert.ok(customerRow(sqlite, 'later@example.com'));          // they did enter an order
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM sales WHERE customer_email = 'later@example.com'").get().n, 1);
+
+  // If saving the customer itself fails, the order still goes through.
+  const broken = { ...db, prepare(sql) { if (/INTO customers/.test(sql)) throw new Error('customers table locked'); return db.prepare(sql); } };
+  const log = console.error; console.error = () => {};
+  try {
+    const ok = await checkoutAs(broken, { email: 'unlucky@example.com' });
+    assert.equal(ok.response.status, 200);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM sales WHERE customer_email = 'unlucky@example.com'").get().n, 1);
+  } finally { console.error = log; }
+});
+
+test('a sale recorded by hand adds its buyer to the list when an email is given', async (t) => {
+  const { db, sqlite } = database(t);
+  const record = (extra) => adminCall(db, 'POST', { subtotal_cents: 1000, category: 'milk', payment_method: 'cash', ...extra }, { path: '/api/admin/record' });
+  let r = await record({ customer_name: 'Milk Buyer', customer_email: ' Milk@Example.com ', customer_phone: '208-555-0160' });
+  assert.equal(r.response.status, 200);
+  const c = customerRow(sqlite, 'milk@example.com');
+  assert.deepEqual([c.name, c.phone, c.trusted, c.tax_exempt], ['Milk Buyer', '208-555-0160', 0, 0]);
+  // No email, or one that is not an email: the sale records, nobody is added.
+  assert.equal((await record({ customer_name: 'Walk-up' })).response.status, 200);
+  assert.equal((await record({ customer_name: 'Typo', customer_email: 'typo' })).response.status, 200);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 2);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM sales WHERE channel = 'direct'").get().n, 3);
+  // An existing customer with no phone gets the phone filled in; their flags and name stand.
+  sqlite.prepare("UPDATE customers SET trusted = 1, phone = NULL WHERE email = 'returning@example.com'").run();
+  await record({ customer_name: 'Someone Else', customer_email: 'returning@example.com', customer_phone: '208-555-0161' });
+  const e = customerRow(sqlite, 'returning@example.com');
+  assert.deepEqual([e.name, e.phone, e.trusted], ['Returning Customer', '208-555-0161', 1]);
+});
+
+test('an invoice written for a new email adds that customer', async (t) => {
+  const { db, sqlite } = database(t);
+  const r = await adminCall(db, 'POST', {
+    action: 'create', send: false, customer: { email: 'Bulk@Example.com', name: 'Bulk Buyer', phone: '208-555-0170' }, pickup: 'farm',
+    lines: [{ name: 'Freight', qty: 1, price_cents: 2500, taxable: false }],
+  }, { path: '/api/admin/invoice' });
+  assert.equal(r.response.status, 200);
+  const c = customerRow(sqlite, 'bulk@example.com');
+  assert.deepEqual([c.name, c.phone, c.trusted], ['Bulk Buyer', '208-555-0170', 0]);
+});
+
+test('remembering an order’s customer: adds once, fills blanks only when allowed, ignores bad emails', async (t) => {
+  const { db, sqlite } = database(t);
+  assert.equal(await rememberOrderCustomer(db, { email: 'x@example.com', name: 'X' }), true);
+  assert.equal(await rememberOrderCustomer(db, { email: 'X@example.com', name: 'Y', phone: '1' }), false);
+  assert.deepEqual([customerRow(sqlite, 'x@example.com').name, customerRow(sqlite, 'x@example.com').phone], ['X', null]);
+  assert.equal(await rememberOrderCustomer(db, { email: 'x@example.com', name: 'Y', phone: '208-555-0101' }, { fillBlanks: true }), false);
+  assert.deepEqual([customerRow(sqlite, 'x@example.com').name, customerRow(sqlite, 'x@example.com').phone], ['X', '208-555-0101']);
+  assert.equal(await rememberOrderCustomer(db, { email: '', name: 'Nobody' }), false);
+  assert.equal(await rememberOrderCustomer(db, { email: 'bad', name: 'Nobody' }, { fillBlanks: true }), false);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 2);
 });
