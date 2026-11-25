@@ -329,6 +329,13 @@ it was emailed or not, with a Copy pay link button. The customer's email has a
 through Stripe (one price, no discount), plus the farm's email and phone
 (`config.json` → `email.reply_to`, `contact.phone`) and what happens after they pay.
 
+**Sizes.** Every size of a product is its own product: same name, a different
+*Size* (40 lbs, 1000 lb tote, 2000 lb tote), each with its own price, cost, SKU,
+stock count and **Show in store** setting. So a 40 lb bag can be on the website
+while the totes are invoice-only. The store lists each shown size as its own
+card (name · size). To add a size, create a new product with the same name and
+the new size (*New product*, or *Create a new item* on an invoice).
+
 **Items.** *Find an item to add* matches any part of a name, size or SKU and
 includes items hidden from the website (marked so). If what you need is not
 there, the last result is *Create “…” as a new item*: name, size, price, optional

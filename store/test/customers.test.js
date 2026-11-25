@@ -833,3 +833,27 @@ test('a new item can be hidden from the store website yet still go on an invoice
   assert.equal(shown.response.status, 200);
   assert.ok(names(await storefront()).includes(id), 'now on the public store');
 });
+
+// ---- one product, several sizes ------------------------------------------------------
+
+test('a product can be sold in several sizes, each with its own price, cost and visibility', async (t) => {
+  const { db } = database(t);
+  const make = async (unit, price, cost, active) => (await adminCall(db, 'POST', { action: 'create',
+    fields: { name: 'Organic Olive Oil Layer Feed', unit, price_cents: price, cost_cents: cost, taxable: true, active } }, { path: '/api/admin/products' })).body.id;
+  const bag = await make('40 lbs', 5300, 4400, true);
+  const tote = await make('1000 lb tote', 72500, 65000, false);
+  const big = await make('2000 lb tote', 140000, 128000, false);
+  assert.equal(new Set([bag, tote, big]).size, 3, 'each size gets its own id');
+  // The public store shows only the size that is switched on.
+  const store = JSON.stringify(await (await worker.fetch(new Request('https://store.example.com/api/catalog'), { DB: db }, {})).json());
+  assert.ok(store.includes(bag) && !store.includes(tote) && !store.includes(big));
+  // All three are on the admin's list and each invoices at its own price.
+  const list = (await adminCall(db, 'GET', undefined, { path: '/api/admin/products' })).body.products.filter((p) => p.name === 'Organic Olive Oil Layer Feed');
+  assert.deepEqual(list.map((p) => [p.unit, p.price_cents, p.active]).sort(), [['1000 lb tote', 72500, false], ['2000 lb tote', 140000, false], ['40 lbs', 5300, true]]);
+  for (const [id, expected] of [[bag, 5300], [tote, 72500], [big, 140000]]) {
+    const r = await adminCall(db, 'POST', { action: 'preview', customer: { email: '', name: 'Size Buyer', phone: '' }, pickup: 'farm', lines: [{ product_id: id, qty: 1 }] }, { path: '/api/admin/invoice' });
+    assert.equal(r.body.card.subtotal_cents, expected);
+  }
+  // Two of the same size would not collide either (the second gets a numbered id).
+  assert.notEqual(await make('40 lbs', 5400, 4400, false), bag);
+});
