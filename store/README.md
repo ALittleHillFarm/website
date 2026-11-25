@@ -329,6 +329,21 @@ it was emailed or not, with a Copy pay link button. The customer's email has a
 through Stripe (one price, no discount), plus the farm's email and phone
 (`config.json` → `email.reply_to`, `contact.phone`) and what happens after they pay.
 
+**Items.** *Find an item to add* matches any part of a name, size or SKU and
+includes items hidden from the website (marked so). If what you need is not
+there, the last result is *Create “…” as a new item*: name, size, price, optional
+cost, whether to charge sales tax, and **Show it on the store website** — left
+unticked (the default) it stays off the website but can go on any invoice. The
+same switch is the **Show in store** tick on each row of Admin → Products, which
+is also where to create items outside an invoice (*New product*), add photos and
+descriptions, and track stock. When you pick a customer, *Recent purchases* offers
+what they bought before that is still an item; below it, *Bought before, but not
+in your item list* offers their old Shopify purchases that match no current item
+(a tote that was never added, a discontinued product) as typed-in lines, with
+**Add it to your items** to make it a real item. A customer who only exists in old
+Shopify purchases has no name on file (those keep only the email): type it, or
+import the Shopify customer list from the Customers tab to fill names in.
+
 Every unpaid invoice on the Orders tab shows its email state: an amber **Not
 sent yet** (with a **Send now** button), *Sent Oct 26 3:12 PM (2 times)*, or a
 red **Email failed: reason**. Those that the customer has not received sort to

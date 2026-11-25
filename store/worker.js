@@ -3217,7 +3217,7 @@ async function adminRoutes(path, request, env) {
 
   if (path === '/api/admin/customer-history') {
     const email = cleanEmail(new URL(request.url).searchParams.get('email'));
-    if (!email) return json({ items: [] });
+    if (!email) return json({ items: [], other: [] });
     const seen = new Map();
     const take = (id, at, qty, price) => {
       if (!id) return;
@@ -3235,6 +3235,22 @@ async function adminRoutes(path, request, env) {
     ).bind(email).all()).results || [];
     for (const h of old) take(h.product_id, h.sold_at.replace(' ', 'T'), h.qty, h.price_cents);
 
+    // Old Shopify lines that match nothing in the catalog today (a tote that was never added, a
+    // discontinued product): offered too, as free-text lines, newest of each kind first.
+    const unmatched = (await env.DB.prepare(
+      "SELECT sold_at, name, unit, qty, price_cents FROM purchase_history WHERE email = ? AND source = 'shopify' AND product_id IS NULL" +
+        ' ORDER BY sold_at DESC'
+    ).bind(email).all()).results || [];
+    const other = [];
+    const kinds = new Set();
+    for (const u of unmatched) {
+      const kind = (u.name + '|' + (u.unit || '')).toLowerCase();
+      if (kinds.has(kind)) continue;
+      kinds.add(kind);
+      other.push({ name: u.name, unit: u.unit || '', last_qty: u.qty, last_price_cents: u.price_cents, last_date: String(u.sold_at).slice(0, 10) });
+      if (other.length === 5) break;
+    }
+
     const products = new Map((await loadCatalog(env)).map((p) => [p.id, p]));
     const items = [...seen.values()].filter((h) => products.has(h.id))
       .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 3)
@@ -3243,7 +3259,7 @@ async function adminRoutes(path, request, env) {
         return { product_id: h.id, name: p.name, unit: p.unit || '', last_qty: h.qty, last_price_cents: h.price,
           price_cents: p.price_cents, last_date: h.at.slice(0, 10), active: !!p.active };
       });
-    return json({ items });
+    return json({ items, other });
   }
 
   if (path === '/api/admin/attention') {

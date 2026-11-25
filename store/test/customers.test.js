@@ -790,3 +790,46 @@ test('a Shopify customer with no email who is already here by name and phone is 
   assert.ok(!r.add.some((a) => a.name === 'Lee Nomail'));
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM customers WHERE name = 'Lee Nomail'").get().n, 1);
 });
+
+// ---- old purchases that match no current item; items hidden from the store ------------
+
+test('the invoice form is offered old purchases that match no current item, newest of each kind first', async (t) => {
+  const { db, sqlite } = database(t);
+  const put = (at, name, unit, qty, price, product) => sqlite.prepare(
+    'INSERT INTO purchase_history (email, sold_at, product_id, name, unit, qty, price_cents, source) VALUES (?,?,?,?,?,?,?,?)'
+  ).run('returning@example.com', at, product, name, unit, qty, price, 'shopify');
+  put('2025-02-01 10:00:00', 'Natures Kelp', '', 1, 5000, 'kelp');                      // matches today's catalog
+  put('2024-05-01 10:00:00', 'Organic Olive Oil Layer Feed', '1000 lb tote', 1, 70000, null);
+  put('2025-09-01 10:00:00', 'Organic Olive Oil Layer Feed', '1000 lb tote', 2, 72500, null);
+  put('2025-03-01 10:00:00', 'Discontinued Mix', '40 lbs', 3, 2500, null);
+  const r = await adminCall(db, 'GET', undefined, { path: '/api/admin/customer-history?email=returning%40example.com' });
+  assert.deepEqual(r.body.items.map((i) => i.product_id), ['kelp']);
+  assert.deepEqual(r.body.other.map((o) => [o.name, o.unit, o.last_qty, o.last_price_cents, o.last_date]), [
+    ['Organic Olive Oil Layer Feed', '1000 lb tote', 2, 72500, '2025-09-01'],   // the newer of the two lines, once
+    ['Discontinued Mix', '40 lbs', 3, 2500, '2025-03-01'],
+  ]);
+  assert.deepEqual((await adminCall(db, 'GET', undefined, { path: '/api/admin/customer-history?email=' })).body, { items: [], other: [] });
+});
+
+test('a new item can be hidden from the store website yet still go on an invoice', async (t) => {
+  const { db } = database(t);
+  const made = await adminCall(db, 'POST', { action: 'create', fields: { name: 'Organic Olive Oil Layer Feed', unit: '1000 lb tote', price_cents: 72500, cost_cents: 65000, taxable: true, active: false } },
+    { path: '/api/admin/products' });
+  assert.equal(made.response.status, 200);
+  const id = made.body.id;
+  const storefront = async () => (await (await worker.fetch(new Request('https://store.example.com/api/catalog'), { DB: db }, {})).json());
+  const names = (c) => JSON.stringify(c);
+  assert.ok(!names(await storefront()).includes(id), 'hidden item is not on the public store');
+  // ...but it is in the admin's list, and an invoice can use it.
+  const list = await adminCall(db, 'GET', undefined, { path: '/api/admin/products' });
+  const row = list.body.products.find((p) => p.id === id);
+  assert.deepEqual([row.active, row.price_cents, row.unit], [false, 72500, '1000 lb tote']);
+  const preview = await adminCall(db, 'POST', { action: 'preview', customer: { email: '', name: 'Tote Buyer', phone: '' }, pickup: 'farm', lines: [{ product_id: id, qty: 1 }] },
+    { path: '/api/admin/invoice' });
+  assert.equal(preview.response.status, 200);
+  assert.equal(preview.body.card.subtotal_cents, 72500);
+  // Showing it later puts it on the website.
+  const shown = await adminCall(db, 'POST', { action: 'save', id, fields: { active: true } }, { path: '/api/admin/products' });
+  assert.equal(shown.response.status, 200);
+  assert.ok(names(await storefront()).includes(id), 'now on the public store');
+});

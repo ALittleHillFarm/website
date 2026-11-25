@@ -135,7 +135,7 @@
       '<div id="pr-msg"></div>' +
       '<div class="pr-bar' + (state.counting ? ' counting' : '') + '">' +
         '<div class="field grow"><label for="pr-q">Search</label><input type="text" id="pr-q" value="' + esc(f.q) + '" placeholder="Name, SKU or supplier" autocomplete="off"></div>' +
-        select('pr-status', 'Show', f.status, [['active', 'Active (in the store)'], ['inactive', 'Switched off'], ['archived', 'Archived'], ['all', 'Everything']]) +
+        select('pr-status', 'Show', f.status, [['active', 'Shown in the store'], ['inactive', 'Hidden from the store (invoices only)'], ['archived', 'Archived'], ['all', 'Everything']]) +
         select('pr-category', 'Category', f.category, [['', 'All']].concat(cats.map(function (c) { return [c, c]; }))) +
         select('pr-supplier', 'Supplier', f.supplier, [['', 'All']].concat(sups.map(function (c) { return [c, c]; }))) +
         select('pr-stock', 'Stock', f.stock, [['', 'Any'], ['attention', 'Low or out'], ['out', 'Out of stock'], ['low', 'Low (' + state.low + ' or fewer)'],
@@ -170,8 +170,8 @@
           '<label class="photo-btn" for="np-file">Choose a photo…</label>' +
           '<input type="file" class="visually-hidden" id="np-file" accept="image/jpeg,image/png,image/gif,image/webp">' +
           '<div class="upload-status" id="np-upload" hidden></div></div></div>' +
-      '</div><div class="check-row" style="margin-bottom:14px"><input type="checkbox" id="np-active"><label for="np-active">Put it in the store right away <span class="lbl-note">needs a price</span></label></div>' +
-      '<p class="hint" style="margin:0 0 14px">Left unticked it stays switched off, so nothing half-finished reaches the store. You can switch it on later with the Active tick.</p>' +
+      '</div><div class="check-row" style="margin-bottom:14px"><input type="checkbox" id="np-active"><label for="np-active">Show it on the store website right away <span class="lbl-note">needs a price</span></label></div>' +
+      '<p class="hint" style="margin:0 0 14px">Left unticked it stays hidden from the website, so nothing half-finished reaches the store, but it can still go on any invoice. You can show it later with the “Show in store” tick.</p>' +
       '<p><button type="button" class="btn" data-act="create">Create product</button> <button type="button" class="btn ghost" data-act="new-cancel">Cancel</button>' +
       ' <span id="np-status" aria-live="polite"></span></p></fieldset>';
     state.newImage = '';
@@ -199,7 +199,7 @@
         '<div class="pr-c pr-margin' + (neg ? ' neg' : '') + '" title="Price less cost"><span class="pr-l">Margin</span><span data-margin>' + (neg ? '−' : '') + money(Math.abs(p.margin_cents)) +
           (pct ? ' <small>' + pct + '</small>' : '') + '</span></div>' +
         '<label class="pr-c"><span class="pr-l">On hand</span><input class="pr-in" data-k="onhand" inputmode="numeric" autocomplete="off" placeholder="not tracked" value="' + (p.on_hand == null ? '' : p.on_hand) + '" aria-label="On hand"></label>' +
-        '<label class="pr-c pr-act"><input type="checkbox" data-k="active"' + (p.active ? ' checked' : '') + ' aria-label="Active"><span class="pr-l">Active</span></label>' +
+        '<label class="pr-c pr-act"><input type="checkbox" data-k="active"' + (p.active ? ' checked' : '') + ' aria-label="Show in store"><span class="pr-l">Show in store</span></label>' +
         '<button type="button" class="pr-more" data-act="more" aria-label="Open all details for ' + esc(p.name) + '">' + (state.open === p.id ? '▴' : '▾') + '</button>' +
       '</div>' +
       '<div class="pr-save" hidden></div>' +
@@ -215,7 +215,7 @@
     box.innerHTML =
       '<p class="pr-sum" id="pr-sum"></p>' +
       (list.length
-        ? '<div class="pr-table"><div class="pr-head"><span>Product</span><span>Price</span><span>Cost</span><span>Margin</span><span>On hand</span><span>Active</span><span></span></div>' +
+        ? '<div class="pr-table"><div class="pr-head"><span>Product</span><span>Price</span><span>Cost</span><span>Margin</span><span>On hand</span><span>Show in store</span><span></span></div>' +
           list.map(rowHtml).join('') + '</div>'
         : '<p class="empty-note">No products match. Try a different search or filter.</p>');
     renderSummary();
@@ -610,13 +610,13 @@
         active: document.getElementById('np-active').checked,
       };
       if (!fields.name.trim()) { st.textContent = 'Give it a name first.'; document.getElementById('np-name').focus(); return; }
-      if (fields.active && !price) { st.textContent = 'Enter a price before putting it in the store, or untick “Put it in the store right away”.'; return; }
+      if (fields.active && !price) { st.textContent = 'Enter a price before putting it in the store, or untick “Show it on the store website right away”.'; return; }
       b.disabled = true; st.textContent = 'Creating…';
       post({ action: 'create', fields: fields }).then(function (r) {
         state.creating = false; state.open = r.id;
         state.f.status = 'all'; state.f.q = fields.name;
         return load().then(function () {
-          msg(fields.active ? 'Created and in the store.' : 'Created. It is switched off until you tick Active.', 'success');
+          msg(fields.active ? 'Created and shown in the store.' : 'Created. It is hidden from the website, but you can put it on any invoice. Tick “Show in store” to put it on the website.', 'success');
           var made = itemEl(r.id); if (made) made.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
       }).catch(function (err) { st.textContent = 'Not created: ' + err.message; b.disabled = false; });
@@ -655,7 +655,7 @@
     }
     if (act === 'restore') {
       post({ action: 'save', id: id, fields: { archived: false } }).then(function () { return load(); })
-        .then(function () { msg('Restored. It is still switched off. Tick Active to sell it.', 'success'); })
+        .then(function () { msg('Restored. It is still hidden from the website. Tick “Show in store” to sell it there.', 'success'); })
         .catch(function (err) { msg(err.message, 'error'); });
       return;
     }
