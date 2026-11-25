@@ -416,19 +416,39 @@ name, email or phone, including those Shopify-only people.
 
 **Who is added automatically.** Anyone an order is entered for joins the list at
 that moment: a customer checking out (even as a guest), an invoice, or a sale
-recorded by hand *with an email* (the email is how the store tells people apart,
-so a hand-entered sale with no email adds nobody). Orders only ever add a missing
+recorded by hand *with an email, or with a name and phone number* (a name alone
+cannot tell people apart, so it adds nobody). Orders only ever add a missing
 person or fill in a blank name or phone — they never change *trusted* or
 *tax-exempt*, and a guest typing an existing customer's email cannot edit that
 customer. An order that is turned away (cash not allowed, bad email) adds nobody;
 a card checkout that is abandoned does, since they did enter an order — remove
 them here if you do not want them.
 
+**Customers with no email.** Someone you know only by name and phone is a
+customer too. *Add a customer* with the email left empty (a phone number is
+then required, so two people can be told apart), or let an order create them:
+a sale recorded by hand with a name and phone but no email, or an invoice for
+a new name and phone. Everything works as for any customer (orders, tax-exempt,
+notes, history, the invoice form's finder) with these differences: nothing is
+ever emailed to them (an invoice is saved, and you **Copy pay link** and text it);
+Stripe is not given an email, so the payer types their own on the payment page;
+and a no-email invoice never raises a "not sent" or "email failed" alert, but is
+flagged like any other once unpaid for a week. When you learn their email, add
+it on their record (or press **Add email & send** on the invoice): their orders
+and history move to it, and if that email already belongs to a customer the
+two records are merged into the existing one, which keeps its own settings.
+Under the hood they are kept under a made-up address ending `@no-email.invalid`
+(a domain the internet reserves, which can never receive mail); the screens
+never show it.
+
 **Importing from Shopify.** Under the list, *Import customers from Shopify*
 takes Shopify's Customers → Export CSV. It shows what it would do first (who is
 added, who is already here, who has no email, who never ordered), then adds only
-people who are missing and fills blank names and phones. Tax-exempt marks in the
-file are listed but **not** carried over: confirm each against its ST-101 and
+people who are missing and fills blank names and phones. People who ordered
+but have no email in Shopify are added by name and phone (matched on their
+Shopify id, so repeating it adds no one twice, and skipped if you already have
+someone with that exact name and phone); only people with no name, phone or
+email are left out. Tax-exempt marks in the file are listed but **not** carried over: confirm each against its ST-101 and
 tick it on their record. Safe to repeat. The CSV holds customer details, so keep
 it out of git.
 

@@ -13,13 +13,18 @@
   var tab = document.getElementById('tab-invoice');
   if (!host || !tab) return;
 
-  var state = { products: [], customers: [], pastOnly: [], pickups: [], lines: [], recent: [], recentFor: '', loaded: false, loading: null, busy: false };
+  var state = { products: [], customers: [], pastOnly: [], pickups: [], lines: [], recent: [], recentFor: '', noEmailKey: '', loaded: false, loading: null, busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // A customer with no email is kept under a made-up address (see lib/customers.js). It rides along
+  // as a hidden key so the invoice goes to the right customer, and is never shown or typed.
+  var NO_EMAIL = /@no-email\.invalid$/i;
+  function isKey(e) { return NO_EMAIL.test(String(e || '')); }
+  function digitsOf(v) { return String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, ''); }
   function money(c) { return '$' + (Math.round(Number(c) || 0) / 100).toFixed(2); }
   function cents(v) {
     var s = String(v == null ? '' : v).replace(/[$,\s]/g, '');
@@ -91,7 +96,7 @@
           '<input type="text" id="inv-find" autocomplete="off" placeholder="Type part of a name, email or phone" role="combobox" aria-expanded="false" aria-controls="inv-find-results">' +
           '<div id="inv-find-results" class="find-results" role="listbox" hidden></div></div>' +
         '<div class="field"><label for="inv-name">Name</label><input type="text" id="inv-name" list="inv-names" autocomplete="off" placeholder="Start typing a name"></div>' +
-        '<div class="field"><label for="inv-email">Email</label><input type="email" id="inv-email" list="inv-customers" autocomplete="off" placeholder="or an email"></div>' +
+        '<div class="field"><label for="inv-email">Email</label><input type="email" id="inv-email" list="inv-customers" autocomplete="off" placeholder="or an email — leave empty if they have none"></div>' +
         '<div class="field"><label for="inv-phone">Phone</label><input type="tel" id="inv-phone"></div>' +
         '<div class="field"><label for="inv-pickup">Pickup</label><select id="inv-pickup">' +
           state.pickups.map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.label) + '</option>'; }).join('') + '</select></div>' +
@@ -121,7 +126,7 @@
     }).filter(function (l) { return l.product_id || l.name; });
     return {
       customer: {
-        email: document.getElementById('inv-email').value.trim(),
+        email: document.getElementById('inv-email').value.trim() || state.noEmailKey || '',
         name: document.getElementById('inv-name').value.trim(),
         phone: document.getElementById('inv-phone').value.trim(),
       },
@@ -141,7 +146,7 @@
     var b = collect();
     var box = document.getElementById('inv-totals');
     if (!box) return;
-    if (!b.lines.length || !b.customer.email || !b.customer.name) {
+    if (!b.lines.length || !b.customer.name) {
       box.innerHTML = '<p class="hint">Fill in the customer and at least one item to see the totals.</p>';
       return;
     }
@@ -166,9 +171,13 @@
     if (from === 'name') {
       var typed = nameBox.value.trim().toLowerCase();
       var byName = state.customers.filter(function (x) { return (x.name || '').toLowerCase() === typed; });
-      if (byName.length === 1) { emailBox.value = byName[0].email; document.getElementById('inv-phone').value = byName[0].phone || ''; }
+      if (byName.length === 1) {
+        state.noEmailKey = isKey(byName[0].email) ? byName[0].email : '';
+        emailBox.value = state.noEmailKey ? '' : byName[0].email;
+        document.getElementById('inv-phone').value = byName[0].phone || '';
+      }
     }
-    var email = emailBox.value.trim().toLowerCase();
+    var email = emailBox.value.trim().toLowerCase() || state.noEmailKey;
     var c = state.customers.filter(function (x) { return x.email === email; })[0];
     var past = !c && state.pastOnly.filter(function (x) { return String(x.email).toLowerCase() === email; })[0];
     loadRecent(c || past || (settled && EMAIL.test(email)) ? email : '');
@@ -176,11 +185,23 @@
     if (c) {
       if (!document.getElementById('inv-name').value) document.getElementById('inv-name').value = c.name || '';
       if (!document.getElementById('inv-phone').value) document.getElementById('inv-phone').value = c.phone || '';
-      note.textContent = 'Known customer' + (c.tax_exempt ? ' · tax-exempt' : '') + (c.trusted ? ' · established' : '') + '.';
+      note.textContent = 'Known customer' + (c.tax_exempt ? ' · tax-exempt' : '') + (c.trusted ? ' · established' : '') +
+        (isKey(c.email) ? ' · no email on file, so the invoice is saved and you copy the pay link to text it.' : '.');
     } else if (past) {
       note.textContent = 'Bought on Shopify before (' + past.lines + (past.lines === 1 ? ' line' : ' lines') + ') — they will be saved as a customer when you create the invoice.';
+    } else if (email) {
+      note.textContent = 'New customer — they will be saved when you create the invoice.';
     } else {
-      note.textContent = email ? 'New customer — they will be saved when you create the invoice.' : '';
+      var named = document.getElementById('inv-name').value.trim(), phoned = digitsOf(document.getElementById('inv-phone').value).length >= 10;
+      note.textContent = named ? (phoned ? 'No email: they will be saved by name and phone, and you copy the pay link to text it.'
+        : 'No email: add their phone number so they can be saved and told apart.') : '';
+    }
+    // "Email it now" means nothing for someone with no email: grey it out rather than leave it ticked.
+    var sendBox = document.getElementById('inv-sendnow');
+    if (sendBox) {
+      var none = !emailBox.value.trim() && (!!state.noEmailKey || !!document.getElementById('inv-name').value.trim());
+      sendBox.disabled = none;
+      if (sendBox.parentNode) sendBox.parentNode.style.opacity = none ? '0.55' : '';
     }
   }
 
@@ -188,7 +209,7 @@
   var digitsOf = function (v) { return String(v || '').replace(/\D/g, ''); };
   function people() {
     return state.customers.map(function (c) {
-      return { email: c.email, name: c.name || '', phone: c.phone || '', orders: c.paid_orders || 0, lines: c.history_lines || 0, saved: true };
+      return { email: c.email, name: c.name || '', phone: c.phone || '', orders: c.paid_orders || 0, lines: c.history_lines || 0, saved: true, noEmail: isKey(c.email) };
     }).concat(state.pastOnly.map(function (h) {
       return { email: String(h.email).toLowerCase(), name: '', phone: '', orders: 0, lines: h.lines || 0, saved: false };
     }));
@@ -197,7 +218,7 @@
     var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
     return people().filter(function (p) {
-      var hay = (p.name + ' ' + p.email + ' ' + p.phone).toLowerCase(), ph = digitsOf(p.phone);
+      var hay = (p.name + ' ' + (p.noEmail ? '' : p.email) + ' ' + p.phone).toLowerCase(), ph = digitsOf(p.phone);
       return words.every(function (w) { return hay.indexOf(w) !== -1 || (digitsOf(w).length >= 3 && ph.indexOf(digitsOf(w)) !== -1); });
     }).sort(function (a, b) {
       var sa = (a.name + ' ' + a.email).toLowerCase().indexOf(words[0]) === 0 ? 0 : 1;
@@ -211,9 +232,9 @@
     var all = findPeople(q), hits = all.slice(0, 8);
     if (!String(q || '').trim()) { box.hidden = true; box.innerHTML = ''; input.setAttribute('aria-expanded', 'false'); return; }
     box.innerHTML = hits.length ? hits.map(function (p) {
-      var bits = [p.name ? p.email : '', p.phone, p.orders ? p.orders + (p.orders === 1 ? ' paid order' : ' paid orders') : '',
+      var bits = [p.name && !p.noEmail ? p.email : '', p.noEmail ? 'no email' : '', p.phone, p.orders ? p.orders + (p.orders === 1 ? ' paid order' : ' paid orders') : '',
         p.lines ? p.lines + ' old Shopify ' + (p.lines === 1 ? 'line' : 'lines') : '', p.saved ? '' : 'Shopify purchases only'].filter(Boolean);
-      return '<button type="button" class="find-hit" role="option" data-pick="' + esc(p.email) + '"><strong>' + esc(p.name || p.email) + '</strong>' +
+      return '<button type="button" class="find-hit" role="option" data-pick="' + esc(p.email) + '"><strong>' + esc(p.name || (p.noEmail ? '(no name)' : p.email)) + '</strong>' +
         '<span class="muted">' + esc(bits.join(' · ')) + '</span></button>';
     }).join('') + (all.length > hits.length ? '<div class="find-more muted">' + (all.length - hits.length) + ' more — keep typing to narrow it down</div>' : '')
       : '<div class="find-more muted">No one matches. Type their name and email below to add a new customer.</div>';
@@ -223,8 +244,9 @@
   function pickPerson(email) {
     var p = people().filter(function (x) { return x.email === email; })[0];
     if (!p) return;
+    state.noEmailKey = p.noEmail ? p.email : '';
     document.getElementById('inv-name').value = p.name;
-    document.getElementById('inv-email').value = p.email;
+    document.getElementById('inv-email').value = p.noEmail ? '' : p.email;
     document.getElementById('inv-phone').value = p.phone;
     document.getElementById('inv-find').value = '';
     showFound('');
@@ -272,6 +294,11 @@
   function resultPanel(r) {
     var linkRow = '<div class="link-row"><code>' + esc(r.link) + '</code> ' +
       '<button type="button" class="btn small ghost" data-act="copylink" data-link="' + esc(r.link) + '">Copy pay link</button></div>';
+    if (r.no_email) {
+      return '<div class="inv-result warn"><div class="t">Invoice ' + esc(r.ref) + ' saved — no email on file</div>' +
+        'Nothing was emailed. Copy the pay link below and text it to them, or hand it over at pickup. If you get their email later, press ' +
+        '<strong>Add email &amp; send</strong> on the <strong>Orders</strong> tab.' + linkRow + '</div>';
+    }
     if (r.emailed) {
       return '<div class="inv-result"><div class="t">Invoice ' + esc(r.ref) + ' emailed</div>' +
         'Emailed to <strong>' + esc(r.to) + '</strong> at ' + esc(when(r.sent_at)) + '. ' +
@@ -290,11 +317,16 @@
 
   function submit(btn) {
     if (state.busy) return;
-    var send = document.getElementById('inv-sendnow').checked;
     var b = collect();
+    var noEmail = !b.customer.email || isKey(b.customer.email);
+    var send = document.getElementById('inv-sendnow').checked && !noEmail;
+    var status = document.getElementById('inv-status');
+    if (!b.customer.email && digitsOf(b.customer.phone).length < 10) {
+      status.textContent = 'Enter their email, or their phone number if they have no email.';
+      return;
+    }
     b.action = 'create';
     b.send = send;
-    var status = document.getElementById('inv-status');
     if (send && !window.confirm('Create this invoice and email it to ' + (b.customer && b.customer.email ? b.customer.email : 'the customer') + ' now?')) return;
     state.busy = true;
     btn.disabled = true;
@@ -302,6 +334,7 @@
     post(b).then(function (r) {
       state.lines = [{ product_id: '', qty: 1, price: '' }];
       state.loaded = false;
+      state.noEmailKey = '';
       return load().then(function () {
         document.getElementById('inv-msg').innerHTML = resultPanel(r);
         host.scrollIntoView({ behavior: 'smooth' });
@@ -343,13 +376,15 @@
     try { writing = state.loaded && !!document.getElementById('inv-email') && collect().lines.length > 0; } catch (err) { writing = false; }
     if (writing && !window.confirm('Start a new invoice for ' + (who.name || who.email) + '? The invoice you were writing here will be cleared.')) return;
     state.loaded = false;                       // fresh customers, fresh form
+    state.noEmailKey = '';
     state.lines = [{ product_id: '', qty: 1, price: '' }];
     state.recent = []; state.recentFor = '';
     tab.click();
     load().then(function () {
       if (!state.loaded) return;
+      state.noEmailKey = isKey(who.email) ? who.email : '';
       document.getElementById('inv-name').value = who.name || '';
-      document.getElementById('inv-email').value = who.email || '';
+      document.getElementById('inv-email').value = state.noEmailKey ? '' : (who.email || '');
       document.getElementById('inv-phone').value = who.phone || '';
       fillCustomer('email', true);
       schedulePreview();
@@ -379,7 +414,7 @@
         l[k] = t.value;
       }
     }
-    if (t.id === 'inv-email') fillCustomer('email');
+    if (t.id === 'inv-email') { state.noEmailKey = ''; fillCustomer('email'); }
     if (t.id === 'inv-name') fillCustomer('name');
     schedulePreview();
   });
@@ -439,7 +474,7 @@
 
   function rerenderKeeping(keep) {
     render();
-    document.getElementById('inv-email').value = keep.customer.email;
+    document.getElementById('inv-email').value = isKey(keep.customer.email) ? '' : keep.customer.email;
     document.getElementById('inv-name').value = keep.customer.name;
     document.getElementById('inv-phone').value = keep.customer.phone;
     document.getElementById('inv-pickup').value = keep.pickup;

@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer,
   parseCsv, tidyPhone, shopifyCustomers, importShopifyCustomers, rememberOrderCustomer, customerProfile,
+  isNoEmail, shownEmail, attachEmail, rememberNoEmailCustomer,
 } from '../lib/customers.js';
 
 // Wrangler accepts JSON imports without attributes; Node requires attributes.
@@ -403,6 +404,7 @@ const SHOPIFY_CSV = '\uFEFF' + [
   "'6,,,ghost@example.com,,,20.00,1,,no,",
   "'7,Returning,Customer,RETURNING@example.com,,'+12085550104,80.00,3,,no,",
   "'8,Pat,Dupe,pat@example.com,,,5.00,1,,no,",
+  "'9,,,,,,15.00,1,,no,",
 ].join('\r\n') + '\r\n';
 
 test('the CSV reader handles quotes, commas and line breaks inside quotes, a BOM and CRLF', () => {
@@ -421,18 +423,19 @@ test('phone numbers read the way the farm writes them', () => {
 
 test('the export is read for people who have ordered and have an email', () => {
   const r = shopifyCustomers(SHOPIFY_CSV);
-  assert.equal(r.rows, 8);
+  assert.equal(r.rows, 9);
   assert.deepEqual(r.people.map((p) => [p.email, p.name, p.phone, p.orders]), [
     ['pat@example.com', 'Pat Example', '208-555-0101', 4],         // the account with orders wins the duplicate
     ['sam@example.com', "Sam O'Neil, Jr.", '208-555-0102', 1],
+    ['shopify-5@no-email.invalid', 'Lee Nomail', '208-555-0103', 2], // no email: kept by name and phone, keyed by Shopify id
     ['ghost@example.com', null, null, 1],
     ['returning@example.com', 'Returning Customer', '208-555-0104', 3],
   ]);
   assert.equal(r.duplicates, 1);
   assert.equal(r.never_ordered, 2);                                 // newsletter signups and "Login with Shop" accounts
-  assert.deepEqual(r.no_email, [{ name: 'Lee Nomail', orders: 2, phone: '208-555-0103' }]); // cannot be keyed without an email; the phone is how to ask for it
+  assert.deepEqual(r.no_contact, [{ orders: 1 }]);                   // no email, name or phone: nobody to keep
   assert.deepEqual(r.tax_exempt, [{ name: "Sam O'Neil, Jr.", email: 'sam@example.com' }]);
-  assert.equal(shopifyCustomers(SHOPIFY_CSV, { includeNeverOrdered: true }).people.length, 6);
+  assert.equal(shopifyCustomers(SHOPIFY_CSV, { includeNeverOrdered: true }).people.length, 7);
 });
 
 test('something that is not a customer export is refused', () => {
@@ -446,7 +449,8 @@ test('a dry run reports and writes nothing', async (t) => {
   const { db, sqlite } = database(t);
   const r = await importShopifyCustomers(db, SHOPIFY_CSV);
   assert.equal(r.dry_run, true);
-  assert.deepEqual(r.add.map((a) => a.email), ['pat@example.com', 'sam@example.com', 'ghost@example.com']);
+  assert.deepEqual(r.add.map((a) => a.email), ['pat@example.com', 'sam@example.com', 'shopify-5@no-email.invalid', 'ghost@example.com']);
+  assert.deepEqual(r.add.map((a) => a.has_email), [1, 1, 0, 1]);
   assert.equal(r.already, 0);
   assert.equal(r.filled, 1);           // returning@example.com exists with a name but no phone
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
@@ -459,16 +463,17 @@ test('importing adds missing people, fills blanks only, and never touches flags 
   const r = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false, now: '2026-11-24T00:00:00Z' });
   assert.equal(r.dry_run, false);
   const rows = Object.fromEntries(sqlite.prepare('SELECT * FROM customers').all().map((c) => [c.email, { ...c }]));
-  assert.deepEqual(Object.keys(rows).sort(), ['ghost@example.com', 'pat@example.com', 'returning@example.com', 'sam@example.com']);
+  assert.deepEqual(Object.keys(rows).sort(), ['ghost@example.com', 'pat@example.com', 'returning@example.com', 'sam@example.com', 'shopify-5@no-email.invalid']);
   // The existing customer keeps their name, flags and notes; only the blank phone is filled.
   assert.deepEqual([rows['returning@example.com'].name, rows['returning@example.com'].phone, rows['returning@example.com'].trusted,
     rows['returning@example.com'].tax_exempt, rows['returning@example.com'].exemption_ref, rows['returning@example.com'].notes],
   ['Kept Name', '208-555-0104', 1, 1, 'ST-101', 'mine']);
   // New people start with no special treatment — even Sam, whom Shopify had as tax-exempt.
-  for (const e of ['pat@example.com', 'sam@example.com', 'ghost@example.com']) {
+  for (const e of ['pat@example.com', 'sam@example.com', 'ghost@example.com', 'shopify-5@no-email.invalid']) {
     assert.deepEqual([rows[e].trusted, rows[e].tax_exempt, rows[e].exemption_ref, rows[e].created_at], [0, 0, null, '2026-11-24T00:00:00Z']);
   }
   assert.equal(rows['sam@example.com'].name, "Sam O'Neil, Jr.");
+  assert.deepEqual([rows['shopify-5@no-email.invalid'].name, rows['shopify-5@no-email.invalid'].phone], ['Lee Nomail', '208-555-0103']);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales').get().n, 1);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM purchase_history').get().n, 1);
 });
@@ -478,7 +483,7 @@ test('running the same import again changes nothing', async (t) => {
   await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
   const before = JSON.stringify(sqlite.prepare('SELECT * FROM customers ORDER BY email').all());
   const again = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
-  assert.deepEqual([again.add.length, again.filled, again.already], [0, 0, 4]);
+  assert.deepEqual([again.add.length, again.filled, again.already], [0, 0, 5]);
   assert.equal(JSON.stringify(sqlite.prepare('SELECT * FROM customers ORDER BY email').all()), before);
 });
 
@@ -499,7 +504,7 @@ test('the import endpoint is a dry run unless told otherwise', async (t) => {
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
   r = await adminCall(db, 'POST', { action: 'import', csv: SHOPIFY_CSV, dry_run: false, include_never_ordered: true });
   assert.equal(r.body.dry_run, false);
-  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 6);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 7);
   r = await adminCall(db, 'POST', { action: 'import', csv: 'not,a,customer,file\n1,2,3,4' });
   assert.equal(r.response.status, 400);
   assert.match(r.body.error, /Shopify/);
@@ -685,4 +690,103 @@ test('the customer page is served to admins only, by email', async (t) => {
   const bare = await worker.fetch(new Request('https://store.example.com/api/admin/customers?email=returning%40example.com'),
     { DB: db, ADMIN_PASSWORD: 'test-admin-password' }, {});
   assert.equal(bare.status, 401);
+});
+
+// ---- customers with no email ----------------------------------------------------
+
+test('a customer with no email is kept by name and phone, under an address nothing can reach', async (t) => {
+  const { db } = database(t);
+  const c = await addCustomer(db, { email: '', name: 'Walt Phoneonly', phone: '(208) 555-0142', notes: 'Calls on Sundays' });
+  assert.ok(isNoEmail(c.email));
+  assert.equal(shownEmail(c.email), '');
+  assert.deepEqual([c.name, c.phone, c.trusted, c.tax_exempt], ['Walt Phoneonly', '(208) 555-0142', 0, 0]);
+  const list = await listCustomers(db);
+  assert.deepEqual(list.customers.map((x) => [x.name, x.has_email]), [['Returning Customer', 1], ['Walt Phoneonly', 0]]);
+  const p = await customerProfile(db, c.email);
+  assert.equal(p.has_email, false);
+  assert.equal(p.customer.name, 'Walt Phoneonly');
+  assert.equal(shownEmail('kim@example.com'), 'kim@example.com');
+});
+
+test('without an email a name and phone are both needed, and the same person is not added twice', async (t) => {
+  const { db, sqlite } = database(t);
+  await rejectsWith(addCustomer(db, { email: '', name: 'No Phone' }), 400, /phone/);
+  await rejectsWith(addCustomer(db, { email: '', name: 'Short Phone', phone: '555-0142' }), 400, /phone/);
+  await rejectsWith(addCustomer(db, { email: '', name: '', phone: '208-555-0142' }), 400, /name/);
+  await addCustomer(db, { email: '', name: 'Walt Phoneonly', phone: '208-555-0142' });
+  await rejectsWith(addCustomer(db, { email: '', name: 'walt  PHONEONLY', phone: '1 (208) 555 0142' }), 409, /already/);
+  // The made-up address cannot be typed in as if it were real.
+  await rejectsWith(addCustomer(db, { email: 'x@no-email.invalid', name: 'Typed It' }), 400, /reserved/);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 2);
+});
+
+test('giving a no-email customer their email moves their orders and history to it', async (t) => {
+  const { db, sqlite } = database(t);
+  const c = await addCustomer(db, { email: '', name: 'Walt Phoneonly', phone: '208-555-0142', trusted: true, notes: 'Sundays' });
+  orderRow(sqlite, { id: 'ffffffff-6', email: c.email });
+  history(sqlite, c.email);
+  const updated = await updateCustomer(db, { email: c.email, new_email: ' Walt@Example.com ', name: 'Walt Phoneonly', phone: '208-555-0142', trusted: true, notes: 'Sundays' });
+  assert.equal(updated.email, 'walt@example.com');
+  assert.deepEqual([updated.name, updated.trusted, updated.notes], ['Walt Phoneonly', 1, 'Sundays']);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers WHERE email = ?').get(c.email).n, 0);
+  assert.equal(sqlite.prepare("SELECT customer_email AS e FROM sales WHERE id = 'ffffffff-6'").get().e, 'walt@example.com');
+  assert.equal(sqlite.prepare('SELECT email FROM purchase_history WHERE email = ?').get('walt@example.com').email, 'walt@example.com');
+  // From then on they are an ordinary customer and cannot be renamed again.
+  await rejectsWith(updateCustomer(db, { email: 'walt@example.com', new_email: 'other@example.com', name: 'W' }), 400, /already has an email/);
+});
+
+test('an email that already belongs to a customer means the same person: the records are merged', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare("UPDATE customers SET trusted = 1, phone = NULL WHERE email = 'returning@example.com'").run();
+  const c = await addCustomer(db, { email: '', name: 'Returning Cust.', phone: '208-555-0177', notes: 'from the phone list', tax_exempt: true });
+  orderRow(sqlite, { id: 'abcdabcd-7', email: c.email });
+  const merged = await updateCustomer(db, { email: c.email, new_email: 'Returning@Example.com', name: 'Returning Cust.', phone: '208-555-0177', tax_exempt: true, notes: 'from the phone list' });
+  assert.equal(merged.merged, true);
+  // The existing customer keeps their name and settings; only blanks are filled. Nothing silently becomes tax-exempt.
+  assert.deepEqual([merged.email, merged.name, merged.phone, merged.trusted, merged.tax_exempt, merged.notes],
+    ['returning@example.com', 'Returning Customer', '208-555-0177', 1, 0, 'from the phone list']);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+  assert.equal(sqlite.prepare("SELECT customer_email AS e FROM sales WHERE id = 'abcdabcd-7'").get().e, 'returning@example.com');
+  await rejectsWith(attachEmail(db, 'returning@example.com', 'x@example.com'), 400);
+  await rejectsWith(attachEmail(db, 'nobody@no-email.invalid', 'x@example.com'), 404);
+});
+
+test('a sale recorded by hand with a name and phone but no email adds that customer once', async (t) => {
+  const { db, sqlite } = database(t);
+  const record = (extra) => adminCall(db, 'POST', { subtotal_cents: 1000, category: 'milk', payment_method: 'cash', ...extra }, { path: '/api/admin/record' });
+  assert.equal((await record({ customer_name: 'Walt Phoneonly', customer_phone: '208-555-0142' })).response.status, 200);
+  assert.equal((await record({ customer_name: 'Walt Phoneonly', customer_phone: '(208) 555-0142' })).response.status, 200);
+  const walt = sqlite.prepare("SELECT * FROM customers WHERE name = 'Walt Phoneonly'").all();
+  assert.equal(walt.length, 1);
+  assert.ok(isNoEmail(walt[0].email));
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales WHERE customer_email = ?').get(walt[0].email).n, 2);
+  // A name alone is not enough to say who someone is.
+  await record({ customer_name: 'Just A Name' });
+  await record({ customer_name: 'Short', customer_phone: '555-0100' });
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM customers WHERE name IN ('Just A Name', 'Short')").get().n, 0);
+  assert.equal(await rememberNoEmailCustomer(db, { name: 'X', phone: '' }), null);
+});
+
+test('the endpoint adds a customer with no email and later gives them theirs', async (t) => {
+  const { db, sqlite } = database(t);
+  let r = await adminCall(db, 'POST', { action: 'add', email: '', name: 'Walt Phoneonly', phone: '208-555-0142' });
+  assert.equal(r.response.status, 200);
+  const key = r.body.customer.email;
+  assert.ok(isNoEmail(key));
+  r = await adminCall(db, 'GET', undefined, { path: '/api/admin/customers?detail=1' });
+  assert.equal(r.body.customers.find((c) => c.email === key).has_email, 0);
+  r = await adminCall(db, 'POST', { action: 'update', email: key, new_email: 'walt@example.com', name: 'Walt Phoneonly', phone: '208-555-0142' });
+  assert.equal(r.response.status, 200);
+  assert.equal(r.body.customer.email, 'walt@example.com');
+  r = await adminCall(db, 'POST', { action: 'update', email: 'walt@example.com', new_email: 'nope', name: 'W' });
+  assert.equal(r.response.status, 400);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 2);
+});
+
+test('a Shopify customer with no email who is already here by name and phone is not added again', async (t) => {
+  const { db, sqlite } = database(t);
+  await addCustomer(db, { email: '', name: 'Lee Nomail', phone: '208-555-0103' });
+  const r = await importShopifyCustomers(db, SHOPIFY_CSV, { dryRun: false });
+  assert.ok(!r.add.some((a) => a.name === 'Lee Nomail'));
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM customers WHERE name = 'Lee Nomail'").get().n, 1);
 });

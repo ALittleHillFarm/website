@@ -28,7 +28,7 @@ import config from './config.json';
 import { BadRequest, centsIn, landedCosts, replayAverage, reportTotals, salesCategory, splitByCategory } from './lib/costing.js';
 import {
   isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer, importShopifyCustomers,
-  rememberOrderCustomer, customerProfile,
+  rememberOrderCustomer, customerProfile, isNoEmail, shownEmail, rememberNoEmailCustomer, attachEmail,
 } from './lib/customers.js';
 
 const STRIPE = 'https://api.stripe.com/v1';
@@ -629,7 +629,7 @@ async function apiCheckout(request, env, ctx) {
 async function stripeCheckout(env, origin, { saleId, email, name, pickup, method, lines, taxCents, autoCapture, cancelUrl, idempotencyKey }) {
   const form = new URLSearchParams();
   form.set('mode', 'payment');
-  form.set('customer_email', email);
+  if (!isNoEmail(email)) form.set('customer_email', email);
   form.set('success_url', origin + '/thanks?sale=' + saleId);
   form.set('cancel_url', cancelUrl);
   form.set('client_reference_id', saleId);
@@ -923,6 +923,16 @@ function timingSafeEqual(a, b) {
 
 /** Add whoever an order was entered for to the customer list. The order is
  *  already saved by now, so a problem here is logged, never allowed to fail it. */
+/** The customer a no-email order belongs to (null if we cannot tell who it is). Never fails the order. */
+async function noEmailBuyer(env, person) {
+  try {
+    return await rememberNoEmailCustomer(env.DB, person);
+  } catch (err) {
+    console.error('could not add the customer to the list: ' + (err && err.message ? err.message : err));
+    return null;
+  }
+}
+
 async function saveOrderCustomer(env, person, options) {
   try {
     await rememberOrderCustomer(env.DB, person, options);
@@ -1257,6 +1267,8 @@ function safeReturn(v) {
 // ---------------------------------------------------------------------------
 
 async function sendEmail(env, { to, subject, text, html }) {
+  // A customer with no email is kept under a made-up address that nothing can deliver to.
+  if (!to || isNoEmail(to)) return { sent: false, reason: 'no email address on file' };
   // Local testing only (store/.dev.vars): print the email instead of sending.
   // Never set DEV_EMAIL_LOG on the live store.
   if (env.DEV_EMAIL_LOG === '1') {
@@ -1498,11 +1510,19 @@ async function adminInvoices(request, env) {
   const b = await request.json();
   try {
     if (b.action === 'preview' || b.action === 'create') {
-      const email = cleanEmail(b.customer && b.customer.email);
-      if (!email) throw new BadRequest('enter the customer’s email address');
       const name = cleanText(b.customer && b.customer.name, 80);
       if (!name) throw new BadRequest('enter the customer’s name');
       const phone = cleanText(b.customer && b.customer.phone, 40);
+      // An email, or (for someone who has none) the made-up address they are kept under, or neither
+      // when a new person is being typed in: they are added with their phone number on create.
+      const typedEmail = String((b.customer && b.customer.email) || '').trim();
+      let email = typedEmail ? cleanEmail(typedEmail) : '';
+      if (typedEmail && !email) throw new BadRequest('that does not look like an email address');
+      if (email && isNoEmail(email) && !(await getCustomer(env, email))) throw new BadRequest('no customer with that address; choose them again');
+      if (!email && b.action === 'create') {
+        email = await rememberNoEmailCustomer(env.DB, { name, phone });
+        if (!email) throw new BadRequest('enter their email address, or their phone number if they have no email');
+      }
       const pickup = String(b.pickup || '');
       if (!config.pickup_locations.some((l) => l.id === pickup)) throw new BadRequest('choose a pickup location');
       const lines = await invoiceLines(env, b.lines);
@@ -1534,10 +1554,12 @@ async function adminInvoices(request, env) {
         'card', 'invoiced', 'pickup:' + pickup, JSON.stringify({ received: now }), token, cleanPara(b.note, 1000) || null).run();
 
       const sale = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(id).first();
-      const sent = b.send === false ? null : await sendInvoiceEmail(env, sale);
+      // Someone with no email cannot be emailed: the pay link is handed over some other way.
+      const noEmail = isNoEmail(email);
+      const sent = b.send === false || noEmail ? null : await sendInvoiceEmail(env, sale);
       return json({
-        ok: true, sale_id: id, ref: orderRef(id), link: payLink(token), to: email,
-        emailed: !!(sent && sent.sent), email_requested: b.send !== false,
+        ok: true, sale_id: id, ref: orderRef(id), link: payLink(token), to: noEmail ? null : email, no_email: noEmail,
+        emailed: !!(sent && sent.sent), email_requested: b.send !== false && !noEmail,
         email_error: sent && !sent.sent ? sent.reason : null, sent_at: sent && sent.sent ? sent.at : null,
       });
     }
@@ -1553,9 +1575,20 @@ async function adminInvoices(request, env) {
         throw new BadRequest('An email was just sent a moment ago. Give it a minute before sending again.');
       }
       let current = sale;
-      if (b.email != null && String(b.email).trim() !== '') {
-        const email = cleanEmail(b.email);
-        if (!email) throw new BadRequest('that does not look like an email address');
+      const giveEmail = b.email != null ? String(b.email).trim() : '';
+      if (isNoEmail(sale.customer_email)) {
+        if (!giveEmail) throw new BadRequest('This customer has no email. Add one to send it, or copy the pay link and text it.');
+        // Their email is now known: it becomes theirs everywhere (merged if they are already a customer).
+        try {
+          await attachEmail(env.DB, sale.customer_email, giveEmail);
+        } catch (err) {
+          if (err instanceof CustomerError) throw new BadRequest(err.message);
+          throw err;
+        }
+        current = await env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(sale.id).first();
+      } else if (giveEmail) {
+        const email = cleanEmail(giveEmail);
+        if (!email || isNoEmail(email)) throw new BadRequest('that does not look like an email address');
         if (email !== sale.customer_email) {
           // The invoice moves to the new address. The old customer record is
           // left alone (it may be someone with other orders); the new address
@@ -2858,7 +2891,7 @@ async function sendFarmOrderEmail(env, saleId, how) {
     dollars(lineAmount(l)) + '</td></tr>').join('');
   const html = emailShell(
     '<p style="margin:0 0 6px;font-size:20px;color:#1E1B16">' + (s.channel === 'invoice' ? 'Invoice ' : 'Order ') + escHtml(ref) + ' · ' + dollars(s.total_cents) + '</p>' +
-    '<p style="margin:0 0 14px">' + escHtml(s.customer_name || '') + ' · ' + escHtml(s.customer_email || '') +
+    '<p style="margin:0 0 14px">' + escHtml(s.customer_name || '') + ' · ' + escHtml(shownEmail(s.customer_email) || 'no email') +
       (s.customer_phone ? ' · ' + escHtml(s.customer_phone) : '') + '</p>' +
     '<table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #E3DCCE;border-bottom:1px solid #E3DCCE;margin:0 0 12px">' + rows + '</table>' +
     '<p style="margin:0 0 6px"><strong>Payment:</strong> ' + escHtml(how) + (s.tax_exempt ? ' (tax-exempt)' : '') + '</p>' +
@@ -2866,7 +2899,7 @@ async function sendFarmOrderEmail(env, saleId, how) {
     '<p style="margin:0 0 16px"><strong>Next:</strong> ' + escHtml(next) + '</p>' +
     '<p style="margin:0"><a href="' + adminUrl() + '" style="background:#59803D;color:#fff;text-decoration:none;padding:10px 18px;border-radius:2px;display:inline-block">Open the admin</a></p>');
   const text = ['Order ' + ref + ' - ' + dollars(s.total_cents),
-    (s.customer_name || '') + ' <' + (s.customer_email || '') + '>' + (s.customer_phone ? ' ' + s.customer_phone : ''),
+    (s.customer_name || '') + (shownEmail(s.customer_email) ? ' <' + shownEmail(s.customer_email) + '>' : ' (no email)') + (s.customer_phone ? ' ' + s.customer_phone : ''),
     '',
     ...lines.map((l) => l.qty + ' x ' + l.name + (l.unit ? ' (' + l.unit + ')' : '')),
     '',
@@ -2891,7 +2924,7 @@ async function attentionItems(env) {
   const detail = (r) => {
     const days = Math.floor((now - Date.parse(r.sold_at)) / DAY);
     return {
-      text: (r.customer_name || r.customer_email || 'A customer') + ' · ' + dollars(r.total_cents) + ' · ordered ' +
+      text: (r.customer_name || shownEmail(r.customer_email) || 'A customer') + ' · ' + dollars(r.total_cents) + ' · ordered ' +
         r.sold_at.slice(0, 10) + ' (' + days + (days === 1 ? ' day' : ' days') + ' ago) · order ' + orderRef(r.id),
       url: stripeUrl(r.stripe_payment_intent), link_label: 'View in Stripe',
     };
@@ -2960,11 +2993,12 @@ async function attentionItems(env) {
   const invDetail = (r, extra) => {
     const days = Math.floor((now - Date.parse(r.sold_at)) / DAY);
     return {
-      text: (r.customer_name || r.customer_email || 'A customer') + ' · ' + dollars(r.total_cents) + ' · invoice ' + orderRef(r.id) +
+      text: (r.customer_name || shownEmail(r.customer_email) || 'A customer') + ' · ' + dollars(r.total_cents) + ' · invoice ' + orderRef(r.id) +
         ' · created ' + r.sold_at.slice(0, 10) + (days >= 1 ? ' (' + days + (days === 1 ? ' day' : ' days') + ' ago)' : '') + (extra || ''),
     };
   };
-  const failedMail = invRows.filter((r) => r.invoice_last_error);
+  const noMail = (r) => isNoEmail(r.customer_email);
+  const failedMail = invRows.filter((r) => r.invoice_last_error && !noMail(r));
   if (failedMail.length) {
     items.push({
       level: 'urgent', filter: 'invoice_unsent',
@@ -2974,7 +3008,7 @@ async function attentionItems(env) {
       details: failedMail.map((r) => invDetail(r, ' · error: ' + String(r.invoice_last_error).slice(0, 80))),
     });
   }
-  const unsent = invRows.filter((r) => !r.invoice_sent_at && !r.invoice_last_error && now - Date.parse(r.sold_at) > 60 * 60 * 1000);
+  const unsent = invRows.filter((r) => !noMail(r) && !r.invoice_sent_at && !r.invoice_last_error && now - Date.parse(r.sold_at) > 60 * 60 * 1000);
   if (unsent.length) {
     items.push({
       level: 'urgent', filter: 'invoice_unsent',
@@ -2983,13 +3017,14 @@ async function attentionItems(env) {
       details: unsent.map((r) => invDetail(r)),
     });
   }
-  const unpaid = invRows.filter((r) => r.invoice_sent_at && !r.invoice_last_error && now - Date.parse(r.sold_at) > 7 * DAY);
+  // An invoice for someone with no email is handed over by link, so it is "out" from the start.
+  const unpaid = invRows.filter((r) => (r.invoice_sent_at || noMail(r)) && !r.invoice_last_error && now - Date.parse(r.sold_at) > 7 * DAY);
   if (unpaid.length) {
     items.push({
       level: 'todo', filter: 'invoiced',
       text: unpaid.length + (unpaid.length === 1 ? ' invoice has' : ' invoices have') + ' been unpaid for over a week (' +
         dollars(unpaid.reduce((n, r) => n + r.total_cents, 0)) + ') — press Resend to remind them, or follow up.',
-      details: unpaid.map((r) => invDetail(r, ' · sent ' + r.invoice_sent_at.slice(0, 10))),
+      details: unpaid.map((r) => invDetail(r, r.invoice_sent_at ? ' · sent ' + r.invoice_sent_at.slice(0, 10) : ' · no email, pay link handed over')),
     });
   }
   const disputes = rows.filter((r) => /DISPUTE OPENED/.test(r.notes || ''));
@@ -3230,7 +3265,8 @@ async function adminRoutes(path, request, env) {
     // Location (consignment) sales have their own tab; they are not orders.
     // Invoices the customer has not received (never sent, or the last email
     // failed) always come first, so they cannot hide in a long list.
-    const lost = "(channel = 'invoice' AND status = 'invoiced' AND (invoice_sent_at IS NULL OR invoice_last_error IS NOT NULL))";
+    const lost = "(channel = 'invoice' AND status = 'invoiced' AND (invoice_sent_at IS NULL OR invoice_last_error IS NOT NULL)" +
+      " AND COALESCE(customer_email, '') NOT LIKE '%@no-email.invalid')";
     const q = status === 'invoice_unsent'
       ? env.DB.prepare('SELECT * FROM sales WHERE ' + lost + ' ORDER BY sold_at DESC LIMIT 500')
       : status
@@ -3498,6 +3534,10 @@ async function adminRoutes(path, request, env) {
     const now = new Date().toISOString();
     const subtotal = Math.round(Number(b.subtotal_cents) || 0);
     const tax = Math.round(Number(b.tax_cents) || 0);
+    // With an email the buyer is keyed by it; without one, a name and phone are enough to keep them.
+    const typedEmail = String(b.customer_email || '').trim();
+    const buyerEmail = typedEmail ? (cleanEmail(typedEmail) || typedEmail)
+      : await noEmailBuyer(env, { name: b.customer_name, phone: b.customer_phone });
 
     await env.DB.prepare(
       'INSERT INTO sales (id, sold_at, channel, category, customer_email, customer_name, customer_phone,' +
@@ -3510,7 +3550,7 @@ async function adminRoutes(path, request, env) {
         b.sold_at || now,
         'direct',
         b.category || 'other',
-        b.customer_email || null,
+        buyerEmail || null,
         b.customer_name || null,
         b.customer_phone || null,
         JSON.stringify(b.items || []),
