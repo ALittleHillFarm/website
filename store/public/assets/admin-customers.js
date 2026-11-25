@@ -16,7 +16,7 @@
   var tab = document.getElementById('tab-customers');
   if (!host || !tab) return;
 
-  var state = { list: [], historyOnly: [], filter: '', editing: null, isNew: false, dirty: false, busy: false, csv: '', previewId: 0 };
+  var state = { list: [], historyOnly: [], filter: '', editing: null, isNew: false, dirty: false, busy: false, csv: '', previewId: 0, viewing: null, cameFrom: '' };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -35,10 +35,22 @@
       });
     });
   }
+  function profileApi(email) {
+    return fetch('/api/admin/customers?email=' + encodeURIComponent(email)).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) throw new Error(d.error || ('Request failed (' + r.status + ')'));
+        return d;
+      });
+    });
+  }
   function note(text, kind) {
     var el = document.getElementById('cu-msg');
     if (el) el.innerHTML = text ? '<p class="alert ' + (kind || 'success') + '">' + esc(text) + '</p>' : '';
   }
+  function money(c) { return '$' + (Math.round(Number(c) || 0) / 100).toFixed(2); }
+  var STATUS = { captured: 'Paid', recorded: 'Paid', authorized: 'Card on hold', pending: 'Pending', processing: 'Bank transfer on its way',
+    awaiting_cash: 'Cash at pickup', invoiced: 'Invoice not paid yet', canceled: 'Canceled', refunded: 'Refunded', failed: 'Failed', abandoned: 'Abandoned' };
+  function statusName(s) { return STATUS[s] || s; }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
   function val(id) { return document.getElementById(id).value; }
   function checked(id) { return document.getElementById(id).checked; }
@@ -75,36 +87,43 @@
         '<div class="meta">' + esc(bits.join(' · ')) + '</div>' +
         (c.notes ? '<div class="meta">' + esc(c.notes.length > 120 ? c.notes.slice(0, 117) + '…' : c.notes) + '</div>' : '') + '</div>' +
       '<div class="ad-amt"></div>' +
-      '<div class="acts"><button type="button" class="btn small" data-act="edit" data-email="' + esc(c.email) + '">Edit</button></div>' +
+      '<div class="acts"><button type="button" class="btn small" data-act="open" data-email="' + esc(c.email) + '">Open</button>' +
+        '<button type="button" class="btn small ghost" data-act="invoice" data-email="' + esc(c.email) + '">Invoice</button></div>' +
+    '</div>';
+  }
+
+  // People who only appear in old Shopify purchases (no customer record yet).
+  function historyRow(h) {
+    return '<div class="ad-item">' +
+      '<div class="ad-main"><strong>' + esc(h.email) + '</strong>' +
+        '<div class="meta">' + esc(plural(h.lines, 'old Shopify line', 'old Shopify lines') + ' · last bought ' + isoDay(h.last_purchase)) + '</div></div>' +
+      '<div class="ad-amt"></div>' +
+      '<div class="acts"><button type="button" class="btn small" data-act="open" data-email="' + esc(h.email) + '">Open</button>' +
+        '<button type="button" class="btn small ghost" data-act="invoice" data-email="' + esc(h.email) + '">Invoice</button>' +
+        '<button type="button" class="btn small ghost" data-act="add-from-history" data-email="' + esc(h.email) + '">Add as customer</button></div>' +
     '</div>';
   }
 
   function listHtml() {
     var shown = state.list.filter(function (c) { return matches(c, state.filter); });
-    if (!state.list.length) return '<p class="empty-note">No customers yet. They are added when someone orders, or press <strong>Add a customer</strong>.</p>';
-    if (!shown.length) return '<p class="empty-note">No customer matches “' + esc(state.filter) + '”.</p>';
-    return '<div class="ad-list">' + shown.map(rowHtml).join('') + '</div>';
+    var oldOnes = state.filter ? state.historyOnly.filter(function (h) { return matches({ email: h.email }, state.filter); }) : [];
+    if (!state.list.length && !oldOnes.length) return '<p class="empty-note">No customers yet. They are added when someone orders, or press <strong>Add a customer</strong>.</p>';
+    if (!shown.length && !oldOnes.length) return '<p class="empty-note">No customer matches “' + esc(state.filter) + '”.</p>';
+    return (shown.length ? '<div class="ad-list">' + shown.map(rowHtml).join('') + '</div>' : '') +
+      (oldOnes.length ? '<p class="hint" style="margin:18px 0 8px">Also in old Shopify purchases (no customer record yet)</p><div class="ad-list">' + oldOnes.map(historyRow).join('') + '</div>' : '');
   }
 
   function historyOnlyHtml() {
     if (!state.historyOnly.length) return '';
-    var rows = state.historyOnly.map(function (h) {
-      return '<div class="ad-item">' +
-        '<div class="ad-main"><strong>' + esc(h.email) + '</strong>' +
-          '<div class="meta">' + esc(plural(h.lines, 'old Shopify line', 'old Shopify lines') + ' · last bought ' + isoDay(h.last_purchase)) + '</div></div>' +
-        '<div class="ad-amt"></div>' +
-        '<div class="acts"><button type="button" class="btn small" data-act="add-from-history" data-email="' + esc(h.email) + '">Add as customer</button></div>' +
-      '</div>';
-    }).join('');
     return '<details class="how" style="margin-top:22px"><summary>' +
       esc(plural(state.historyOnly.length, 'email', 'emails')) + ' with Shopify purchases but no customer record</summary>' +
       '<p class="hint" style="margin:12px 0">Their purchases already count (cash at pickup, “recent purchases” on an invoice). ' +
-      'Add them as customers to give them a name here and in the invoice form.</p>' +
-      '<div class="ad-list">' + rows + '</div></details>';
+      'Add them as customers to give them a name here and in the invoice form. Searching above also finds them.</p>' +
+      '<div class="ad-list">' + state.historyOnly.map(historyRow).join('') + '</div></details>';
   }
 
   function renderList() {
-    state.editing = null; state.dirty = false;
+    state.editing = null; state.viewing = null; state.cameFrom = ''; state.dirty = false;
     host.innerHTML = '<div id="cu-msg"></div>' +
       '<p><button type="button" class="btn" data-act="new">Add a customer</button> ' +
         '<span class="muted" id="cu-count" style="margin-left:12px"></span></p>' +
@@ -150,7 +169,7 @@
     if (r.no_email.length) {
       out += '<p><strong>' + esc(plural(r.no_email.length, 'customer', 'customers')) + ' ordered but ' + (r.no_email.length === 1 ? 'has' : 'have') + ' no email in Shopify</strong>, ' +
         'so they cannot be added (the email is how the store knows someone). Add them with <em>Add a customer</em> when you have their email.</p>' +
-        '<details><summary class="link-btn">Who</summary>' + namesList(r.no_email, function (n) { return esc(n.name) + ' <span class="muted">· ' + esc(plural(n.orders, 'order', 'orders')) + '</span>'; }) + '</details>';
+        '<details><summary class="link-btn">Who</summary>' + namesList(r.no_email, function (n) { return esc(n.name) + ' <span class="muted">· ' + esc(plural(n.orders, 'order', 'orders')) + (n.phone ? ' · ' + esc(n.phone) : ' · no phone either') + '</span>'; }) + '</details>';
     }
     if (r.never_ordered) out += '<p class="muted">' + esc(plural(r.never_ordered, 'person', 'people')) + ' who never ordered ' + (r.never_ordered === 1 ? 'was' : 'were') + ' left out (tick the box above to include them).</p>';
     if (r.tax_exempt.length) {
@@ -196,6 +215,57 @@
       state.busy = false; btn.disabled = false;
       st.textContent = 'Not saved: ' + err.message;
     });
+  }
+
+
+  // ---- one customer: who they are, what they bought, and a way to invoice them ----
+  function renderProfile() {
+    var p = state.viewing, c = p.customer;
+    var who = (c && c.name) || p.email;
+    var chips = c ? (c.tax_exempt ? ' <span class="chip">Tax-exempt</span>' : '') + (c.trusted ? ' <span class="chip done">Trusted</span>' : '') : '';
+    var paid = p.orders.filter(function (o) { return (o.status === 'captured' || o.status === 'recorded') && o.total_cents > o.refunded_cents; });
+    var spent = paid.reduce(function (n, o) { return n + o.total_cents - o.refunded_cents; }, 0);
+    var orders = p.orders.length ? '<div class="ad-list">' + p.orders.map(function (o) {
+      return '<div class="ad-item"><div class="ad-main"><strong>' + esc(o.items || 'Order ' + o.ref) + '</strong>' +
+        '<div class="meta">' + esc(isoDay(o.sold_at) + ' · order ' + o.ref + ' · ' + (o.channel === 'invoice' ? 'invoice' : o.channel === 'direct' ? 'recorded sale' : 'online') +
+          ' · ' + statusName(o.status) + (o.refunded_cents ? ' · refunded ' + money(o.refunded_cents) : '')) + '</div></div>' +
+        '<div class="ad-amt">' + esc(money(o.total_cents)) + '</div><div class="acts"></div></div>';
+    }).join('') + '</div>' : '<p class="empty-note" style="padding:8px 0">No orders in this store yet.</p>';
+    var old = p.history.length ? '<div class="ad-list">' + p.history.map(function (h) {
+      return '<div class="ad-item"><div class="ad-main"><strong>' + esc(h.name) + '</strong>' + (h.unit ? ' <span class="muted">(' + esc(h.unit) + ')</span>' : '') +
+        '<div class="meta">' + esc(isoDay(h.sold_at) + ' · ' + h.qty + ' × ' + money(h.price_cents)) + '</div></div>' +
+        '<div class="ad-amt">' + esc(money(h.qty * h.price_cents)) + '</div><div class="acts"></div></div>';
+    }).join('') + '</div>' : '<p class="empty-note" style="padding:8px 0">No purchases from before this store are on file.</p>';
+    host.innerHTML =
+      '<p><button type="button" class="link-btn" data-act="back">← All customers</button></p>' +
+      '<div id="cu-msg"></div>' +
+      '<h3 class="serif" style="font-size:26px;margin:0 0 4px">' + esc(who) + chips + '</h3>' +
+      '<p class="muted" style="margin:0 0 14px">' + esc([c && c.name ? p.email : '', c && c.phone ? c.phone : ''].filter(Boolean).join(' · ') || (c ? '' : 'Not saved as a customer yet')) + '</p>' +
+      '<p><button type="button" class="btn" data-act="invoice" data-email="' + esc(p.email) + '">Create invoice</button> ' +
+        (c ? '<button type="button" class="btn ghost" data-act="edit" data-email="' + esc(p.email) + '">Edit details</button>'
+           : '<button type="button" class="btn ghost" data-act="add-from-history" data-email="' + esc(p.email) + '">Add as customer</button>') + '</p>' +
+      (c && c.notes ? '<p style="white-space:pre-wrap;margin:0 0 6px"><span class="muted">Notes:</span> ' + esc(c.notes) + '</p>' : '') +
+      (c && c.tax_exempt && c.exemption_ref ? '<p style="margin:0 0 6px"><span class="muted">ST-101:</span> ' + esc(c.exemption_ref) + '</p>' : '') +
+      '<h4 class="serif" style="font-size:20px;margin:26px 0 10px">Orders here <span class="muted" style="font-size:14px">' +
+        esc(plural(paid.length, 'paid order', 'paid orders') + (paid.length ? ' · ' + money(spent) : '')) + '</span></h4>' + orders +
+      '<h4 class="serif" style="font-size:20px;margin:26px 0 10px">Before this store (Shopify)</h4>' + old;
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function openProfile(email) {
+    host.innerHTML = '<p class="lede">Loading…</p>';
+    return profileApi(email).then(function (p) {
+      state.viewing = p; state.editing = null;
+      renderProfile();
+    }).catch(function (err) {
+      renderList(); note(err.message, 'error');
+    });
+  }
+
+  // Hand the customer to the New invoice tab.
+  function invoiceFor(email) {
+    var c = state.list.filter(function (x) { return x.email === email; })[0];
+    document.dispatchEvent(new CustomEvent('invoice-for', { detail: { email: email, name: c ? c.name || '' : '', phone: c ? c.phone || '' : '' } }));
   }
 
   // ---- the editor ---------------------------------------------------------------
@@ -250,7 +320,11 @@
       state.busy = false; state.dirty = false;
       var who = r.customer && (r.customer.name || r.customer.email);
       var verb = state.isNew ? 'Added ' : 'Saved ';
-      return load().then(function () { renderList(); note(verb + who + '.'); });
+      var back = !state.isNew && state.cameFrom;
+      return load().then(function () {
+        if (back) return openProfile(back).then(function () { note(verb + who + '.'); });
+        renderList(); note(verb + who + '.');
+      });
     }).catch(function (err) {
       state.busy = false; btn.disabled = false;
       st.textContent = 'Not saved: ' + err.message;
@@ -319,8 +393,11 @@
       blank.email = b.getAttribute('data-email');
       return openEditor(blank, true);
     }
+    if (act === 'open') return openProfile(b.getAttribute('data-email'));
+    if (act === 'invoice') return invoiceFor(b.getAttribute('data-email'));
     if (act === 'edit') {
       var row = state.list.filter(function (x) { return x.email === b.getAttribute('data-email'); })[0];
+      state.cameFrom = state.viewing ? state.viewing.email : '';
       return row && openEditor(JSON.parse(JSON.stringify(row)), false);
     }
     if (act === 'back') {

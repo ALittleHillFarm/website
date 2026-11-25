@@ -406,6 +406,14 @@ email is fixed once a customer exists — their orders, history and sign-in are
 all matched by it — so a new address means adding a new customer. Removing a
 customer deletes only that record (contact details, notes and the two flags);
 orders and Shopify history are untouched and they can still sign in and order.
+**One customer's page.** *Open* on any row shows their details, every order
+here (store, invoice or recorded sale) and what they bought on Shopify, with
+**Create invoice** (jumps to New invoice with them filled in and their recent
+purchases ready to tick) and **Edit details**. People who only ever bought on
+Shopify have a page too, and appear in the search before they are saved as
+customers. On the New invoice form, **Find a customer** matches any part of a
+name, email or phone, including those Shopify-only people.
+
 **Who is added automatically.** Anyone an order is entered for joins the list at
 that moment: a customer checking out (even as a guest), an invoice, or a sale
 recorded by hand *with an email* (the email is how the store tells people apart,

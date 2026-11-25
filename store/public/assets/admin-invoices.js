@@ -13,7 +13,7 @@
   var tab = document.getElementById('tab-invoice');
   if (!host || !tab) return;
 
-  var state = { products: [], customers: [], pickups: [], lines: [], recent: [], recentFor: '', loaded: false, busy: false };
+  var state = { products: [], customers: [], pastOnly: [], pickups: [], lines: [], recent: [], recentFor: '', loaded: false, loading: null, busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -46,19 +46,22 @@
 
   function load() {
     if (state.loaded) return Promise.resolve();
+    if (state.loading) return state.loading;
     host.innerHTML = '<p class="lede">Loading…</p>';
-    return Promise.all([
-      getJSON('/api/admin/products'), getJSON('/api/admin/customers'), getJSON('/api/config'),
+    state.loading = Promise.all([
+      getJSON('/api/admin/products'), getJSON('/api/admin/customers?detail=1'), getJSON('/api/config'),
     ]).then(function (r) {
       state.products = (r[0].products || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
       state.customers = r[1].customers || [];
+      state.pastOnly = r[1].history_only || [];
       state.pickups = r[2].pickup_locations || [];
       state.loaded = true;
       if (!state.lines.length) state.lines.push({ product_id: '', qty: 1, price: '' });
       render();
     }).catch(function (err) {
       host.innerHTML = '<p class="alert error">' + esc(err.message) + '</p>';
-    });
+    }).then(function () { state.loading = null; });
+    return state.loading;
   }
 
   function lineRow(l, i) {
@@ -84,6 +87,9 @@
       '<datalist id="inv-names">' + state.customers.filter(function (c) { return c.name; }).map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.email) + '</option>'; }).join('') + '</datalist>' +
       '<div id="inv-msg"></div>' +
       '<fieldset class="goat-set"><legend>Customer</legend><div class="form-grid">' +
+        '<div class="field span2 inv-find"><label for="inv-find">Find a customer</label>' +
+          '<input type="text" id="inv-find" autocomplete="off" placeholder="Type part of a name, email or phone" role="combobox" aria-expanded="false" aria-controls="inv-find-results">' +
+          '<div id="inv-find-results" class="find-results" role="listbox" hidden></div></div>' +
         '<div class="field"><label for="inv-name">Name</label><input type="text" id="inv-name" list="inv-names" autocomplete="off" placeholder="Start typing a name"></div>' +
         '<div class="field"><label for="inv-email">Email</label><input type="email" id="inv-email" list="inv-customers" autocomplete="off" placeholder="or an email"></div>' +
         '<div class="field"><label for="inv-phone">Phone</label><input type="tel" id="inv-phone"></div>' +
@@ -150,7 +156,11 @@
     });
   }
 
-  function fillCustomer(from) {
+  var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+  // `settled` = they finished typing (left the box), so an email we have never
+  // heard of is worth looking up in the purchase history too.
+  function fillCustomer(from, settled) {
     var emailBox = document.getElementById('inv-email');
     var nameBox = document.getElementById('inv-name');
     if (from === 'name') {
@@ -160,15 +170,68 @@
     }
     var email = emailBox.value.trim().toLowerCase();
     var c = state.customers.filter(function (x) { return x.email === email; })[0];
-    loadRecent(c ? c.email : '');
+    var past = !c && state.pastOnly.filter(function (x) { return String(x.email).toLowerCase() === email; })[0];
+    loadRecent(c || past || (settled && EMAIL.test(email)) ? email : '');
     var note = document.getElementById('inv-cust-note');
     if (c) {
       if (!document.getElementById('inv-name').value) document.getElementById('inv-name').value = c.name || '';
       if (!document.getElementById('inv-phone').value) document.getElementById('inv-phone').value = c.phone || '';
       note.textContent = 'Known customer' + (c.tax_exempt ? ' · tax-exempt' : '') + (c.trusted ? ' · established' : '') + '.';
+    } else if (past) {
+      note.textContent = 'Bought on Shopify before (' + past.lines + (past.lines === 1 ? ' line' : ' lines') + ') — they will be saved as a customer when you create the invoice.';
     } else {
       note.textContent = email ? 'New customer — they will be saved when you create the invoice.' : '';
     }
+  }
+
+  // ---- finding a customer: any part of a name, email or phone ----------------
+  var digitsOf = function (v) { return String(v || '').replace(/\D/g, ''); };
+  function people() {
+    return state.customers.map(function (c) {
+      return { email: c.email, name: c.name || '', phone: c.phone || '', orders: c.paid_orders || 0, lines: c.history_lines || 0, saved: true };
+    }).concat(state.pastOnly.map(function (h) {
+      return { email: String(h.email).toLowerCase(), name: '', phone: '', orders: 0, lines: h.lines || 0, saved: false };
+    }));
+  }
+  function findPeople(q) {
+    var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return people().filter(function (p) {
+      var hay = (p.name + ' ' + p.email + ' ' + p.phone).toLowerCase(), ph = digitsOf(p.phone);
+      return words.every(function (w) { return hay.indexOf(w) !== -1 || (digitsOf(w).length >= 3 && ph.indexOf(digitsOf(w)) !== -1); });
+    }).sort(function (a, b) {
+      var sa = (a.name + ' ' + a.email).toLowerCase().indexOf(words[0]) === 0 ? 0 : 1;
+      var sb = (b.name + ' ' + b.email).toLowerCase().indexOf(words[0]) === 0 ? 0 : 1;
+      return sa - sb || (a.name || a.email).toLowerCase().localeCompare((b.name || b.email).toLowerCase());
+    });
+  }
+  function showFound(q) {
+    var box = document.getElementById('inv-find-results'), input = document.getElementById('inv-find');
+    if (!box) return;
+    var all = findPeople(q), hits = all.slice(0, 8);
+    if (!String(q || '').trim()) { box.hidden = true; box.innerHTML = ''; input.setAttribute('aria-expanded', 'false'); return; }
+    box.innerHTML = hits.length ? hits.map(function (p) {
+      var bits = [p.name ? p.email : '', p.phone, p.orders ? p.orders + (p.orders === 1 ? ' paid order' : ' paid orders') : '',
+        p.lines ? p.lines + ' old Shopify ' + (p.lines === 1 ? 'line' : 'lines') : '', p.saved ? '' : 'Shopify purchases only'].filter(Boolean);
+      return '<button type="button" class="find-hit" role="option" data-pick="' + esc(p.email) + '"><strong>' + esc(p.name || p.email) + '</strong>' +
+        '<span class="muted">' + esc(bits.join(' · ')) + '</span></button>';
+    }).join('') + (all.length > hits.length ? '<div class="find-more muted">' + (all.length - hits.length) + ' more — keep typing to narrow it down</div>' : '')
+      : '<div class="find-more muted">No one matches. Type their name and email below to add a new customer.</div>';
+    box.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+  }
+  function pickPerson(email) {
+    var p = people().filter(function (x) { return x.email === email; })[0];
+    if (!p) return;
+    document.getElementById('inv-name').value = p.name;
+    document.getElementById('inv-email').value = p.email;
+    document.getElementById('inv-phone').value = p.phone;
+    document.getElementById('inv-find').value = '';
+    showFound('');
+    fillCustomer('email', true);
+    schedulePreview();
+    var next = !p.name ? document.getElementById('inv-name') : host.querySelector('input[data-k="pick"]');
+    if (next) next.focus();
   }
 
   // ---- recent purchases: tick to add, untick to remove ----------------------
@@ -253,8 +316,52 @@
   // The Customers tab added, changed or removed someone: fetch the list again next time.
   document.addEventListener('customers-changed', function () { state.loaded = false; });
 
+  host.addEventListener('keydown', function (e) {
+    var t = e.target, box = document.getElementById('inv-find-results');
+    if (!box || box.hidden) return;
+    var hits = Array.prototype.slice.call(box.querySelectorAll('.find-hit'));
+    var at = hits.indexOf(t);
+    if (t.id === 'inv-find') {
+      if (e.key === 'ArrowDown' && hits[0]) { e.preventDefault(); hits[0].focus(); }
+      else if (e.key === 'Enter' && hits[0]) { e.preventDefault(); pickPerson(hits[0].getAttribute('data-pick')); }
+      else if (e.key === 'Escape') { t.value = ''; showFound(''); }
+    } else if (at >= 0) {
+      if (e.key === 'ArrowDown' && hits[at + 1]) { e.preventDefault(); hits[at + 1].focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); (hits[at - 1] || document.getElementById('inv-find')).focus(); }
+      else if (e.key === 'Escape') { document.getElementById('inv-find').focus(); showFound(''); }
+    }
+  });
+  document.addEventListener('click', function (e) {
+    var box = document.getElementById('inv-find-results');
+    if (box && !box.hidden && !(e.target.closest && e.target.closest('.inv-find'))) { document.getElementById('inv-find').value = ''; showFound(''); }
+  });
+
+  // "Create invoice" on a customer's page: open this tab with them filled in.
+  document.addEventListener('invoice-for', function (ev) {
+    var who = ev.detail || {};
+    var writing = false;
+    try { writing = state.loaded && !!document.getElementById('inv-email') && collect().lines.length > 0; } catch (err) { writing = false; }
+    if (writing && !window.confirm('Start a new invoice for ' + (who.name || who.email) + '? The invoice you were writing here will be cleared.')) return;
+    state.loaded = false;                       // fresh customers, fresh form
+    state.lines = [{ product_id: '', qty: 1, price: '' }];
+    state.recent = []; state.recentFor = '';
+    tab.click();
+    load().then(function () {
+      if (!state.loaded) return;
+      document.getElementById('inv-name').value = who.name || '';
+      document.getElementById('inv-email').value = who.email || '';
+      document.getElementById('inv-phone').value = who.phone || '';
+      fillCustomer('email', true);
+      schedulePreview();
+      var next = who.name ? host.querySelector('input[data-k="pick"]') : document.getElementById('inv-name');
+      if (next) next.focus();
+      host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
   host.addEventListener('input', function (e) {
     var t = e.target;
+    if (t.id === 'inv-find') return showFound(t.value);
     var i = t.getAttribute('data-i');
     if (i != null) {
       var l = state.lines[+i];
@@ -302,12 +409,14 @@
       return;
     }
     if (e.target.getAttribute('data-k') === 'taxable') { state.lines[+e.target.getAttribute('data-i')].taxable = e.target.checked; }
-    if (e.target.id === 'inv-email') fillCustomer('email');
-    if (e.target.id === 'inv-name') fillCustomer('name');
+    if (e.target.id === 'inv-email') fillCustomer('email', true);
+    if (e.target.id === 'inv-name') fillCustomer('name', true);
     schedulePreview();
   });
 
   host.addEventListener('click', function (e) {
+    var pick = e.target.closest && e.target.closest('[data-pick]');
+    if (pick) return pickPerson(pick.getAttribute('data-pick'));
     var b = e.target.closest && e.target.closest('[data-act]');
     if (!b) return;
     var act = b.getAttribute('data-act');

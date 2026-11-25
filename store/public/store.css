@@ -437,6 +437,17 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .inv-recent { background:var(--paper); border:1px solid var(--line); padding:12px 14px 4px; margin-bottom:16px; }
 .inv-recent .label { margin-bottom:8px; }
 .inv-recent .check-row { align-items:flex-start; margin-bottom:8px; }
+
+/* Customer finder on the New invoice form */
+.inv-find { position:relative; }
+.find-results { border:1px solid var(--line); background:var(--card); margin-top:4px; max-height:340px; overflow:auto; box-shadow:0 6px 18px rgba(0,0,0,.08); }
+.find-results[hidden] { display:none; }
+.find-hit { display:block; width:100%; text-align:left; padding:10px 14px; border:none; border-top:1px solid var(--line-soft); background:none; font:inherit; color:var(--ink); cursor:pointer; }
+.find-hit:first-child { border-top:none; }
+.find-hit:hover, .find-hit:focus { background:var(--line-soft); outline:none; }
+.find-hit strong { display:block; font-family:var(--serif); font-weight:400; font-size:17px; }
+.find-hit .muted { display:block; font-size:12.5px; margin-top:2px; }
+.find-more { padding:10px 14px; font-size:13px; }
 .inv-recent .muted { color:var(--muted); font-size:13px; }
 
 /* Invoice quantity: the browser's own up/down arrows, on the right, shown

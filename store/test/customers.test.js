@@ -5,7 +5,7 @@ import { registerHooks } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import {
   isEstablishedCustomer, importPurchaseHistory, CustomerError, listCustomers, addCustomer, updateCustomer, deleteCustomer,
-  parseCsv, tidyPhone, shopifyCustomers, importShopifyCustomers, rememberOrderCustomer,
+  parseCsv, tidyPhone, shopifyCustomers, importShopifyCustomers, rememberOrderCustomer, customerProfile,
 } from '../lib/customers.js';
 
 // Wrangler accepts JSON imports without attributes; Node requires attributes.
@@ -430,7 +430,7 @@ test('the export is read for people who have ordered and have an email', () => {
   ]);
   assert.equal(r.duplicates, 1);
   assert.equal(r.never_ordered, 2);                                 // newsletter signups and "Login with Shop" accounts
-  assert.deepEqual(r.no_email, [{ name: 'Lee Nomail', orders: 2 }]); // cannot be keyed without an email
+  assert.deepEqual(r.no_email, [{ name: 'Lee Nomail', orders: 2, phone: '208-555-0103' }]); // cannot be keyed without an email; the phone is how to ask for it
   assert.deepEqual(r.tax_exempt, [{ name: "Sam O'Neil, Jr.", email: 'sam@example.com' }]);
   assert.equal(shopifyCustomers(SHOPIFY_CSV, { includeNeverOrdered: true }).people.length, 6);
 });
@@ -633,4 +633,56 @@ test('remembering an order’s customer: adds once, fills blanks only when allow
   assert.equal(await rememberOrderCustomer(db, { email: '', name: 'Nobody' }), false);
   assert.equal(await rememberOrderCustomer(db, { email: 'bad', name: 'Nobody' }, { fillBlanks: true }), false);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 2);
+});
+
+// ---- one customer's page --------------------------------------------------------
+
+function orderRow(sqlite, { id, email = 'returning@example.com', channel = 'online', status = 'captured', total = 5000, refunded = 0, items = '[{"name":"Kelp","qty":2}]', at = '2026-03-01T12:00:00Z' }) {
+  sqlite.prepare(
+    'INSERT INTO sales (id, sold_at, channel, category, customer_email, items_json, subtotal_cents, tax_cents, total_cents, payment_method, status, refunded_cents)' +
+    ' VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+  ).run(id, at, channel, 'feed', email, items, total, 0, total, 'card', status, refunded);
+}
+
+test('a customer page shows the record, their orders here and their Shopify purchases', async (t) => {
+  const { db, sqlite } = database(t);
+  orderRow(sqlite, { id: 'aaaaaaaa-1', at: '2026-01-01T00:00:00Z' });
+  orderRow(sqlite, { id: 'bbbbbbbb-2', email: 'RETURNING@example.com', channel: 'invoice', status: 'invoiced', total: 9000, at: '2026-02-01T00:00:00Z',
+    items: '[{"name":"A"},{"name":"B"},{"name":"C"},{"name":"D"},{"name":"E"}]' });
+  orderRow(sqlite, { id: 'cccccccc-3', email: 'someone-else@example.com' });
+  orderRow(sqlite, { id: 'dddddddd-4', channel: 'location' });
+  history(sqlite); history(sqlite, 'someone-else@example.com');
+  const p = await customerProfile(db, ' Returning@Example.com ');
+  assert.equal(p.email, 'returning@example.com');
+  assert.equal(p.customer.name, 'Returning Customer');
+  assert.deepEqual(p.orders.map((o) => [o.ref, o.status, o.total_cents, o.items]), [
+    ['bbbbbbbb', 'invoiced', 9000, 'A, B, C + 2 more'],      // newest first; long orders are shortened
+    ['aaaaaaaa', 'captured', 5000, '2 × Kelp'],
+  ]);                                                         // no one else's orders, no consignment reports
+  assert.equal(p.history.length, 1);
+  assert.equal(p.history[0].name, 'Old purchase without a matching product');
+});
+
+test('a person who only ever bought on Shopify still has a page, and a stranger does not', async (t) => {
+  const { db, sqlite } = database(t);
+  history(sqlite, 'shopify-only@example.com');
+  const p = await customerProfile(db, 'Shopify-Only@example.com');
+  assert.equal(p.customer, null);
+  assert.equal(p.history.length, 1);
+  assert.deepEqual(p.orders, []);
+  await rejectsWith(customerProfile(db, 'stranger@example.com'), 404);
+  await rejectsWith(customerProfile(db, 'not an email'), 400, /email/);
+});
+
+test('the customer page is served to admins only, by email', async (t) => {
+  const { db, sqlite } = database(t);
+  orderRow(sqlite, { id: 'eeeeeeee-5' });
+  const r = await adminCall(db, 'GET', undefined, { path: '/api/admin/customers?email=returning%40example.com' });
+  assert.equal(r.response.status, 200);
+  assert.equal(r.body.customer.email, 'returning@example.com');
+  assert.equal(r.body.orders.length, 1);
+  assert.equal((await adminCall(db, 'GET', undefined, { path: '/api/admin/customers?email=stranger%40example.com' })).response.status, 404);
+  const bare = await worker.fetch(new Request('https://store.example.com/api/admin/customers?email=returning%40example.com'),
+    { DB: db, ADMIN_PASSWORD: 'test-admin-password' }, {});
+  assert.equal(bare.status, 401);
 });

@@ -255,7 +255,7 @@ export function shopifyCustomers(csv, { includeNeverOrdered = false } = {}) {
     const exempt = cell(r, at.exempt).toLowerCase() === 'yes';
     if (!email) {
       // Their email is the only way the store tells people apart, so these cannot be added.
-      if (orders > 0) result.no_email.push({ name: name || '(no name)', orders });
+      if (orders > 0) result.no_email.push({ name: name || '(no name)', orders, phone: tidyPhone(cell(r, at.phone) || cell(r, at.addressPhone)) || null });
       continue;
     }
     if (exempt) result.tax_exempt.push({ name: name || email, email });
@@ -346,4 +346,41 @@ export async function rememberOrderCustomer(db, { email, name, phone }, { fillBl
       " phone = COALESCE(NULLIF(customers.phone, ''), excluded.phone)"
   ).bind(...person).run();
   return !was;
+}
+
+// ---------------------------------------------------------------------------
+// One customer, everything we know: for the admin's customer page.
+// ---------------------------------------------------------------------------
+
+/** What an order contained, in a few words. */
+function itemsSummary(json) {
+  let items = [];
+  try { items = JSON.parse(json || '[]'); } catch { /* shown as nothing */ }
+  const names = (Array.isArray(items) ? items : []).map((l) => (l && l.name ? (l.qty > 1 ? l.qty + ' × ' : '') + l.name : '')).filter(Boolean);
+  return names.length > 3 ? names.slice(0, 3).join(', ') + ' + ' + (names.length - 3) + ' more' : names.join(', ');
+}
+
+/**
+ * The customer record (null if they are only in Shopify history), their
+ * orders from this store, and what they bought on Shopify before it. Matched
+ * by email, ignoring case. Works for an email that has no customer record,
+ * so staff can open and invoice people who only ever bought on Shopify.
+ */
+export async function customerProfile(db, email) {
+  const who = normalEmail(email);
+  if (!who) throw new CustomerError('that does not look like an email address');
+  const customer = await oneCustomer(db, who);
+  const orders = ((await db.prepare(
+    'SELECT id, sold_at, channel, status, payment_method, total_cents, refunded_cents, items_json, customer_name FROM sales' +
+      " WHERE customer_email = ? COLLATE NOCASE AND channel != 'location' ORDER BY sold_at DESC LIMIT 100"
+  ).bind(who).all()).results || []).map((s) => ({
+    id: s.id, ref: String(s.id).slice(0, 8), sold_at: s.sold_at, channel: s.channel, status: s.status, payment_method: s.payment_method,
+    total_cents: s.total_cents, refunded_cents: s.refunded_cents || 0, items: itemsSummary(s.items_json),
+  }));
+  const history = (await db.prepare(
+    "SELECT sold_at, name, unit, qty, price_cents FROM purchase_history WHERE email = ? COLLATE NOCASE AND source = 'shopify'" +
+      ' ORDER BY sold_at DESC LIMIT 200'
+  ).bind(who).all()).results || [];
+  if (!customer && !orders.length && !history.length) throw new CustomerError('no customer or purchase history for that email', 404);
+  return { email: customer ? customer.email : who, customer: customer ? { ...customer } : null, orders, history: history.map((h) => ({ ...h })) };
 }
