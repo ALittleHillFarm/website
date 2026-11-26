@@ -295,7 +295,8 @@
       '<fieldset class="goat-set"><legend>Sire and dam, with photos</legend><div class="goat-parents">' + parents + '</div></fieldset>' +
 
       '<fieldset class="goat-set"><legend>Extra facts</legend>' +
-        '<p class="hint" style="margin:0 0 14px">Shown on the roster card and the goat’s page — e.g. “Breeding to 2026: Maple Sugar”.</p>' +
+        '<p class="hint" style="margin:0 0 14px">Shown on the roster card and the goat’s page — e.g. “Temperament: friendly”. ' +
+          'A buck’s “Breeding to &lt;year&gt;” row is filled in from the Breeding tab, so a fact with that label is ignored.</p>' +
         facts + '<button type="button" class="btn ghost small" data-act="fact-add">Add a fact</button></fieldset>' +
 
       '<fieldset class="goat-set"><legend>Notes</legend>' + prompts + sections +
