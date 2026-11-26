@@ -8,6 +8,11 @@
  * The email is who a customer is — their orders, purchase history and
  * sign-in are all matched by it — so it can be typed when adding but is
  * fixed afterwards. A different email is a different customer.
+ *
+ * A customer with no email is kept under a made-up address ending
+ * @no-email.invalid (see lib/customers.js). It is only ever used as the key;
+ * this screen never shows it. Giving them their real email later moves their
+ * orders and history to it.
  */
 (function () {
   'use strict';
@@ -52,6 +57,9 @@
     awaiting_cash: 'Cash at pickup', invoiced: 'Invoice not paid yet', canceled: 'Canceled', refunded: 'Refunded', failed: 'Failed', abandoned: 'Abandoned' };
   function statusName(s) { return STATUS[s] || s; }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+  var NO_EMAIL = /@no-email\.invalid$/i;
+  function emailOf(c) { var e = c && c.email; return e && !NO_EMAIL.test(e) ? e : ''; }
+  function digits(v) { return String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, ''); }
   function val(id) { return document.getElementById(id).value; }
   function checked(id) { return document.getElementById(id).checked; }
   function isoDay(s) { return String(s || '').slice(0, 10); }
@@ -72,18 +80,19 @@
   // ---- the list ---------------------------------------------------------------
   function matches(c, q) {
     if (!q) return true;
-    var hay = [c.name, c.email, c.phone, c.notes].join(' ').toLowerCase();
-    return q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1; });
+    var hay = [c.name, emailOf(c), c.phone, c.notes].join(' ').toLowerCase();
+    var ph = digits(c.phone);
+    return q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1 || (digits(w).length >= 3 && ph.indexOf(digits(w)) !== -1); });
   }
 
   function rowHtml(c) {
-    var chips = (c.tax_exempt ? ' <span class="chip">Tax-exempt</span>' : '') + (c.trusted ? ' <span class="chip done">Trusted</span>' : '');
-    var bits = [c.name ? c.email : '', c.phone || ''].filter(Boolean);
+    var chips = (emailOf(c) ? '' : ' <span class="chip">No email</span>') + (c.tax_exempt ? ' <span class="chip">Tax-exempt</span>' : '') + (c.trusted ? ' <span class="chip done">Trusted</span>' : '');
+    var bits = [c.name ? emailOf(c) : '', c.phone || ''].filter(Boolean);
     var orders = plural(c.paid_orders || 0, 'paid order', 'paid orders');
     var old = c.history_lines ? plural(c.history_lines, 'old Shopify line', 'old Shopify lines') : 'no Shopify history';
     bits.push(orders, old);
     return '<div class="ad-item">' +
-      '<div class="ad-main"><strong>' + esc(c.name || c.email) + '</strong>' + chips +
+      '<div class="ad-main"><strong>' + esc(c.name || emailOf(c) || '(no name)') + '</strong>' + chips +
         '<div class="meta">' + esc(bits.join(' · ')) + '</div>' +
         (c.notes ? '<div class="meta">' + esc(c.notes.length > 120 ? c.notes.slice(0, 117) + '…' : c.notes) + '</div>' : '') + '</div>' +
       '<div class="ad-amt"></div>' +
@@ -163,17 +172,18 @@
     var out = '<div class="alert" style="margin:0 0 14px"><strong>' + esc(plural(r.file_rows, 'row', 'rows')) + '</strong> in the file.</div>';
     out += '<p><strong>' + esc(plural(r.add.length, 'person', 'people')) + ' would be added.</strong>' +
       (r.add.length ? '</p><details><summary class="link-btn">Who</summary>' +
-        namesList(r.add, function (a) { return esc(a.name || '(no name)') + ' <span class="muted">· ' + esc(a.email) + ' · ' + esc(plural(a.orders, 'order', 'orders')) + '</span>'; }) + '</details>' : '</p>');
+        namesList(r.add, function (a) { return esc(a.name || '(no name)') + ' <span class="muted">· ' + (a.has_email ? esc(a.email) : 'no email · ' + (a.phone ? esc(a.phone) : 'no phone')) + ' · ' + esc(plural(a.orders, 'order', 'orders')) + '</span>'; }) + '</details>' : '</p>');
+    var noMail = r.add.filter(function (a) { return !a.has_email; }).length;
+    if (noMail) out += '<p class="muted">' + esc(plural(noMail, 'of them has', 'of them have')) + ' no email in Shopify, so ' + (noMail === 1 ? 'is' : 'are') + ' added by name and phone. You can invoice them (the pay link is texted, not emailed) and add their email later.</p>';
     out += '<p>' + esc(plural(r.already, 'person is', 'people are')) + ' already customers' +
       (r.filled ? ', and ' + esc(plural(r.filled, 'of them has', 'of them have')) + ' a blank name or phone that would be filled in' : '') + '.</p>';
-    if (r.no_email.length) {
-      out += '<p><strong>' + esc(plural(r.no_email.length, 'customer', 'customers')) + ' ordered but ' + (r.no_email.length === 1 ? 'has' : 'have') + ' no email in Shopify</strong>, ' +
-        'so they cannot be added (the email is how the store knows someone). Add them with <em>Add a customer</em> when you have their email.</p>' +
-        '<details><summary class="link-btn">Who</summary>' + namesList(r.no_email, function (n) { return esc(n.name) + ' <span class="muted">· ' + esc(plural(n.orders, 'order', 'orders')) + (n.phone ? ' · ' + esc(n.phone) : ' · no phone either') + '</span>'; }) + '</details>';
+    if (r.no_contact.length) {
+      out += '<p class="muted">' + esc(plural(r.no_contact.length, 'customer', 'customers')) + ' ordered but ' + (r.no_contact.length === 1 ? 'has' : 'have') +
+        ' no email, name or phone in Shopify, so there is nothing to keep.</p>';
     }
     if (r.never_ordered) out += '<p class="muted">' + esc(plural(r.never_ordered, 'person', 'people')) + ' who never ordered ' + (r.never_ordered === 1 ? 'was' : 'were') + ' left out (tick the box above to include them).</p>';
     if (r.tax_exempt.length) {
-      out += '<p><strong>Marked tax-exempt in Shopify:</strong> ' + esc(r.tax_exempt.map(function (t) { return t.name + ' (' + t.email + ')'; }).join('; ')) +
+      out += '<p><strong>Marked tax-exempt in Shopify:</strong> ' + esc(r.tax_exempt.map(function (t) { return t.name + (t.email ? ' (' + t.email + ')' : ' (no email)'); }).join('; ')) +
         '. This is <strong>not</strong> carried over. Open their record and tick tax-exempt once you have confirmed their ST-101.</p>';
     }
     var todo = r.add.length + r.filled;
@@ -221,7 +231,7 @@
   // ---- one customer: who they are, what they bought, and a way to invoice them ----
   function renderProfile() {
     var p = state.viewing, c = p.customer;
-    var who = (c && c.name) || p.email;
+    var who = (c && c.name) || emailOf(p) || '(no name)';
     var chips = c ? (c.tax_exempt ? ' <span class="chip">Tax-exempt</span>' : '') + (c.trusted ? ' <span class="chip done">Trusted</span>' : '') : '';
     var paid = p.orders.filter(function (o) { return (o.status === 'captured' || o.status === 'recorded') && o.total_cents > o.refunded_cents; });
     var spent = paid.reduce(function (n, o) { return n + o.total_cents - o.refunded_cents; }, 0);
@@ -240,7 +250,7 @@
       '<p><button type="button" class="link-btn" data-act="back">← All customers</button></p>' +
       '<div id="cu-msg"></div>' +
       '<h3 class="serif" style="font-size:26px;margin:0 0 4px">' + esc(who) + chips + '</h3>' +
-      '<p class="muted" style="margin:0 0 14px">' + esc([c && c.name ? p.email : '', c && c.phone ? c.phone : ''].filter(Boolean).join(' · ') || (c ? '' : 'Not saved as a customer yet')) + '</p>' +
+      '<p class="muted" style="margin:0 0 14px">' + esc([emailOf(p) ? p.email : 'No email on file', c && c.phone ? c.phone : ''].filter(Boolean).join(' · ') + (c ? '' : ' · Not saved as a customer yet')) + '</p>' +
       '<p><button type="button" class="btn" data-act="invoice" data-email="' + esc(p.email) + '">Create invoice</button> ' +
         (c ? '<button type="button" class="btn ghost" data-act="edit" data-email="' + esc(p.email) + '">Edit details</button>'
            : '<button type="button" class="btn ghost" data-act="add-from-history" data-email="' + esc(p.email) + '">Add as customer</button>') + '</p>' +
@@ -265,6 +275,7 @@
   // Hand the customer to the New invoice tab.
   function invoiceFor(email) {
     var c = state.list.filter(function (x) { return x.email === email; })[0];
+    // `email` may be the made-up key of someone with no email; the invoice form knows to treat it that way.
     document.dispatchEvent(new CustomEvent('invoice-for', { detail: { email: email, name: c ? c.name || '' : '', phone: c ? c.phone || '' : '' } }));
   }
 
@@ -276,8 +287,9 @@
       '<div id="cu-msg"></div>' +
       '<fieldset class="goat-set"><legend>' + (isNew ? 'New customer' : 'Edit customer') + '</legend><div class="form-grid">' +
         '<div class="field"><label for="cu-name">Name</label><input type="text" id="cu-name" maxlength="120" value="' + esc(e.name) + '" autocomplete="off"></div>' +
-        '<div class="field"><label for="cu-email">Email</label><input type="email" id="cu-email" maxlength="254" value="' + esc(e.email) + '" autocomplete="off"' + (isNew ? '' : ' readonly') + '>' +
-          '<div class="hint">' + (isNew ? 'They use this to sign in, and their orders and past purchases are matched by it.'
+        '<div class="field"><label for="cu-email">Email' + (isNew ? ' <span class="lbl-note">optional</span>' : '') + '</label><input type="email" id="cu-email" maxlength="254" value="' + esc(isNew ? e.email : emailOf(e)) + '" autocomplete="off"' + (isNew || !emailOf(e) ? '' : ' readonly') + '>' +
+          '<div class="hint">' + (isNew ? 'They use this to sign in, and their orders and past purchases are matched by it. Leave it empty for someone with no email: then their phone number is needed.'
+            : !emailOf(e) ? 'No email on file. When you have it, add it here: their orders and history move to it (if they are already a customer under that email, the two are merged).'
             : 'Fixed: their orders, purchases and sign-in all go by this address. For a new address, add a new customer.') + '</div></div>' +
         '<div class="field"><label for="cu-phone">Phone</label><input type="text" id="cu-phone" maxlength="40" value="' + esc(e.phone) + '" autocomplete="off"></div>' +
         '<div class="field"></div>' +
@@ -307,23 +319,31 @@
   function save(btn) {
     if (state.busy) return;
     var st = document.getElementById('cu-status');
-    var email = val('cu-email').trim();
-    if (state.isNew && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { st.textContent = 'Enter a real email address.'; return; }
+    var typed = val('cu-email').trim();
+    var shape = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (typed && !shape.test(typed)) { st.textContent = 'That does not look like an email address.'; return; }
     if (state.isNew && !val('cu-name').trim()) { st.textContent = 'Enter their name.'; return; }
+    if (state.isNew && !typed && digits(val('cu-phone')).length < 10) { st.textContent = 'Without an email, enter their phone number so they can be told apart.'; return; }
+    var addingEmail = !state.isNew && !emailOf(state.editing) && !!typed;
     if (checked('cu-exempt') && !val('cu-ref').trim() &&
         !window.confirm('Mark them tax-exempt without an ST-101 reference? You can add the reference later.')) return;
     state.busy = true; btn.disabled = true; st.textContent = 'Saving…';
     api('POST', {
-      action: state.isNew ? 'add' : 'update', email: email, name: val('cu-name'), phone: val('cu-phone'),
+      action: state.isNew ? 'add' : 'update', email: state.isNew ? typed : state.editing.email, new_email: addingEmail ? typed : '',
+      name: val('cu-name'), phone: val('cu-phone'),
       trusted: checked('cu-trusted'), tax_exempt: checked('cu-exempt'), exemption_ref: val('cu-ref'), notes: val('cu-notes'),
     }).then(function (r) {
       state.busy = false; state.dirty = false;
-      var who = r.customer && (r.customer.name || r.customer.email);
+      var who = r.customer && (r.customer.name || emailOf(r.customer) || 'them');
       var verb = state.isNew ? 'Added ' : 'Saved ';
-      var back = !state.isNew && state.cameFrom;
+      var merged = r.customer && r.customer.merged;
+      var done = merged ? 'Their email already belonged to a customer, so the two records are now one (' + who + '). Their existing settings were kept.'
+        : addingEmail ? 'Saved ' + who + ' with their email.' : verb + who + '.';
+      // If they were given an email their address changed: reopen under the new one.
+      var back = addingEmail ? (r.customer && r.customer.email) : !state.isNew && state.cameFrom;
       return load().then(function () {
-        if (back) return openProfile(back).then(function () { note(verb + who + '.'); });
-        renderList(); note(verb + who + '.');
+        if (back) return openProfile(back).then(function () { note(done); });
+        renderList(); note(done);
       });
     }).catch(function (err) {
       state.busy = false; btn.disabled = false;
@@ -340,7 +360,7 @@
     var gone = ['contact details', 'notes'];
     if (c.trusted) gone.push('trusted setting');
     if (c.tax_exempt) gone.push('tax-exempt setting');
-    var msg = 'Remove ' + (c.name || c.email) + ' (' + c.email + ') from your customers?\n\n' +
+    var msg = 'Remove ' + (c.name || emailOf(c) || 'this customer') + (emailOf(c) ? ' (' + c.email + ')' : '') + ' from your customers?\n\n' +
       'This deletes their ' + gone.join(', ').replace(/, ([^,]*)$/, ' and $1') + '.\n' +
       (keeps.length ? 'Their ' + keeps.join(' and ') + ' stay on file.\n' : 'Nothing else is deleted.\n') +
       'If they order again they start as a new customer.';
@@ -348,7 +368,7 @@
     btn.disabled = true;
     api('POST', { action: 'delete', email: c.email }).then(function () {
       state.editing = null; state.dirty = false;
-      return load().then(function () { renderList(); note('Removed ' + (c.name || c.email) + '.'); });
+      return load().then(function () { renderList(); note('Removed ' + (c.name || emailOf(c) || 'the customer') + '.'); });
     }).catch(function (err) {
       document.getElementById('cu-status').textContent = 'Not removed: ' + err.message; btn.disabled = false;
     });

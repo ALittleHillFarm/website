@@ -77,21 +77,56 @@ export class CustomerError extends Error {
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const text = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
 
+/**
+ * Customers with no email. The store identifies a customer by email, so someone
+ * we only know by name and phone is given a made-up address on a domain that
+ * the internet reserves for exactly this (".invalid" can never be a real
+ * mailbox). Everything keyed by email (orders, history, tax settings) then
+ * works unchanged. The address is never shown, never emailed and never sent to
+ * Stripe; adding their real email later swaps it in (attachEmail).
+ */
+export const NO_EMAIL_DOMAIN = 'no-email.invalid';
+export const isNoEmail = (v) => String(v == null ? '' : v).trim().toLowerCase().endsWith('@' + NO_EMAIL_DOMAIN);
+/** The address to show people: nothing for a made-up one. */
+export const shownEmail = (v) => (isNoEmail(v) ? '' : String(v == null ? '' : v));
+export const newNoEmailKey = (seed) => {
+  const id = String(seed || '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 40)
+    || crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  return (seed ? 'shopify-' : 'noemail-') + id + '@' + NO_EMAIL_DOMAIN;
+};
+
 /** The one spelling of an email we store and match on, or '' if it is not one. */
 export function normalEmail(v) {
   const e = String(v == null ? '' : v).trim().toLowerCase();
   return e.length <= 254 && EMAIL_SHAPE.test(e) ? e : '';
 }
 
+/** An email a person could really have: not the made-up one. */
+export const realEmail = (v) => {
+  const e = normalEmail(v);
+  return e && !isNoEmail(e) ? e : '';
+};
+
+const phoneDigits = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+const sameName = (a, b) => {
+  const n = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return n(a) !== '' && n(a) === n(b);
+};
+
+/** An existing customer with this exact phone number AND this exact name, if any. */
+async function findSamePerson(db, name, phone) {
+  const digits = phoneDigits(phone);
+  if (digits.length < 10) return null;
+  const all = (await db.prepare("SELECT email, name, phone FROM customers WHERE phone IS NOT NULL AND phone != ''").all()).results || [];
+  return all.find((c) => phoneDigits(c.phone) === digits && sameName(c.name, name)) || null;
+}
+
 /** What the form sent, trimmed, capped and typed. Unknown fields are dropped. */
 function customerFields(b, { needName }) {
-  const email = normalEmail(b.email);
-  if (!email) throw new CustomerError('that does not look like an email address');
   const name = text(b.name, 120);
   if (needName && !name) throw new CustomerError('enter the customer’s name');
   const notes = String(b.notes == null ? '' : b.notes).replace(/[ \t]+/g, ' ').trim().slice(0, 2000);
   return {
-    email,
     name: name || null,
     phone: text(b.phone, 40) || null,
     tax_exempt: b.tax_exempt === true || b.tax_exempt === 1 ? 1 : 0,
@@ -100,6 +135,9 @@ function customerFields(b, { needName }) {
     notes: notes || null,
   };
 }
+
+/** Rows carry has_email so the screen never has to look at the made-up address. */
+const withHasEmail = (c) => ({ ...c, has_email: isNoEmail(c.email) ? 0 : 1 });
 
 const CUSTOMER_COLUMNS = 'email, name, phone, tax_exempt, exemption_ref, trusted, notes, created_at';
 
@@ -115,7 +153,7 @@ export async function listCustomers(db, { detail = false } = {}) {
     const rows = (await db.prepare(
       'SELECT ' + CUSTOMER_COLUMNS + " FROM customers ORDER BY COALESCE(NULLIF(name, ''), email) COLLATE NOCASE, email"
     ).all()).results || [];
-    return { customers: rows };
+    return { customers: rows.map(withHasEmail) };
   }
   const customers = (await db.prepare(
     'SELECT c.email, c.name, c.phone, c.tax_exempt, c.exemption_ref, c.trusted, c.notes, c.created_at,' +
@@ -129,36 +167,87 @@ export async function listCustomers(db, { detail = false } = {}) {
       " WHERE h.source = 'shopify' AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.email = h.email COLLATE NOCASE)" +
       ' GROUP BY h.email ORDER BY last_purchase DESC, h.email'
   ).all()).results || [];
-  return { customers, history_only };
+  return { customers: customers.map(withHasEmail), history_only };
 }
 
 async function oneCustomer(db, email) {
   return db.prepare('SELECT ' + CUSTOMER_COLUMNS + ' FROM customers WHERE email = ? COLLATE NOCASE').bind(email).first();
 }
 
-/** A new customer. An email we already have is refused, never overwritten. */
+/**
+ * A new customer. An email we already have is refused, never overwritten.
+ * With no email, they need a phone number as well as a name (it is the only
+ * other way to tell people apart) and are kept under a made-up address.
+ */
 export async function addCustomer(db, input, now = new Date().toISOString()) {
-  const c = customerFields(input || {}, { needName: true });
-  if (await oneCustomer(db, c.email)) throw new CustomerError('there is already a customer with that email — edit them instead', 409);
+  const f = customerFields(input || {}, { needName: true });
+  const typed = String((input && input.email) == null ? '' : input.email).trim();
+  let email;
+  if (typed) {
+    email = realEmail(typed);
+    if (!email) throw new CustomerError(isNoEmail(typed) ? 'that address is reserved for customers with no email' : 'that does not look like an email address');
+    if (await oneCustomer(db, email)) throw new CustomerError('there is already a customer with that email — edit them instead', 409);
+  } else {
+    if (phoneDigits(f.phone).length < 10) throw new CustomerError('without an email, enter their phone number so they can be told apart');
+    const same = await findSamePerson(db, f.name, f.phone);
+    if (same) throw new CustomerError('there is already a customer with that name and phone number — open them instead', 409);
+    email = newNoEmailKey();
+  }
   await db.prepare(
     'INSERT INTO customers (email, name, phone, tax_exempt, exemption_ref, trusted, notes, created_at) VALUES (?,?,?,?,?,?,?,?)'
-  ).bind(c.email, c.name, c.phone, c.tax_exempt, c.exemption_ref, c.trusted, c.notes, now).run();
-  return oneCustomer(db, c.email);
+  ).bind(email, f.name, f.phone, f.tax_exempt, f.exemption_ref, f.trusted, f.notes, now).run();
+  return oneCustomer(db, email);
 }
 
 /**
  * Change an existing customer's details and flags. The email is who they are
  * (their orders, history and sign-in are all keyed by it), so it is never
- * changed here: a different email is a different customer.
+ * changed here: a different email is a different customer. The one exception
+ * is a customer with no email, who can be given theirs with `new_email`.
  */
 export async function updateCustomer(db, input) {
-  const c = customerFields(input || {}, { needName: false });
-  const found = await oneCustomer(db, c.email);
+  const key = normalEmail(input && input.email);
+  if (!key) throw new CustomerError('that does not look like an email address');
+  const f = customerFields(input, { needName: false });
+  const found = await oneCustomer(db, key);
   if (!found) throw new CustomerError('no customer with that email', 404);
+  const newEmail = String(input.new_email == null ? '' : input.new_email).trim();
+  if (newEmail && !isNoEmail(found.email)) throw new CustomerError('this customer already has an email, which cannot be changed');
   await db.prepare(
     'UPDATE customers SET name = ?, phone = ?, tax_exempt = ?, exemption_ref = ?, trusted = ?, notes = ? WHERE email = ? COLLATE NOCASE'
-  ).bind(c.name, c.phone, c.tax_exempt, c.exemption_ref, c.trusted, c.notes, found.email).run();
+  ).bind(f.name, f.phone, f.tax_exempt, f.exemption_ref, f.trusted, f.notes, found.email).run();
+  if (newEmail) return attachEmail(db, found.email, newEmail);
   return oneCustomer(db, found.email);
+}
+
+/**
+ * Give a customer who has no email their real one. Their orders and purchase
+ * history move to it. If that email already belongs to another customer, the two
+ * are the same person: this record is folded into the existing one (which keeps
+ * its own name, phone and settings; only blanks are filled) and removed.
+ */
+export async function attachEmail(db, key, typed) {
+  const from = await oneCustomer(db, normalEmail(key));
+  if (!from) throw new CustomerError('no customer with that email', 404);
+  if (!isNoEmail(from.email)) throw new CustomerError('this customer already has an email, which cannot be changed');
+  const to = realEmail(typed);
+  if (!to) throw new CustomerError(isNoEmail(typed) ? 'enter their real email address' : 'that does not look like an email address');
+  const existing = await oneCustomer(db, to);
+  const relink = [
+    db.prepare('UPDATE sales SET customer_email = ? WHERE customer_email = ? COLLATE NOCASE').bind(to, from.email),
+    db.prepare('UPDATE purchase_history SET email = ? WHERE email = ? COLLATE NOCASE').bind(to, from.email),
+  ];
+  if (existing) {
+    await db.batch([
+      db.prepare("UPDATE customers SET name = COALESCE(NULLIF(name, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?)," +
+        " notes = COALESCE(NULLIF(notes, ''), ?) WHERE email = ?").bind(from.name, from.phone, from.notes, existing.email),
+      ...relink,
+      db.prepare('DELETE FROM customers WHERE email = ?').bind(from.email),
+    ]);
+    return { ...(await oneCustomer(db, existing.email)), merged: true };
+  }
+  await db.batch([db.prepare('UPDATE customers SET email = ? WHERE email = ?').bind(to, from.email), ...relink]);
+  return oneCustomer(db, to);
 }
 
 /**
@@ -238,7 +327,7 @@ export function shopifyCustomers(csv, { includeNeverOrdered = false } = {}) {
   const table = parseCsv(csv);
   const header = (table[0] || []).map((h) => h.trim().toLowerCase());
   const col = (name) => header.indexOf(name.toLowerCase());
-  const at = { email: col('Email'), first: col('First Name'), last: col('Last Name'), phone: col('Phone'),
+  const at = { id: col('Customer ID'), email: col('Email'), first: col('First Name'), last: col('Last Name'), phone: col('Phone'),
     addressPhone: col('Default Address Phone'), orders: col('Total Orders'), exempt: col('Tax Exempt') };
   if (at.email < 0 || at.first < 0 || at.orders < 0) {
     throw new CustomerError('that does not look like Shopify’s customer export (it needs Email, First Name and Total Orders columns)');
@@ -247,15 +336,25 @@ export function shopifyCustomers(csv, { includeNeverOrdered = false } = {}) {
   const cell = (r, i) => (i < 0 ? '' : unquoteCell(r[i]));
 
   const people = new Map();
-  const result = { rows: table.length - 1, people: [], no_email: [], never_ordered: 0, tax_exempt: [], duplicates: 0 };
+  const result = { rows: table.length - 1, people: [], no_contact: [], never_ordered: 0, tax_exempt: [], duplicates: 0 };
   for (const r of table.slice(1)) {
     const name = text([cell(r, at.first), cell(r, at.last)].filter(Boolean).join(' '), 120);
     const orders = Math.max(0, Math.floor(Number(cell(r, at.orders)) || 0));
     const email = normalEmail(cell(r, at.email));
     const exempt = cell(r, at.exempt).toLowerCase() === 'yes';
     if (!email) {
-      // Their email is the only way the store tells people apart, so these cannot be added.
-      if (orders > 0) result.no_email.push({ name: name || '(no name)', orders, phone: tidyPhone(cell(r, at.phone) || cell(r, at.addressPhone)) || null });
+      // Ordered but Shopify has no email: keep them by name and phone, under a made-up
+      // address built from their Shopify id so running this again finds the same record.
+      // With neither a name nor a phone there is nobody to keep.
+      if (orders > 0) {
+        const phone = tidyPhone(cell(r, at.phone) || cell(r, at.addressPhone)) || null;
+        if (!name && !phone) { result.no_contact.push({ orders }); continue; }
+        if (exempt) result.tax_exempt.push({ name: name || phone, email: '' });
+        const key = newNoEmailKey(cell(r, at.id) || phoneDigits(phone) || name);
+        const seen = people.get(key);
+        if (seen) result.duplicates++;
+        else people.set(key, { email: key, name: name || null, orders, phone, noEmail: true });
+      }
       continue;
     }
     if (exempt) result.tax_exempt.push({ name: name || email, email });
@@ -280,13 +379,19 @@ export function shopifyCustomers(csv, { includeNeverOrdered = false } = {}) {
  */
 export async function importShopifyCustomers(db, csv, { includeNeverOrdered = false, dryRun = true, now = new Date().toISOString() } = {}) {
   const read = shopifyCustomers(csv, { includeNeverOrdered });
-  const have = new Map(((await db.prepare('SELECT email, name, phone FROM customers').all()).results || [])
-    .map((c) => [String(c.email).toLowerCase(), c]));
+  const existing = (await db.prepare('SELECT email, name, phone FROM customers').all()).results || [];
+  const have = new Map(existing.map((c) => [String(c.email).toLowerCase(), c]));
   const add = [], fill = [];
   let already = 0;
   for (const p of read.people) {
     const mine = have.get(p.email);
-    if (!mine) { add.push(p); continue; }
+    if (!mine) {
+      // Someone with no email who is already here under their name and phone is not added twice.
+      const same = p.noEmail && phoneDigits(p.phone).length >= 10
+        && existing.find((c) => phoneDigits(c.phone) === phoneDigits(p.phone) && sameName(c.name, p.name));
+      if (same) already++; else add.push(p);
+      continue;
+    }
     const name = !String(mine.name || '').trim() && p.name ? p.name : null;
     const phone = !String(mine.phone || '').trim() && p.phone ? p.phone : null;
     if (name || phone) fill.push({ email: mine.email, name, phone });
@@ -305,10 +410,10 @@ export async function importShopifyCustomers(db, csv, { includeNeverOrdered = fa
   return {
     dry_run: !!dryRun,
     file_rows: read.rows,
-    add: add.map(({ email, name, orders }) => ({ email, name, orders })),
+    add: add.map(({ email, name, orders, phone }) => ({ email, has_email: isNoEmail(email) ? 0 : 1, name, orders, phone })),
     filled: fill.length,
     already,
-    no_email: read.no_email,
+    no_contact: read.no_contact,
     never_ordered: read.never_ordered,
     tax_exempt: read.tax_exempt,
     duplicates: read.duplicates,
@@ -382,5 +487,22 @@ export async function customerProfile(db, email) {
       ' ORDER BY sold_at DESC LIMIT 200'
   ).bind(who).all()).results || [];
   if (!customer && !orders.length && !history.length) throw new CustomerError('no customer or purchase history for that email', 404);
-  return { email: customer ? customer.email : who, customer: customer ? { ...customer } : null, orders, history: history.map((h) => ({ ...h })) };
+  return { email: customer ? customer.email : who, has_email: !isNoEmail(who), customer: customer ? withHasEmail(customer) : null,
+    orders, history: history.map((h) => ({ ...h })) };
+}
+
+/**
+ * For an order entered with a name and phone but no email: the customer it
+ * belongs to. Reuses the person with that exact name and phone, otherwise adds
+ * them under a made-up address. Returns that address, or null if there is not
+ * enough to tell them apart (a name alone is not).
+ */
+export async function rememberNoEmailCustomer(db, { name, phone }, { now = new Date().toISOString() } = {}) {
+  const n = text(name, 120), p = text(phone, 40);
+  if (!n || phoneDigits(p).length < 10) return null;
+  const same = await findSamePerson(db, n, p);
+  if (same) return same.email;
+  const key = newNoEmailKey();
+  await db.prepare('INSERT INTO customers (email, name, phone, created_at) VALUES (?,?,?,?)').bind(key, n, p, now).run();
+  return key;
 }

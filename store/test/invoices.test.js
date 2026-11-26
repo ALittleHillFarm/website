@@ -212,3 +212,139 @@ test('a bounced bank payment puts the invoice back to unpaid and tells the custo
   const again = await call(db, '/api/invoice?t=' + new URL(made.body.link).searchParams.get('inv'));
   assert.equal(again.body.state, 'unpaid');
 });
+
+// ---- invoices for customers with no email ---------------------------------------
+
+const phoneOnly = (extra = {}) => ({
+  action: 'create', send: true, pickup: 'farm', note: '',
+  customer: { email: '', name: 'Walt Phoneonly', phone: '208-555-0142' },
+  lines: [{ name: 'Freight', qty: 2, price_cents: 2500, taxable: false }], ...extra,
+});
+
+test('an invoice for someone with no email is saved with a pay link and nothing is emailed', async (t) => {
+  const { db, sqlite } = database(t);
+  const log = captureLog(t);
+  const made = await call(db, '/api/admin/invoice', { body: phoneOnly() });
+  assert.equal(made.status, 200);
+  assert.equal(made.body.no_email, true);
+  assert.equal(made.body.emailed, false);
+  assert.equal(made.body.email_requested, false);
+  assert.equal(made.body.to, null);
+  assert.match(made.body.link, /\/pay\?inv=/);
+  assert.ok(!log.some((l) => l.includes('[dev email]')), 'no email was attempted');
+  const sale = sqlite.prepare('SELECT * FROM sales').get();
+  const customer = sqlite.prepare('SELECT * FROM customers').get();
+  assert.match(customer.email, /@no-email\.invalid$/);
+  assert.deepEqual([customer.name, customer.phone, sale.customer_email], ['Walt Phoneonly', '208-555-0142', customer.email]);
+  assert.deepEqual([sale.invoice_sent_at, sale.invoice_last_error], [null, null]);
+  // The same person again is the same customer.
+  await call(db, '/api/admin/invoice', { body: phoneOnly() });
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+});
+
+test('a new person with no email needs a phone number, but the totals can be previewed without one', async (t) => {
+  const { db, sqlite } = database(t);
+  const bad = await call(db, '/api/admin/invoice', { body: phoneOnly({ customer: { email: '', name: 'Walt', phone: '' } }) });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /email.*phone/i);
+  const preview = await call(db, '/api/admin/invoice', { body: phoneOnly({ action: 'preview', customer: { email: '', name: 'Walt', phone: '' } }) });
+  assert.equal(preview.status, 200);
+  assert.ok(preview.body.card.total_cents > 0);
+  const forged = await call(db, '/api/admin/invoice', { body: phoneOnly({ customer: { email: 'ghost@no-email.invalid', name: 'Walt', phone: '208-555-0142' } }) });
+  assert.equal(forged.status, 400);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sales').get().n, 0);
+});
+
+test('an invoice picked for a saved no-email customer keeps their tax-exempt setting', async (t) => {
+  const { db, sqlite } = database(t);
+  const first = await call(db, '/api/admin/invoice', { body: phoneOnly({ send: false }) });
+  const key = sqlite.prepare('SELECT email FROM customers').get().email;
+  sqlite.prepare('UPDATE customers SET tax_exempt = 1, exemption_ref = ? WHERE email = ?').run('ST-101', key);
+  const second = await call(db, '/api/admin/invoice', { body: phoneOnly({ customer: { email: key, name: 'Walt Phoneonly', phone: '' }, lines: [{ name: 'Tote', qty: 1, price_cents: 75500, taxable: true }] }) });
+  assert.equal(second.status, 200);
+  const sale = sqlite.prepare('SELECT * FROM sales WHERE id = ?').get(second.body.sale_id);
+  assert.deepEqual([sale.tax_exempt, sale.tax_cents, sale.customer_email], [1, 0, key]);
+  assert.ok(first.body.ok);
+});
+
+test('an unpaid no-email invoice is never reported as unsent or failed, only as unpaid after a week', async (t) => {
+  const { db, sqlite } = database(t);
+  await call(db, '/api/admin/invoice', { body: phoneOnly() });
+  sqlite.prepare("UPDATE sales SET sold_at = ?").run(new Date(Date.now() - 2 * 3600 * 1000).toISOString());
+  let att = await call(db, '/api/admin/attention');
+  assert.deepEqual(att.body.items.filter((i) => /invoice/i.test(i.text)), []);
+  const unsent = await call(db, '/api/admin/sales?status=invoice_unsent');
+  assert.deepEqual(unsent.body.sales, []);
+  sqlite.prepare("UPDATE sales SET sold_at = ?").run(new Date(Date.now() - 8 * 86400 * 1000).toISOString());
+  att = await call(db, '/api/admin/attention');
+  const week = att.body.items.find((i) => /unpaid for over a week/.test(i.text));
+  assert.ok(week, 'flagged once it has been unpaid for a week');
+  assert.match(week.details[0].text, /Walt Phoneonly/);
+  assert.match(week.details[0].text, /no email/);
+});
+
+test('sending an invoice that has no email needs one, and giving it makes it theirs everywhere', async (t) => {
+  const { db, sqlite } = database(t);
+  const log = captureLog(t);
+  const made = await call(db, '/api/admin/invoice', { body: phoneOnly() });
+  const none = await call(db, '/api/admin/invoice', { body: { action: 'send', sale_id: made.body.sale_id } });
+  assert.equal(none.status, 400);
+  assert.match(none.body.error, /no email/i);
+  const bad = await call(db, '/api/admin/invoice', { body: { action: 'send', sale_id: made.body.sale_id, email: 'x@no-email.invalid' } });
+  assert.equal(bad.status, 400);
+  const sent = await call(db, '/api/admin/invoice', { body: { action: 'send', sale_id: made.body.sale_id, email: 'Walt@Example.com' } });
+  assert.equal(sent.status, 200);
+  assert.equal(sent.body.sent_to, 'walt@example.com');
+  assert.ok(log.some((l) => l.includes('[dev email] to walt@example.com')));
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 1);
+  assert.deepEqual({ ...sqlite.prepare('SELECT email, name, phone FROM customers').get() }, { email: 'walt@example.com', name: 'Walt Phoneonly', phone: '208-555-0142' });
+  assert.equal(sqlite.prepare('SELECT customer_email AS e FROM sales').get().e, 'walt@example.com');
+});
+
+test('giving the email of someone already a customer folds the no-email record into theirs', async (t) => {
+  const { db, sqlite } = database(t);
+  sqlite.prepare("INSERT INTO customers (email, name, trusted, created_at) VALUES ('walt@example.com', 'Walter P.', 1, '2026-01-01')").run();
+  const made = await call(db, '/api/admin/invoice', { body: phoneOnly({ send: false }) });
+  const sent = await call(db, '/api/admin/invoice', { body: { action: 'send', sale_id: made.body.sale_id, email: 'walt@example.com' } });
+  assert.equal(sent.status, 200);
+  const rows = sqlite.prepare('SELECT * FROM customers').all();
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].email, rows[0].name, rows[0].phone, rows[0].trusted], ['walt@example.com', 'Walter P.', '208-555-0142', 1]);
+  assert.equal(sqlite.prepare('SELECT customer_email AS e FROM sales').get().e, 'walt@example.com');
+});
+
+test('paying cash or check for a no-email invoice records it without trying to send a receipt', async (t) => {
+  const { db, sqlite } = database(t);
+  const log = captureLog(t);
+  const made = await call(db, '/api/admin/invoice', { body: phoneOnly() });
+  const paid = await call(db, '/api/admin/invoice', { body: { action: 'record_payment', sale_id: made.body.sale_id, method: 'cash' } });
+  assert.equal(paid.status, 200);
+  assert.equal(paid.body.receipt_emailed, false);
+  assert.equal(sqlite.prepare('SELECT status FROM sales').get().status, 'recorded');
+  assert.ok(!log.some((l) => l.includes('[dev email]') && l.includes('Receipt')));
+});
+
+test('the made-up address is never given to Stripe, but a real one is', async (t) => {
+  const { db } = database(t);
+  const bodies = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    bodies.push(String(init && init.body));
+    return new Response(JSON.stringify({ id: 'cs_test_1', url: 'https://pay.example/s', payment_intent: 'pi_1' }));
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const pay = async (made) => {
+    const token = new URL(made.body.link).searchParams.get('inv');
+    const res = await worker.fetch(new Request('https://store.example.com/api/invoice/pay', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t: token, method: 'card' }),
+    }), { ...env(db), STRIPE_SECRET_KEY: 'sk_test_stand_in' }, { waitUntil() {} });
+    assert.equal(res.status, 200);
+  };
+  await pay(await call(db, '/api/admin/invoice', { body: phoneOnly({ send: false }) }));
+  const forNoEmail = bodies.find((b) => b.includes('line_items'));
+  assert.ok(forNoEmail && !/customer_email/.test(forNoEmail) && !/no-email\.invalid/.test(forNoEmail));
+  bodies.length = 0;
+  await pay(await call(db, '/api/admin/invoice', { body: invoice('real@example.com', false) }));
+  assert.match(bodies.find((b) => b.includes('line_items')), /customer_email=real%40example\.com/);
+});

@@ -473,7 +473,7 @@ fieldset.pay legend { font-size:12px; letter-spacing:0.04em; color:var(--muted);
 .pr-bar select, .pr-bar input { font-size:15px; padding:9px 11px; }
 .pr-sum { font-size:13px; color:var(--muted); margin:0 0 10px; }
 .pr-table { background:var(--card); border:1px solid var(--line); }
-.pr-head, .pr-row { display:grid; grid-template-columns:minmax(0,1fr) 92px 92px 92px 92px 56px 34px; gap:10px; align-items:center; padding:8px 12px; }
+.pr-head, .pr-row { display:grid; grid-template-columns:minmax(0,1fr) 92px 92px 92px 92px 96px 34px; gap:10px; align-items:center; padding:8px 12px; }
 .pr-head { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); background:var(--paper); }
 .pr-item { border-top:1px solid var(--line-soft); }
 .pr-item:first-of-type { border-top:none; }

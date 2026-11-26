@@ -124,8 +124,12 @@
           <input type="text" id="r-name" required>
         </div>
         <div class="field">
-          <label for="r-email">Customer email <span class="lbl-note">optional — with one, they are added to your Customers list</span></label>
+          <label for="r-email">Customer email <span class="lbl-note">optional</span></label>
           <input type="email" id="r-email">
+        </div>
+        <div class="field">
+          <label for="r-phone">Customer phone <span class="lbl-note">optional — with an email, or this phone number, they are added to your Customers list</span></label>
+          <input type="tel" id="r-phone">
         </div>
         <div class="field span2">
           <label for="r-desc">Item description</label>
@@ -433,6 +437,10 @@
 
   var salesById = {};
 
+  // A customer with no email is kept under a made-up address ending @no-email.invalid. Never show it.
+  function noEmailAddr(e) { return /@no-email\.invalid$/i.test(String(e || '')); }
+  function shownEmail(e) { return noEmailAddr(e) ? '' : String(e || ''); }
+
   function payLinkFor(sale) {
     return location.origin + '/pay?inv=' + encodeURIComponent(sale.invoice_token || '');
   }
@@ -444,6 +452,12 @@
 
   // What the farm needs to know about an unpaid invoice's email, in words.
   function invoiceSendInfo(sale) {
+    // No email on file: nothing to send, so no "not sent" alarm. The pay link is handed over by text or in person.
+    if (noEmailAddr(sale.customer_email)) {
+      return { badgeClass: 'badge', badgeText: 'Unpaid', count: 0, noEmail: true,
+        html: '<div class="send-state"><strong>No email on file</strong>, so nothing was emailed. Press <strong>Copy pay link</strong> and text it to them, ' +
+          'or press <strong>Add email &amp; send</strong> once you have their email.</div>' };
+    }
     var count = Math.max(Number(sale.invoice_send_count) || 0, sale.invoice_sent_at ? 1 : 0);
     var hint = '<div class="send-hint">Customer can’t find it? Ask them to check their junk/spam folder. ' +
       'You can also press <strong>Copy pay link</strong> and text it to them, or <strong>Change email &amp; send</strong> if the address was wrong.</div>';
@@ -492,16 +506,16 @@
     var sendInfo = null;
     if (sale.status === 'invoiced') {
       sendInfo = invoiceSendInfo(sale);
-      var who = ' data-sale="' + esc(sale.id) + '" data-email="' + esc(sale.customer_email || '') + '" data-count="' + sendInfo.count +
+      var who = ' data-sale="' + esc(sale.id) + '" data-email="' + esc(shownEmail(sale.customer_email)) + '" data-count="' + sendInfo.count +
         '" data-last="' + esc(sale.invoice_sent_at || '') + '"';
-      actions = (sendInfo.count === 0
+      actions = (sendInfo.count === 0 && !sendInfo.noEmail
         ? '<button type="button" class="btn small" data-action="inv-send"' + who + '>Send now</button>'
         : '') + actions;
       actions +=
         '<button type="button" class="btn small ghost" data-action="inv-copy" data-sale="' + esc(sale.id) + '" data-link="' +
           esc(payLinkFor(sale)) + '">Copy pay link</button>' +
         (sendInfo.count > 0 ? '<button type="button" class="btn small ghost" data-action="inv-send"' + who + '>Resend</button>' : '') +
-        '<button type="button" class="btn small ghost" data-action="inv-email"' + who + '>Change email &amp; send</button>' +
+        '<button type="button" class="btn small ghost" data-action="inv-email"' + who + '>' + (sendInfo.noEmail ? 'Add email &amp; send' : 'Change email &amp; send') + '</button>' +
         '<button type="button" class="btn small ghost" data-action="inv-cash" data-sale="' + esc(sale.id) + '">Paid cash/check</button>' +
         '<button type="button" class="btn small rust" data-action="inv-cancel" data-sale="' + esc(sale.id) + '">Cancel invoice</button>';
     }
@@ -523,7 +537,7 @@
         '<div class="top">' +
           '<div>' +
             '<h3>' + esc(sale.customer_name || 'Unnamed customer') + '</h3>' +
-            '<div class="email">Order ' + esc(String(sale.id).slice(0, 8)) + ' · ' + esc(sale.customer_email || '') + '</div>' +
+            '<div class="email">Order ' + esc(String(sale.id).slice(0, 8)) + ' · ' + esc(shownEmail(sale.customer_email) || 'no email') + '</div>' +
           '</div>' +
           '<span class="' + badgeClass + '">' + esc(badgeText) + '</span>' +
         '</div>' +
@@ -624,7 +638,7 @@
         '<div class="muted">' + esc(invoiceDate(sale.sold_at)) + '</div>' +
         '<div class="iv-status ' + (sale.status === 'invoiced' ? 'due' : '') + '">' + esc(status) + '</div></div></div>' +
       '<div class="iv-meta"><div><div class="label">Bill to</div><div>' + esc(sale.customer_name || '') + '</div>' +
-        '<div class="muted">' + esc(sale.customer_email || '') + (sale.customer_phone ? ' · ' + esc(sale.customer_phone) : '') + '</div></div>' +
+        '<div class="muted">' + esc(shownEmail(sale.customer_email) || (sale.customer_phone ? '' : 'no email on file')) + (shownEmail(sale.customer_email) && sale.customer_phone ? ' · ' : '') + (sale.customer_phone ? esc(sale.customer_phone) : '') + '</div></div>' +
         '<div><div class="label">Pickup</div><div>' + esc(pickupLabel(sale.fulfillment)) + '</div></div></div>' +
       (sale.invoice_note ? '<p class="iv-note">' + esc(sale.invoice_note) + '</p>' : '') +
       '<table class="iv-lines"><thead><tr><th class="q">Qty</th><th>Item</th><th class="n">Price</th><th class="n">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>' +
@@ -725,13 +739,15 @@
       failReload = true;
     } else if (action === 'inv-email') {
       var cur = btn.getAttribute('data-email');
-      var next = window.prompt('Correct the email address for this invoice.\nCurrently: ' + cur + '\n\nNew address:', cur);
+      var next = window.prompt(cur
+        ? 'Correct the email address for this invoice.\nCurrently: ' + cur + '\n\nNew address:'
+        : 'This customer has no email yet. Their email will be saved to their record, with their orders.\n\nEmail address:', cur);
       if (next === null) return;
       next = next.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) { window.alert('That does not look like an email address.'); return; }
-      if (!window.confirm('Change the address to ' + next + ' and email the invoice there now?')) return;
+      if (!window.confirm((cur ? 'Change the address to ' : 'Save ') + next + (cur ? ' and email the invoice there now?' : ' as their email and email the invoice there now?'))) return;
       job = runAction('/api/admin/invoice', { action: 'send', sale_id: saleId, email: next });
-      doneMsg = function (r) { return 'Address updated. Invoice emailed to ' + r.sent_to + ' at ' + when(r.sent_at) + '.'; };
+      doneMsg = function (r) { return (cur ? 'Address updated. ' : 'Email saved. ') + 'Invoice emailed to ' + r.sent_to + ' at ' + when(r.sent_at) + '.'; };
       failReload = true;
     } else if (action === 'inv-cash') {
       var how = window.prompt('Paid how? Type cash or check.', 'cash');
@@ -804,6 +820,7 @@
       category: document.getElementById('r-category').value,
       customer_name: document.getElementById('r-name').value.trim(),
       customer_email: document.getElementById('r-email').value.trim() || null,
+      customer_phone: document.getElementById('r-phone').value.trim() || null,
       items: [{ description: document.getElementById('r-desc').value.trim() }],
       subtotal_cents: subtotalCents,
       tax_cents: taxCents,
