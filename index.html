@@ -30,7 +30,7 @@
     <div><div class="n" data-count="does-n">5</div><div class="l">Registered does</div></div>
     <div><div class="n" data-count="bucks-n">2</div><div class="l">Herdsires</div></div>
     <div><div class="n" data-count="elite-n">1</div><div class="l">ADGA Elite doe</div></div>
-    <div><div class="n">4</div><div class="l">Kiddings due 2026</div></div>
+    <div><div class="n" data-count="kiddings-n">4</div><div class="l" data-count="kiddings-due">Kiddings due 2026</div></div>
   </section>
 
   <section style="margin-bottom:80px">
@@ -80,9 +80,10 @@
     </div>
   </section>
 
+  <!-- The count above and this block are the pairings due in the schedule's year (store admin > Breeding), filled in by site-worker.js; the markup here is the fallback. -->
   <section>
-    <div class="rule-head"><h2 class="serif">Spring 2026 Kiddings</h2><div class="rule"></div><a href="breeding.html">Full schedule →</a></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)">
+    <div class="rule-head"><h2 class="serif" data-count="kiddings-label">2026 Kiddings</h2><div class="rule"></div><a href="breeding.html">Full schedule →</a></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)" data-breedings="home">
       <a href="breeding.html" style="background:var(--card);padding:22px 20px;text-decoration:none;color:inherit;display:block">
         <div class="eyebrow">Due April 8</div>
         <div class="serif" style="font-size:19px;line-height:1.25;margin-top:10px">Cookie <span style="color:var(--muted)">×</span> Polaris</div>
